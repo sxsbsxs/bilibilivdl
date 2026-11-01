@@ -19,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.coroutineContext
 import org.json.JSONArray
 import org.json.JSONObject
 import com.sxsbsxs.bilivdl.data.queue.DownloadTaskEntity
@@ -166,7 +165,7 @@ class BiliDownloadService : Service() {
                 updateTask(task)
                 notificationManager.notify(NOTIFICATION_ID, notification("下载失败：$title", null, null))
             } finally {
-                running.remove(taskId, coroutineContext.job)
+                running.remove(taskId, this.coroutineContext[Job])
                 if (active.decrementAndGet() == 0) {
                     stopSelf()
                 }
