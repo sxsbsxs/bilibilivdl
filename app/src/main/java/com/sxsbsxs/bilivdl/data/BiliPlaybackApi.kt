@@ -375,12 +375,10 @@ object BiliPlaybackApi {
                 }
             }
         }
-        bestHttp?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
-        // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
-        // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
-        if (videoCodec.isBlank() && audioCodec.isBlank()) {
-            tryGrpcPlayback(resolvedAid, cid, qn)?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
-        }
+        // HTTP 线路可能静默降档；与 gRPC 返回的真实轨道比较后再决定最终播放画质。
+        val grpc = if (videoCodec.isBlank() && audioCodec.isBlank()) tryGrpcPlayback(resolvedAid, cid, qn) else null
+        val best = listOfNotNull(bestHttp, grpc).maxByOrNull { it.quality }
+        best?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
 
         // Avoid the legacy parser: it converts localized numeric values (e.g. 万) and can throw. Only trust streams returned by official JSON or gRPC.
         error("B站公开播放接口（DASH/DURL）和 gRPC 均未返回可用视频流；已停止使用会触发本地化数字解析异常的旧线路，请稍后重试或切换网络")
