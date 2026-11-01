@@ -43,13 +43,13 @@ object SubtitleApiBridge {
    if (line.contains(" --> ")) {
     index++
     val times = line.replace('.', ',')
-    out.append(index).append('\\n').append(times).append('\\n')
+    out.append(index).append('\n').append(times).append('\n')
     i++
     while (i < vtt.size && vtt[i].isNotBlank()) {
-     out.append(vtt[i]).append('\\n')
+     out.append(vtt[i]).append('\n')
      i++
     }
-    out.append('\\n')
+    out.append('\n')
    }
    i++
   }
