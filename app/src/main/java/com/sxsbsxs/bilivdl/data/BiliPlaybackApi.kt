@@ -12,7 +12,7 @@ import java.security.MessageDigest
 import java.util.TreeMap
 
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0)
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val title: String = "", val description: String = "", val ownerName: String = "", val ownerFace: String = "", val viewCount: Long = 0L, val danmakuCount: Long = 0L, val likeCount: Long = 0L, val coinCount: Long = 0L, val favoriteCount: Long = 0L, val shareCount: Long = 0L, val publishTime: Long = 0L)
 
 object BiliPlaybackApi {
     private val order = intArrayOf(46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52)
@@ -168,7 +168,7 @@ object BiliPlaybackApi {
         var play = get("https://api.bilibili.com/x/player/playurl?$publicQuery", cookie)
         if (play.optInt("code") != 0) {
             // 公开旧接口被临时限制时，回退到 WBI playurl；匿名状态仍然先尝试免登录线路。
-            play = get(signed("/x/player/wbi/playurl", params, cookie), cookie)
+            play = get(signed("/x/player/wbi/playurl", publicParams, cookie), cookie)
         }
         if(play.optInt("code")!=0) {
             val code=play.optInt("code")
@@ -178,7 +178,7 @@ object BiliPlaybackApi {
         val ids=data.optJSONArray("accept_quality"); val names=data.optJSONArray("accept_description")
         val qualities=mutableListOf<Pair<Int,String>>()
         if(ids!=null&&names!=null) for(i in 0 until minOf(ids.length(),names.length())) qualities.add(ids.optInt(i) to names.optString(i))
-        val actual=data.optInt("quality",qn)
+        val actual=data.optInt("quality",0)
         val dash=data.optJSONObject("dash")
         if(dash!=null) {
             val videos=dash.optJSONArray("video") ?: error("DASH 视频轨道为空")
@@ -204,7 +204,7 @@ object BiliPlaybackApi {
                 selected.takeIf { it.startsWith("https://") || it.startsWith("http://") }
             }
         }.orEmpty()
-        if(streams.isEmpty()) error("B站未返回可播放的 DASH 或 MP4 音视频流")
+        if(streams.isEmpty()) error("B站未返回可播放的 DASH 或 MP4 音视频流")\n        if (actual <= 0) error("B站播放接口未返回真实画质编号，已停止显示猜测画质")
         // DURL 可能由多个连续分段组成；不能只取第一个分段，否则播放/下载会被截断。
         return PlaybackInfo(
             cid, streams.first(), actual,
