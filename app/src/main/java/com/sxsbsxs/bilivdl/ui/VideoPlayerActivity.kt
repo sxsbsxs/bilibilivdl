@@ -19,6 +19,8 @@ import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
 import com.sxsbsxs.bilivdl.data.BangumiApiBridge
+import com.sxsbsxs.bilivdl.data.SubtitleApiBridge
+import com.sxsbsxs.bilivdl.data.BiliSubtitleTrack
 import com.sxsbsxs.bilivdl.data.BiliInteractionApi
 import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
@@ -45,6 +47,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
     private var info: PlaybackInfo? = null
+    private var selectedSubtitleUri: android.net.Uri? = null
+    private var selectedSubtitleLabel: String = ""
     private var danmakuEnabled = true
     private var commentPage = 1
     private var commentHasMore = true
@@ -74,6 +78,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.partButton.setOnClickListener { showParts() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
+        b.subtitleButton.setOnClickListener { showSubtitles() }
         b.danmakuButton.setOnClickListener {
             danmakuEnabled = !danmakuEnabled
             b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
@@ -123,16 +128,16 @@ class VideoPlayerActivity : AppCompatActivity() {
                 exo = ExoPlayer.Builder(this@VideoPlayerActivity).setMediaSourceFactory(source).build().also { player ->
                     b.playerView.player = player
                     if (p.isDash && p.videoUrl != null && p.audioUrl != null) {
-                        val videoSource = source.createMediaSource(MediaItem.fromUri(p.videoUrl))
-                        val audioSource = source.createMediaSource(MediaItem.fromUri(p.audioUrl))
+                        val videoSource = source.createMediaSource(buildMediaItem(p.videoUrl))
+                        val audioSource = source.createMediaSource(buildMediaItem(p.audioUrl))
                         player.setMediaSource(MergingMediaSource(videoSource, audioSource))
                     } else if (p.isDash) {
-                        player.setMediaItem(MediaItem.fromUri(p.videoUrl ?: p.url))
+                        player.setMediaItem(buildMediaItem(p.videoUrl ?: p.url))
                     } else if (p.segments.size > 1) {
                         // B站 DURL 分段必须按顺序连续播放，不能只播放第一段。
-                        player.setMediaItems(p.segments.map { MediaItem.fromUri(it) })
+                        player.setMediaItems(p.segments.map { buildMediaItem(it) })
                     } else {
-                        player.setMediaItem(MediaItem.fromUri(p.url))
+                        player.setMediaItem(buildMediaItem(p.url))
                     }
                     player.addListener(object : Player.Listener {
                         override fun onPlayerError(error: PlaybackException) {
@@ -160,6 +165,67 @@ class VideoPlayerActivity : AppCompatActivity() {
                 loadDanmaku(p.cid)
             } catch (e: Exception) {
                 b.playerStatus.text = "获取播放地址失败：${e.message ?: "接口异常"}"
+            }
+        }
+    }
+
+    private fun buildMediaItem(url: String): MediaItem {
+        val builder = MediaItem.Builder().setUri(url)
+        val subtitle = selectedSubtitleUri
+        if (subtitle != null) {
+            builder.setSubtitleConfigurations(listOf(
+                MediaItem.SubtitleConfiguration.Builder(subtitle)
+                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setLanguage("und")
+                    .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+                    .build()
+            ))
+        }
+        return builder.build()
+    }
+
+    private fun showSubtitles() {
+        val playback = info ?: run { b.playerStatus.text = "请等待播放地址加载完成"; return }
+        b.playerStatus.text = "正在获取字幕列表…"
+        lifecycleScope.launch {
+            try {
+                val identifiers = withContext(Dispatchers.IO) {
+                    if (epId > 0L) {
+                        val episode = BangumiApiBridge.episode(epId)
+                        episode.aid to episode.cid
+                    } else aid to playback.cid
+                }
+                val tracks = withContext(Dispatchers.IO) {
+                    SubtitleApiBridge.tracks(identifiers.first, identifiers.second, epId, seasonId)
+                }
+                val labels = listOf("关闭字幕") + tracks.map { "${it.label}（${it.language}）" }
+                MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                    .setTitle("选择字幕")
+                    .setItems(labels.toTypedArray()) { _, which ->
+                        lifecycleScope.launch {
+                            try {
+                                if (which == 0) {
+                                    selectedSubtitleUri = null
+                                    selectedSubtitleLabel = ""
+                                    b.subtitleButton.text = "字幕：关闭"
+                                } else {
+                                    val track = tracks[which - 1]
+                                    selectedSubtitleUri = withContext(Dispatchers.IO) {
+                                        SubtitleApiBridge.downloadAsVtt(this@VideoPlayerActivity, track)
+                                    }
+                                    selectedSubtitleLabel = track.label
+                                    b.subtitleButton.text = "字幕：${track.label}"
+                                }
+                                pendingSeekPosition = exo?.currentPosition ?: 0L
+                                load(playback.quality)
+                            } catch (e: Exception) {
+                                b.playerStatus.text = "字幕加载失败：${e.message}"
+                            }
+                        }
+                    }.show()
+                b.playerStatus.text = if (tracks.isEmpty()) "当前视频没有可用字幕" else "已找到 ${tracks.size} 条字幕"
+            } catch (e: Exception) {
+                b.playerStatus.text = "字幕列表获取失败：${e.message}"
             }
         }
     }
