@@ -61,7 +61,52 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         val failed = tasks.count { it.status == "failed" }
         b.downloadSummary.text = "全部 " + tasks.size + "    下载中 " + active + "    已完成 " + completed + "    失败 " + failed
         b.downloadTasks.text = "点击已完成的文件可查看详情、播放、分享或删除；其他任务可管理下载状态。"
+        addBatchControls(tasks)
         tasks.forEach { addTaskCard(it) }
+    }
+
+    /** 批量操作直接作用于持久化任务队列，不只是界面按钮。 */
+    private fun addBatchControls(tasks: List<DownloadTaskEntity>) {
+        val context = requireContext()
+        val active = tasks.filter { it.status == "downloading" || it.status == "queued" }
+        val resumable = tasks.filter { it.status == "paused" || it.status == "failed" || it.status == "queued" }
+        val controls = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        fun button(label: String, enabled: Boolean, action: () -> Unit) {
+            controls.addView(MaterialButton(context).apply {
+                text = label
+                isAllCaps = false
+                isEnabled = enabled
+                minHeight = dp(40)
+                setOnClickListener { action() }
+                layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                    marginEnd = dp(5)
+                }
+            })
+        }
+        button("全部暂停", active.isNotEmpty()) {
+            active.filter { it.status == "downloading" }.forEach {
+                BiliDownloadService.pause(context, it.taskId)
+            }
+        }
+        button("继续全部", resumable.isNotEmpty()) {
+            resumable.forEach {
+                BiliDownloadService.resume(context, it.taskId, it.bvid, it.aid,
+                    it.title, it.qn, it.episodeId)
+            }
+        }
+        button("取消全部", active.isNotEmpty()) {
+            AlertDialog.Builder(context).setTitle("取消全部活动任务")
+                .setMessage("将取消所有正在下载或排队中的任务，已完成的文件不会删除。")
+                .setNegativeButton("返回", null)
+                .setPositiveButton("全部取消") { _, _ ->
+                    active.forEach { BiliDownloadService.cancel(context, it.taskId) }
+                }.show()
+        }
+        b.downloadTaskControls.addView(controls)
     }
 
     private fun addTaskCard(task: DownloadTaskEntity) {
