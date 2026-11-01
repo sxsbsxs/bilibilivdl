@@ -138,7 +138,7 @@ object BiliPlaybackApi {
                 id = item.id,
                 codec = item.codecs,
                 label = item.codecs + " · " + (item.bandwidth / 1000).toString() + " kbps",
-                bandwidth = item.bandwidth
+                bandwidth = item.bandwidth.toLong()
             )
         }
         return DownloadStreamChoices(videos, audios)
