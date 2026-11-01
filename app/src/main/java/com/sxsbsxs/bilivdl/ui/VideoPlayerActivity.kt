@@ -148,7 +148,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.playerScroll.setOnScrollChangeListener(
             NestedScrollView.OnScrollChangeListener { scroll, _, y, _, _ ->
                 val content = scroll.getChildAt(0) ?: return@OnScrollChangeListener
-                if (y + scroll.height >= content.measuredHeight - 650) {
+                if (b.playerCommentsPanel.visibility == View.VISIBLE &&
+                    y + scroll.height >= content.measuredHeight - 650) {
                     loadComments(false)
                 }
             }
