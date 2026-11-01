@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
@@ -695,10 +696,18 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val replies = withContext(Dispatchers.IO) { BilimiaoApiBridge.replies(aid, comment.id, 1) }
-                val lines = replies.map { "${it.user}：${it.text}" }.toTypedArray()
+                val list = RecyclerView(this@VideoPlayerActivity).apply {
+                    layoutManager = LinearLayoutManager(this@VideoPlayerActivity)
+                    isNestedScrollingEnabled = true
+                    setPadding(16, 4, 16, 4)
+                    adapter = CommentAdapter(::showReplies, ::likeComment).apply {
+                        submit(listOf(comment) + replies)
+                    }
+                    layoutParams = android.view.ViewGroup.LayoutParams(-1, (resources.displayMetrics.heightPixels * 0.62f).toInt())
+                }
                 MaterialAlertDialogBuilder(this@VideoPlayerActivity)
-                    .setTitle("评论回复 · ${comment.replyCount}")
-                    .setItems(lines, null)
+                    .setTitle("全部回复 · ${comment.replyCount}")
+                    .setView(list)
                     .setPositiveButton("关闭", null)
                     .show()
             } catch (e: Exception) {
