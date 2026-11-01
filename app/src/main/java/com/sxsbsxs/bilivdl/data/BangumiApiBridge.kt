@@ -47,9 +47,9 @@ object BangumiApiBridge {
         require(ep.cid > 0L) { "番剧剧集缺少 CID" }
         val result = playerApi.getBangumiUrl(episodeId.toString(), ep.cid.toString(), qn, 4048)
         if (result.code != 0) error(result.message.ifBlank { "番剧播放地址获取失败（code=" + result.code + "）" })
-        val qualities = result.support_formats.map { it.quality to it.new_description.ifBlank { it.display_desc } }.ifEmpty {
+        val qualities = (result.support_formats.map { it.quality to it.new_description.ifBlank { it.display_desc } }.ifEmpty {
             result.accept_quality.mapIndexed { index, quality -> quality to (result.accept_description.getOrNull(index) ?: "清晰度 $quality") }
-        }
+        }).distinctBy { it.first }.sortedByDescending { it.first }
         val actual = result.quality.takeIf { it > 0 } ?: qn
         val label = qualities.firstOrNull { it.first == actual }?.second ?: "清晰度 $actual"
         val dash = result.dash
