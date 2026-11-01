@@ -21,6 +21,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import com.sxsbsxs.bilivdl.data.queue.DownloadTaskEntity
+import com.sxsbsxs.bilivdl.data.queue.DownloadQueueStore
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -193,7 +195,7 @@ class BiliDownloadService : Service() {
         else -> "清晰度 $qn"
     }
 
-    private fun updateTask(task: JSONObject) {
+    private suspend fun updateTask(task: JSONObject) {
         val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
         synchronized(BiliDownloadService::class.java) {
             val old = JSONArray(prefs.getString("tasks", "[]"))
@@ -209,6 +211,18 @@ class BiliDownloadService : Service() {
             if (!replaced) updated.put(task)
             prefs.edit().putString("tasks", updated.toString()).apply()
         }
+        DownloadQueueStore.save(this, DownloadTaskEntity(
+            taskId = task.optString("id"),
+            title = task.optString("title", "视频"),
+            bvid = task.optString("bvid"),
+            aid = task.optLong("aid"),
+            qn = task.optInt("qn", 80),
+            quality = task.optString("quality"),
+            status = task.optString("status", "queued"),
+            progress = task.optString("progress"),
+            outputPath = task.optString("path"),
+            createdAt = task.optLong("time", System.currentTimeMillis())
+        ))
     }
 
     private fun notification(title: String, done: Long?, total: Long?): Notification {
