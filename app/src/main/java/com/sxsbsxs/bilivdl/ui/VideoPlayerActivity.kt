@@ -13,6 +13,7 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -110,8 +111,12 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val source = DefaultMediaSourceFactory(this@VideoPlayerActivity).setDataSourceFactory(http)
                 exo = ExoPlayer.Builder(this@VideoPlayerActivity).setMediaSourceFactory(source).build().also { player ->
                     b.playerView.player = player
-                    if (p.isDash) {
-                        player.setMediaItem(MediaItem.Builder().setUri(p.url).setMimeType(MimeTypes.APPLICATION_MPD).build())
+                    if (p.isDash && p.videoUrl != null && p.audioUrl != null) {
+                        val videoSource = source.createMediaSource(MediaItem.fromUri(p.videoUrl))
+                        val audioSource = source.createMediaSource(MediaItem.fromUri(p.audioUrl))
+                        player.setMediaSource(MergingMediaSource(videoSource, audioSource))
+                    } else if (p.isDash) {
+                        player.setMediaItem(MediaItem.fromUri(p.videoUrl ?: p.url))
                     } else if (p.segments.size > 1) {
                         // B站 DURL 分段必须按顺序连续播放，不能只播放第一段。
                         player.setMediaItems(p.segments.map { MediaItem.fromUri(it) })
