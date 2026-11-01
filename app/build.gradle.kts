@@ -24,7 +24,8 @@ dependencies {
  implementation(project(":danmaku-engine"))
  implementation("com.squareup.okhttp3:okhttp:4.10.0")
  implementation("com.google.zxing:core:3.5.3")
- implementation("androidx.room:room-runtime:2.6.1")
- implementation("androidx.room:room-ktx:2.6.1")
- ksp("androidx.room:room-compiler:2.6.1")
+ // Keep Room aligned with the upstream Kotlin/KSP toolchain.
+ implementation("androidx.room:room-runtime:2.7.2")
+ implementation("androidx.room:room-ktx:2.7.2")
+ ksp("androidx.room:room-compiler:2.7.2")
 }
