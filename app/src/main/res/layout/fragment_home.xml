@@ -2,21 +2,30 @@
 <androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
  android:id="@+id/home_swipe" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background_dark">
  <androidx.core.widget.NestedScrollView android:id="@+id/home_scroll" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="BiliVdl" android:textColor="@color/text_primary" android:textSize="27sp" android:textStyle="bold"/>
+    <com.google.android.material.button.MaterialButton android:id="@+id/home_login_button" android:layout_width="wrap_content" android:layout_height="40dp" android:layout_marginEnd="8dp" android:minWidth="0dp" android:text="登录" android:textAllCaps="false" app:cornerRadius="20dp"/>
     <ImageButton android:id="@+id/home_search_button" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_search_button" android:contentDescription="搜索视频" android:padding="11dp" android:src="@drawable/ic_search" android:tint="@color/text_primary"/>
    </LinearLayout>
-   <com.google.android.material.card.MaterialCardView android:id="@+id/home_search_entry" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="16dp" android:clickable="true" android:focusable="true" app:cardBackgroundColor="@color/surface_dark" app:cardCornerRadius="14dp" app:strokeColor="@color/stroke_dark" app:strokeWidth="1dp">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:paddingHorizontal="15dp">
+   <com.google.android.material.card.MaterialCardView android:id="@+id/home_search_entry" android:layout_width="match_parent" android:layout_height="54dp" android:layout_marginTop="16dp" android:clickable="true" android:focusable="true" app:cardBackgroundColor="@color/surface_elevated" app:cardCornerRadius="15dp" app:strokeColor="@color/stroke_dark" app:strokeWidth="1dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:paddingStart="14dp" android:paddingEnd="6dp">
      <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_search" android:tint="@color/text_secondary"/>
-     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:text="搜索视频 / BV号 / AV号" android:textColor="@color/text_secondary" android:textSize="14sp"/>
+     <EditText android:id="@+id/home_search_input" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:background="@android:color/transparent" android:hint="搜索视频、UP主、BV号或AV号" android:imeOptions="actionSearch" android:inputType="text" android:maxLines="1" android:paddingStart="10dp" android:paddingEnd="6dp" android:textColor="@color/text_primary" android:textColorHint="@color/text_secondary" android:textSize="14sp"/>
+     <com.google.android.material.button.MaterialButton android:id="@+id/home_search_submit" android:layout_width="wrap_content" android:layout_height="40dp" android:minWidth="64dp" android:text="搜索" android:textAllCaps="false" android:textSize="13sp" app:backgroundTint="@color/brand" app:cornerRadius="12dp"/>
     </LinearLayout>
    </com.google.android.material.card.MaterialCardView>
+   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:orientation="horizontal">
+    <com.google.android.material.button.MaterialButton android:id="@+id/home_search_video_mode" android:layout_width="wrap_content" android:layout_height="34dp" android:minWidth="64dp" android:text="视频" android:textAllCaps="false" android:textSize="12sp" app:cornerRadius="17dp"/>
+    <com.google.android.material.button.MaterialButton android:id="@+id/home_search_bangumi_mode" android:layout_width="wrap_content" android:layout_height="34dp" android:layout_marginStart="7dp" android:minWidth="64dp" android:text="番剧" android:textAllCaps="false" android:textSize="12sp" app:cornerRadius="17dp"/>
+   </LinearLayout>
+   <ProgressBar android:id="@+id/home_search_progress" android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center_horizontal" android:layout_marginTop="10dp" android:indeterminateTint="@color/brand" android:visibility="gone"/>
+   <TextView android:id="@+id/home_search_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/text_secondary" android:textSize="12sp" android:visibility="gone"/>
+   <androidx.recyclerview.widget.RecyclerView android:id="@+id/home_search_results" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false" android:visibility="gone" android:clipToPadding="false" android:paddingBottom="8dp"/>
    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:text="为你推荐" android:textColor="@color/text_primary" android:textSize="19sp" android:textStyle="bold"/>
    <ProgressBar android:id="@+id/home_progress" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center_horizontal" android:layout_marginTop="16dp" android:indeterminateTint="@color/brand" android:visibility="gone"/>
    <TextView android:id="@+id/home_feed_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center" android:text="正在加载推荐视频…" android:textColor="@color/text_secondary" android:textSize="12sp"/>
-   <androidx.recyclerview.widget.RecyclerView android:id="@+id/home_recommendations" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:clipToPadding="false" android:nestedScrollingEnabled="false"/>
+   <androidx.recyclerview.widget.RecyclerView android:id="@+id/home_recommendations" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:clipToPadding="false" android:nestedScrollingEnabled="false" android:paddingBottom="12dp"/>
   </LinearLayout>
  </androidx.core.widget.NestedScrollView>
 </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

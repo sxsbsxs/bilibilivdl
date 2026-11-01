@@ -41,7 +41,15 @@ object BiliPopularApi {
                             duration = "%d:%02d".format(seconds / 60, seconds % 60),
                             bvid = bvid,
                             aid = item.optLong("aid"),
-                            description = item.optString("desc")
+                            description = item.optString("desc"),
+                            danmaku = stat?.optLong("danmaku"),
+                            likes = stat?.optLong("like"),
+                            favorites = stat?.optLong("favorite"),
+                            coins = stat?.optLong("coin"),
+                            shares = stat?.optLong("share"),
+                            comments = stat?.optLong("reply"),
+                            category = item.optString("tname"),
+                            pubdate = item.optLong("pubdate")
                         )
                     )
                 }

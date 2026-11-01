@@ -28,32 +28,39 @@ object BiliDownloadEngine {
     private const val MAX_RETRIES = 4
 
     suspend fun download(context: Context, playback: PlaybackInfo, title: String, cookie: String,
+        taskId: String = title.hashCode().toString(),
         onProgress: (Long, Long, String) -> Unit): String = withContext(Dispatchers.IO) {
         val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
+        val taskKey = taskId.replace(Regex("[^A-Za-z0-9_-]"), "_").take(48)
+        val fileStem = "$safe.$taskKey"
         val dir = File(context.cacheDir, "bili-download").apply { mkdirs() }
-        val headers = mutableMapOf("User-Agent" to BiliHeaders.UA, "Referer" to "https://www.bilibili.com/",
-            "Origin" to "https://www.bilibili.com", "Accept" to "*/*")
-        if (cookie.isNotBlank()) headers["Cookie"] = cookie
-        val merged = File(dir, "$safe.final.mp4")
+        // CDN media requests use BiliDroid's UA. Never forward the Bilibili account Cookie to CDN hosts.
+        val headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 BiliDroid/1.41.0 (bbcallen@gmail.com)",
+            "Referer" to "https://www.bilibili.com/",
+            "Accept" to "*/*"
+        )
+        val merged = File(dir, "$fileStem.final.mp4")
         try {
             if (playback.isDash) {
                 val video = playback.videoUrl ?: error("DASH 视频轨道缺失")
                 val audio = playback.audioUrl ?: error("DASH 音频轨道缺失")
-                val vf = File(dir, "$safe.video.m4s")
-                val af = File(dir, "$safe.audio.m4s")
+                val vf = File(dir, "$fileStem.video.m4s")
+                val af = File(dir, "$fileStem.audio.m4s")
                 coroutineScope {
-                    val v = async { transfer(video, vf, headers) { n, _ -> onProgress(n + af.length(), -1, "下载视频轨道") } }
-                    val a = async { transfer(audio, af, headers) { n, _ -> onProgress(n + vf.length(), -1, "下载音频轨道") } }
+                    val v = async { transferCandidates(listOf(video) + playback.videoBackupUrls, vf, headers) { n, _ -> onProgress(n + af.length(), -1, "下载视频轨道") } }
+                    val a = async { transferCandidates(listOf(audio) + playback.audioBackupUrls, af, headers) { n, _ -> onProgress(n + vf.length(), -1, "下载音频轨道") } }
                     v.await(); a.await()
                 }
                 onProgress(0, 0, "正在合并音视频")
                 muxDashTracks(vf, af, merged)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 if (!merged.isFile || merged.length() == 0L) error("音视频合并失败：输出文件为空")
                 vf.delete(); af.delete()
             } else if (playback.segments.size > 1) {
                 // DURL 多段视频需要按接口返回顺序全部下载并顺序拼接。
                 val segmentFiles = playback.segments.mapIndexed { index, _ ->
-                    File(dir, "$safe.segment$index.tmp")
+                    File(dir, "$fileStem.segment$index.tmp")
                 }
                 segmentFiles.forEachIndexed { index, segmentFile ->
                     transfer(playback.segments[index], segmentFile, headers) { n, _ ->
@@ -62,17 +69,55 @@ object BiliDownloadEngine {
                     }
                 }
                 muxDurlSegments(segmentFiles, merged)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 // Keep partial segments when cancelled; remove only after a successful mux.
                 segmentFiles.forEach { it.delete() }
             } else {
-                transfer(playback.url, merged, headers) { n, total -> onProgress(n, total, "下载视频") }
+                transferCandidates(listOf(playback.url), merged, headers) { n, total -> onProgress(n, total, "下载视频") }
             }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
             publish(context, merged, safe)
+        } catch (cancelled: CancellationException) {
+            // Preserve partial transfers so pause/restart can continue from the last byte.
+            throw cancelled
         } catch (error: Exception) {
-            merged.delete()
+            // Keep network partials; the next retry validates HTTP Range before appending.
             throw error
         }
     }
+
+    fun cleanupTask(context: Context, taskId: String, title: String) {
+        val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
+        val taskKey = taskId.replace(Regex("[^A-Za-z0-9_-]"), "_").take(48)
+        File(context.cacheDir, "bili-download").listFiles()
+            ?.filter { it.name.contains(".$taskKey.") }
+            ?.forEach { it.delete() }
+    }
+
+    /** 按 BVD 的候选源轮换策略处理 CDN 403；切换源时丢弃不可信的跨源临时前缀。 */
+    private suspend fun transferCandidates(urls: List<String>, file: File, headers: Map<String, String>,
+        progress: (Long, Long) -> Unit) {
+        val candidates = urls.filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
+        require(candidates.isNotEmpty()) { "B站没有返回可用的 CDN 地址" }
+        var last: Exception? = null
+        for ((index, url) in candidates.withIndex()) {
+            try {
+                transfer(url, file, headers, progress)
+                return
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                last = error
+                if (index < candidates.lastIndex) {
+                    file.delete()
+                    progress(0L, -1L)
+                }
+            }
+        }
+        throw last ?: IllegalStateException("所有 CDN 地址均不可用")
+    }
+
+    private class CdnHttpException(val status: Int) : java.io.IOException("CDN 返回 HTTP " + status)
 
     private suspend fun transfer(url: String, file: File, headers: Map<String, String>,
         progress: (Long, Long) -> Unit) {
@@ -80,7 +125,7 @@ object BiliDownloadEngine {
         for (attempt in 0..MAX_RETRIES) {
             try { transferOnce(url, file, headers, progress); return }
             catch (e: CancellationException) { throw e }
-            catch (e: Exception) { last = e; if (attempt == MAX_RETRIES) break; delay((1000L shl attempt).coerceAtMost(8000L)) }
+            catch (e: Exception) { last = e; if (e is CdnHttpException && (e.status == 403 || e.status == 412)) break; if (attempt == MAX_RETRIES) break; delay((1000L shl attempt).coerceAtMost(8000L)) }
         }
         throw last ?: IllegalStateException("下载失败")
     }
@@ -101,7 +146,15 @@ object BiliDownloadEngine {
             }
         try {
             val code = c.responseCode
-            if (code != 200 && code != 206) error("CDN 返回 HTTP $code")
+            if (code == 416 && offset > 0L) {
+                val total = Regex("bytes \\*/(\\d+)").matchEntire(c.getHeaderField("Content-Range").orEmpty())
+                    ?.groupValues?.get(1)?.toLongOrNull()
+                if (total != null && total == offset) {
+                    progress(offset, total)
+                    return
+                }
+            }
+            if (code != 200 && code != 206) throw CdnHttpException(code)
             val append = offset > 0 && code == 206
             if (append) {
                 val range = Regex("bytes (\\d+)-(\\d+)/(\\d+|\\*)").matchEntire(c.getHeaderField("Content-Range").orEmpty())
@@ -136,7 +189,8 @@ object BiliDownloadEngine {
      * 合并 B站 DURL 的多个 MP4 分段。不能直接拼接 MP4 文件字节；
      * 这里按媒体轨道读取样本，并为每段增加前一段的时间偏移。
      */
-    private fun muxDurlSegments(segments: List<File>, output: File) {
+    private suspend fun muxDurlSegments(segments: List<File>, output: File) {
+        output.delete()
         require(segments.isNotEmpty()) { "没有可合并的视频分段" }
         val muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         val outputTracks = linkedMapOf<String, Int>()
@@ -145,7 +199,7 @@ object BiliDownloadEngine {
         var started = false
         var timeOffsetUs = 0L
         try {
-            segments.forEachIndexed { segmentIndex, file ->
+            for ((segmentIndex, file) in segments.withIndex()) {
                 val extractor = MediaExtractor()
                 try {
                     extractor.setDataSource(file.absolutePath)
@@ -170,6 +224,7 @@ object BiliDownloadEngine {
                         started = true
                     }
                     while (true) {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
                         val track = extractor.sampleTrackIndex
                         if (track < 0) break
                         val outTrack = trackMap[track]
@@ -198,7 +253,8 @@ object BiliDownloadEngine {
     }
 
     /** 使用 Android MediaExtractor/MediaMuxer 直接复制 DASH 轨道，不重新编码。 */
-    private fun muxDashTracks(video: File, audio: File, output: File) {
+    private suspend fun muxDashTracks(video: File, audio: File, output: File) {
+        output.delete()
         val videoExtractor = MediaExtractor()
         val audioExtractor = MediaExtractor()
         var muxer: MediaMuxer? = null
@@ -224,6 +280,7 @@ object BiliDownloadEngine {
             var videoTime = videoExtractor.sampleTime
             var audioTime = audioExtractor.sampleTime
             while (videoTime >= 0 || audioTime >= 0) {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 val takeVideo = audioTime < 0 || (videoTime >= 0 && videoTime <= audioTime)
                 val extractor = if (takeVideo) videoExtractor else audioExtractor
                 val buffer = if (takeVideo) videoBuffer else audioBuffer
@@ -247,7 +304,7 @@ object BiliDownloadEngine {
         }
     }
 
-    private fun publish(context: Context, file: File, title: String): String {
+    private suspend fun publish(context: Context, file: File, title: String): String {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$title.mp4")
@@ -259,8 +316,19 @@ object BiliDownloadEngine {
         }
         val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: error("无法创建系统媒体库文件")
         try {
-            resolver.openOutputStream(uri, "w")?.use { output -> file.inputStream().use { it.copyTo(output, BUFFER_SIZE) } }
-                ?: error("无法写入系统媒体库")
+            resolver.openOutputStream(uri, "w")?.use { output ->
+                file.inputStream().use { input ->
+                    val buffer = ByteArray(BUFFER_SIZE)
+                    while (true) {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        output.write(buffer, 0, count)
+                    }
+                    output.flush()
+                }
+            } ?: error("无法写入系统媒体库")
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
             if (Build.VERSION.SDK_INT >= 29) resolver.update(uri, ContentValues().apply {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
             }, null, null)

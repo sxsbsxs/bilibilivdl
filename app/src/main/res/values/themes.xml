@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.BiliVdl" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.BiliVdl" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/brand</item>
         <item name="colorOnPrimary">@color/white</item>
         <item name="colorSecondary">@color/brand</item>
         <item name="android:statusBarColor">@color/background_dark</item>
         <item name="android:navigationBarColor">@color/background_dark</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowBackground">@color/background_dark</item>
         <item name="android:fontFamily">sans</item>
     </style>

@@ -24,6 +24,9 @@ class MainActivity : AppCompatActivity() {
         }
         if (savedInstanceState == null) binding.bottomNavigation.selectedItemId = R.id.nav_home
     }
+    fun openAccountPage() {
+        binding.bottomNavigation.selectedItemId = R.id.nav_profile
+    }
     private fun showPage(fragment: Fragment) {
         supportFragmentManager.beginTransaction().setReorderingAllowed(true)
             .replace(R.id.fragment_container, fragment).commit()

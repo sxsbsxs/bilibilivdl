@@ -6,9 +6,17 @@ import android.view.View
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliPopularApi
+import com.sxsbsxs.bilivdl.data.BiliApi
+import com.sxsbsxs.bilivdl.data.BiliVideoLookup
+import com.sxsbsxs.bilivdl.data.BangumiApiBridge
+import com.sxsbsxs.bilivdl.data.BangumiSearchResult
+import androidx.appcompat.app.AlertDialog
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
 import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.databinding.FragmentHomeBinding
 import kotlinx.coroutines.CancellationException
@@ -28,28 +36,52 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private var loadJob: Job? = null
     private val videos = mutableListOf<com.sxsbsxs.bilivdl.data.BiliVideo>()
     private lateinit var adapter: VideoAdapter
+    private lateinit var searchAdapter: VideoAdapter
+    private lateinit var bangumiSearchAdapter: BangumiResultAdapter
+    private var bangumiSearchMode = false
+    private var searchJob: Job? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         _binding = FragmentHomeBinding.bind(view)
 
         val openSearch = {
-            parentFragmentManager.beginTransaction()
-                .replace(R.id.fragment_container, DiscoverFragment())
-                .addToBackStack("search")
-                .commit()
+            b.homeSearchInput.requestFocus()
+            val keyboard = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            keyboard?.showSoftInput(b.homeSearchInput, InputMethodManager.SHOW_IMPLICIT)
+        }
+        b.homeLoginButton.setOnClickListener {
+            (activity as? com.sxsbsxs.bilivdl.MainActivity)?.openAccountPage()
         }
         b.homeSearchButton.setOnClickListener { openSearch() }
         b.homeSearchEntry.setOnClickListener { openSearch() }
+        b.homeSearchInput.setOnClickListener { b.homeSearchInput.requestFocus() }
+        b.homeSearchVideoMode.setOnClickListener { setHomeSearchMode(false) }
+        b.homeSearchBangumiMode.setOnClickListener { setHomeSearchMode(true) }
+        setHomeSearchMode(false)
+        b.homeSearchSubmit.setOnClickListener { searchOnHome() }
+        b.homeSearchInput.setOnEditorActionListener { _, action, _ ->
+            if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE) {
+                searchOnHome()
+                true
+            } else false
+        }
 
         adapter = VideoAdapter { video ->
             startActivity(Intent(requireContext(), VideoPlayerActivity::class.java).apply {
                 putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
                 putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
                 putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
+                putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
+                putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
             })
         }
-        b.homeRecommendations.layoutManager = LinearLayoutManager(requireContext())
+        b.homeRecommendations.layoutManager = GridLayoutManager(requireContext(), 2).apply {
+            // A two-column cover feed, like the reference Bilibili discovery layout.
+            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                override fun getSpanSize(position: Int) = 1
+            }
+        }
         b.homeRecommendations.adapter = adapter
         b.homeSwipe.setOnRefreshListener { refresh() }
         b.homeScroll.setOnScrollChangeListener(
@@ -61,6 +93,98 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             }
         )
         refresh()
+    }
+
+    private fun setHomeSearchMode(bangumi: Boolean) {
+        bangumiSearchMode = bangumi
+        b.homeSearchVideoMode.isSelected = !bangumi
+        b.homeSearchBangumiMode.isSelected = bangumi
+        b.homeSearchVideoMode.alpha = if (bangumi) 0.65f else 1f
+        b.homeSearchBangumiMode.alpha = if (bangumi) 1f else 0.65f
+        b.homeSearchInput.hint = if (bangumi) "搜索番剧名称" else "搜索视频、UP主、BV号或AV号"
+    }
+
+    private fun openBangumiFromHome(item: BangumiSearchResult) {
+        b.homeSearchStatus.text = "正在获取《${item.title}》的剧集…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(item.seasonId) }
+                if (season.episodes.isEmpty()) error("该番剧暂时没有可用剧集")
+                val labels: Array<CharSequence> = season.episodes.map { episode ->
+                    listOf(episode.title, episode.longTitle).filter { it.isNotBlank() }.joinToString(" · ")
+                }.toTypedArray()
+                AlertDialog.Builder(requireContext())
+                    .setTitle(season.title.ifBlank { item.title })
+                    .setItems(labels) { _, index ->
+                        val episode = season.episodes[index]
+                        startActivity(Intent(requireContext(), VideoPlayerActivity::class.java).apply {
+                            putExtra(VideoPlayerActivity.EXTRA_EP_ID, episode.id)
+                            putExtra(VideoPlayerActivity.EXTRA_AID, episode.aid)
+                            putExtra(VideoPlayerActivity.EXTRA_BVID, episode.bvid)
+                            putExtra(VideoPlayerActivity.EXTRA_COVER, episode.cover.ifBlank { season.cover })
+                            putExtra(VideoPlayerActivity.EXTRA_AUTHOR, "番剧 · ${season.title}")
+                            putExtra(VideoPlayerActivity.EXTRA_TITLE, listOf(season.title, episode.title, episode.longTitle)
+                                .filter { it.isNotBlank() }.joinToString(" · "))
+                        })
+                    }
+                    .setNegativeButton("关闭", null)
+                    .show()
+                b.homeSearchStatus.text = "已加载 ${season.episodes.size} 集，选择剧集即可播放"
+            } catch (e: Exception) {
+                b.homeSearchStatus.text = "番剧详情加载失败：${e.message ?: "网络异常"}"
+            }
+        }
+    }
+
+    private fun searchOnHome() {
+        val keyword = b.homeSearchInput.text?.toString()?.trim().orEmpty()
+        if (keyword.isBlank()) {
+            b.homeSearchInput.error = if (bangumiSearchMode) "请输入番剧名称" else "请输入关键词、BV号或AV号"
+            return
+        }
+        b.homeSearchInput.error = null
+        (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(b.homeSearchInput.windowToken, 0)
+        searchJob?.cancel()
+        b.homeSearchProgress.visibility = View.VISIBLE
+        b.homeSearchStatus.visibility = View.VISIBLE
+        b.homeSearchStatus.text = if (bangumiSearchMode) "正在搜索番剧…" else "正在搜索视频…"
+        b.homeSearchSubmit.isEnabled = false
+        searchJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                if (bangumiSearchMode) {
+                    val result = withContext(Dispatchers.IO) { BangumiApiBridge.search(keyword) }
+                    if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关番剧"
+                    else {
+                        b.homeSearchStatus.visibility = View.GONE
+                        startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
+                            putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
+                            putExtra(SearchResultsActivity.EXTRA_BANGUMI, true)
+                            putExtra(SearchResultsActivity.EXTRA_BANGUMI_RESULTS, ArrayList(result))
+                        })
+                    }
+                } else {
+                    val result = withContext(Dispatchers.IO) {
+                        if (BiliApi.resolveVideoId(keyword) != null) listOf(BiliVideoLookup.get(keyword))
+                        else BiliApi.searchVideos(keyword)
+                    }
+                    if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关视频"
+                    else {
+                        b.homeSearchStatus.visibility = View.GONE
+                        startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
+                            putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
+                            putExtra(SearchResultsActivity.EXTRA_BANGUMI, false)
+                            putExtra(SearchResultsActivity.EXTRA_VIDEO_RESULTS, ArrayList(result))
+                        })
+                    }
+                }
+            } catch (e: Exception) {
+                b.homeSearchStatus.text = "搜索失败：${e.message ?: "网络异常"}"
+            } finally {
+                b.homeSearchProgress.visibility = View.GONE
+                b.homeSearchSubmit.isEnabled = true
+            }
+        }
     }
 
     private fun refresh() {
@@ -133,7 +257,9 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
 
     override fun onDestroyView() {
         loadJob?.cancel()
+        searchJob?.cancel()
         loadJob = null
+        searchJob = null
         loading = false
         _binding = null
         super.onDestroyView()

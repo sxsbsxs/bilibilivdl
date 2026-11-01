@@ -8,14 +8,13 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.security.MessageDigest
-import java.util.TreeMap
 
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0)
+data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
+data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "")
 
 object BiliPlaybackApi {
-    private val order = intArrayOf(46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52)
     private fun get(url: String, cookie: String): JSONObject {
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout=20000; readTimeout=25000; instanceFollowRedirects=true
@@ -31,24 +30,13 @@ object BiliPlaybackApi {
         } finally { c.disconnect() }
     }
     private fun enc(s:String)=URLEncoder.encode(s,"UTF-8")
-    private fun md5(s:String)=MessageDigest.getInstance("MD5").digest(s.toByteArray()).joinToString(""){"%02x".format(it)}
-    private fun mixin(cookie:String):String {
-        val nav=get("https://api.bilibili.com/x/web-interface/nav",cookie)
-        if(nav.optInt("code")!=0) error("无法获取 B站签名密钥：${nav.optString("message")}")
-        val img=nav.optJSONObject("data")?.optJSONObject("wbi_img")?:error("B站未返回 WBI 密钥")
-        val a=img.optString("img_url").substringAfterLast('/').substringBefore('.')
-        val b=img.optString("sub_url").substringAfterLast('/').substringBefore('.')
-        val raw=a+b
-        if(raw.length<64) error("B站 WBI 密钥格式异常")
-        return order.joinToString(""){raw[it].toString()}.take(32)
-    }
-    private fun signed(path:String, values:Map<String,String>, cookie:String):String {
-        val p=TreeMap(values); p["wts"]=(System.currentTimeMillis()/1000).toString()
-        val query=p.entries.joinToString("&"){"${enc(it.key)}=${enc(it.value).replace(Regex("[!'()*]"),"")}"}
-        return "https://api.bilibili.com$path?$query&w_rid=${md5(query+mixin(cookie))}"
-    }
 
-
+    private fun authorSign(mid: Long, cookie: String): String {
+        if (mid <= 0L) return ""
+        val root = get("https://api.bilibili.com/x/space/acc/info?mid=$mid", cookie)
+        if (root.optInt("code", -1) != 0) return ""
+        return root.optJSONObject("data")?.optString("sign").orEmpty().trim()
+    }
     /**
      * gRPC 优先的匿名播放线路。gRPC 不可用时返回 null，由调用方继续 HTTP 备用线路。
      */
@@ -66,7 +54,7 @@ object BiliPlaybackApi {
             )
             val response = BiliGRPCHttp.request { PlayURLGRPC.playView(request) }.awaitCall()
             val videoInfo = response.videoInfo ?: return null
-            val streams = videoInfo.streamList.filter { it.content != null }
+            val streams = videoInfo.streamList.filter { it.content != null }.sortedByDescending { it.streamInfo?.quality ?: 0 }
             if (streams.isEmpty()) return null
             val selected = streams.firstOrNull { it.streamInfo?.quality == requestedQuality }
                 ?: streams.firstOrNull()
@@ -74,7 +62,7 @@ object BiliPlaybackApi {
             val actualQuality = selected.streamInfo?.quality ?: videoInfo.quality
             val qualities = streams.mapNotNull { stream ->
                 stream.streamInfo?.let { it.quality to it.newDescription }
-            }.distinctBy { it.first }
+            }.distinctBy { it.first }.sortedByDescending { it.first }
             when (val content = selected.content ?: return null) {
                 is Stream.Content.DashVideo -> {
                     val dash = content.value
@@ -92,7 +80,9 @@ object BiliPlaybackApi {
                         qualities = qualities,
                         isDash = audioUrl?.isNotBlank() == true,
                         videoUrl = videoUrl,
-                        audioUrl = audioUrl?.takeIf { it.isNotBlank() }
+                        audioUrl = audioUrl?.takeIf { it.isNotBlank() },
+                        videoBackupUrls = dash.backupUrl.filter { it.isNotBlank() && it != videoUrl },
+                        audioBackupUrls = audio?.backupUrl.orEmpty().filter { it.isNotBlank() && it != audioUrl }
                     )
                 }
                 is Stream.Content.SegmentVideo -> {
@@ -116,22 +106,174 @@ object BiliPlaybackApi {
         }
     }
 
-    suspend fun load(bvid:String, aid:Long, qn:Int=80, cookie:String="", pageIndex:Int=0):PlaybackInfo {
+    suspend fun downloadQualities(aid: Long, cid: Long, cookie: String): List<Pair<Int, String>> {
+        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=127&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json"
+        val root = get(url, cookie)
+        if (root.optInt("code", -1) != 0) {
+            val code = root.optInt("code")
+            error(root.optString("message", "获取可下载清晰度失败") + "（$code）")
+        }
+        val data = root.optJSONObject("data") ?: error("清晰度响应缺少 data")
+        val accepted = data.optJSONArray("accept_quality") ?: return emptyList()
+        val labels = data.optJSONArray("accept_description")
+        val dashVideo = data.optJSONObject("dash")?.optJSONArray("video")
+        val returnedIds = if (dashVideo != null) {
+            (0 until dashVideo.length()).mapNotNull { dashVideo.optJSONObject(it)?.optInt("id")?.takeIf { id -> id > 0 } }.toSet()
+        } else setOf(data.optInt("quality").takeIf { it > 0 } ?: return emptyList())
+        return (0 until accepted.length()).mapNotNull { index ->
+            val qn = accepted.optInt(index)
+            if (qn <= 0 || qn !in returnedIds) null else qn to (labels?.optString(index).orEmpty().ifBlank { "清晰度 $qn" })
+        }.distinctBy { it.first }.sortedByDescending { it.first }
+    }
+
+    suspend fun downloadStreamChoices(aid: Long, cid: Long, qn: Int, cookie: String = ""): DownloadStreamChoices {
+        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json"
+        val root = get(url, cookie)
+        if (root.optInt("code", -1) == 0) {
+            val dash = root.optJSONObject("data")?.optJSONObject("dash")
+            if (dash != null) {
+                val videoArray = dash.optJSONArray("video")
+                val audioArray = dash.optJSONArray("audio")
+                val videos = (0 until (videoArray?.length() ?: 0)).mapNotNull { index ->
+                    val item = videoArray?.optJSONObject(index) ?: return@mapNotNull null
+                    val id = item.optInt("id")
+                    val codec = item.optString("codecs")
+                    val height = item.optInt("height")
+                    val bandwidth = item.optLong("bandwidth")
+                    if (id <= 0 || codec.isBlank()) null else DownloadStreamOption(
+                        id, codec, "${height}P · $codec · ${bandwidth / 1000} kbps", bandwidth
+                    )
+                }.sortedWith(compareByDescending<DownloadStreamOption> { it.id }.thenByDescending { it.bandwidth })
+                val audios = (0 until (audioArray?.length() ?: 0)).mapNotNull { index ->
+                    val item = audioArray?.optJSONObject(index) ?: return@mapNotNull null
+                    val id = item.optInt("id")
+                    val codec = item.optString("codecs")
+                    val bandwidth = item.optLong("bandwidth")
+                    if (id <= 0 || codec.isBlank()) null else DownloadStreamOption(
+                        id, codec, "$codec · ${bandwidth / 1000} kbps", bandwidth
+                    )
+                }.sortedByDescending { it.bandwidth }
+                return DownloadStreamChoices(videos, audios)
+            }
+        }
+        // 兼容 gRPC / 官方接口暂时不可用的情况，仍保留 BiliMiao 的备用实现。
+        val data = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
+            .getVideoPalyUrl(aid.toString(), cid.toString(), qn, 4048)
+        val dash = data.dash ?: return DownloadStreamChoices(emptyList(), emptyList())
+        val videos = dash.video.map { item ->
+            DownloadStreamOption(item.id, item.codecs,
+                item.height.toString() + "P · " + item.codecs + " · " + (item.bandwidth / 1000).toString() + " kbps",
+                item.bandwidth.toLong())
+        }
+        val audios = dash.audio.orEmpty().map { item ->
+            DownloadStreamOption(item.id, item.codecs, item.codecs + " · " + (item.bandwidth / 1000).toString() + " kbps", item.bandwidth.toLong())
+        }
+        return DownloadStreamChoices(videos, audios)
+    }
+
+
+    /**
+     * B站视频详情页的相关推荐接口。结果按官方返回顺序展示，最多保留 20 条。
+     */
+    fun relatedVideos(bvid: String, aid: Long, cookie: String = ""): List<BiliVideo> {
+        require(bvid.isNotBlank() || aid > 0L) { "缺少视频编号，无法获取相关推荐" }
+        val id = if (bvid.isNotBlank()) "bvid=${enc(bvid)}" else "aid=$aid"
+        val root = get("https://api.bilibili.com/x/web-interface/archive/related?$id", cookie)
+        if (root.optInt("code", -1) != 0) {
+            error(root.optString("message", "获取相关推荐失败"))
+        }
+        val items = root.optJSONArray("data") ?: return emptyList()
+        return (0 until minOf(items.length(), 20)).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            val bvidValue = item.optString("bvid")
+            val aidValue = item.optLong("aid")
+            if (bvidValue.isBlank() && aidValue <= 0L) return@mapNotNull null
+            val owner = item.optJSONObject("owner")
+            val stat = item.optJSONObject("stat")
+            BiliVideo(
+                title = item.optString("title").replace(Regex("<[^>]+>"), ""),
+                cover = item.optString("pic").let { if (it.startsWith("//")) "https:$it" else it },
+                author = owner?.optString("name").orEmpty().ifBlank { "未知 UP 主" },
+                play = stat?.optLong("view")?.toString() ?: "0",
+                duration = item.optString("duration"),
+                bvid = bvidValue,
+                aid = aidValue,
+                description = item.optString("desc"),
+                danmaku = stat?.optLong("danmaku"),
+                likes = stat?.optLong("like"),
+                favorites = stat?.optLong("favorite"),
+                coins = stat?.optLong("coin"),
+                shares = stat?.optLong("share"),
+                comments = stat?.optLong("reply"),
+                category = item.optString("tname"),
+                pubdate = item.optLong("pubdate").takeIf { it > 0L }
+            )
+        }.distinctBy { it.bvid.ifBlank { it.aid.toString() } }
+    }
+
+    private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String): PlaybackInfo? {
+        val root = get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+        if (root.optInt("code", -1) != 0) return null
+        val data = root.optJSONObject("data") ?: return null
+        val qa = data.optJSONArray("accept_quality")
+        val la = data.optJSONArray("accept_description")
+        val choices = (0 until (qa?.length() ?: 0)).mapNotNull { i ->
+            val id = qa?.optInt(i) ?: 0
+            if (id <= 0) null else id to (la?.optString(i).orEmpty().ifBlank { "清晰度 " + id })
+        }.distinctBy { it.first }.sortedByDescending { it.first }
+        val reportedQuality = data.optInt("quality", 0)
+        val dash = data.optJSONObject("dash")
+        if (dash != null) {
+            val va = dash.optJSONArray("video")
+            val aa = dash.optJSONArray("audio")
+            val videos = (0 until (va?.length() ?: 0)).mapNotNull { va?.optJSONObject(it) }
+            val audios = (0 until (aa?.length() ?: 0)).mapNotNull { aa?.optJSONObject(it) }
+            val video = videos.firstOrNull { it.optInt("id") == reportedQuality }
+                ?: videos.firstOrNull { it.optInt("id") == qn }
+                ?: videos.maxByOrNull { it.optLong("bandwidth") } ?: return null
+            val actual = video.optInt("id").takeIf { it > 0 } ?: reportedQuality.takeIf { it > 0 } ?: return null
+            val audio = audios.maxByOrNull { it.optLong("bandwidth") }
+            fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
+            val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
+            val audioUrl = audio?.let { primary(it).ifBlank { it.optJSONArray("backupUrl")?.optString(0).orEmpty() } }
+            if (videoUrl.isBlank()) return null
+            return PlaybackInfo(cid, videoUrl, video.optInt("id", actual),
+                choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual,
+                (choices.filter { choice -> videos.any { it.optInt("id") == choice.first } } + (actual to (choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual))).distinctBy { it.first }.sortedByDescending { it.first },
+                isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl)
+        }
+        val durl = data.optJSONArray("durl") ?: return null
+        val urls = (0 until durl.length()).mapNotNull { durl.optJSONObject(it)?.optString("url")?.takeIf { u -> u.startsWith("http") } }
+        if (urls.isEmpty()) return null
+        val actual = reportedQuality.takeIf { it > 0 } ?: return null
+        val actualLabel = choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual
+        return PlaybackInfo(cid, urls.first(), actual, actualLabel,
+            listOf(actual to actualLabel), segments = urls)
+    }
+
+    suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0,
+        videoCodec: String = "", audioCodec: String = ""):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
         val detailUrl = "https://api.bilibili.com/x/web-interface/view?" +
             id.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
-        var detail = get(detailUrl, cookie)
-        if (detail.optInt("code") != 0) {
-            // 兼容 B 站对公开详情接口的风控：最后再尝试 WBI 详情接口。
-            detail = get(signed("/x/web-interface/wbi/view", id, cookie), cookie)
+        // 游客详情必须先走公开 Web 接口：不调用需要 WBI/登录态的资料聚合接口。
+        // 公开接口被风控或暂不可用时，再回退 BiliMiao 的 app 端详情接口。
+        val d = runCatching {
+            val detail = get(detailUrl, cookie)
+            if (detail.optInt("code") != 0) {
+                val code = detail.optInt("code")
+                error(if (code == -352) "B站暂时限制了游客视频详情请求（-352），请稍后重试" else detail.optString("message", "视频信息获取失败"))
+            }
+            detail.optJSONObject("data") ?: error("视频信息为空")
+        }.getOrElse { publicError ->
+            runCatching {
+                BilimiaoApiBridge.videoInfo(if (bvid.isNotBlank()) bvid else aid.toString(), if (bvid.isNotBlank()) "BV" else "AV")
+            }.getOrElse { fallbackError ->
+                throw IllegalStateException("公开视频详情和 BiliMiao 备用详情均失败：${publicError.message}；${fallbackError.message}", fallbackError)
+            }
         }
-        if(detail.optInt("code")!=0) {
-            val code=detail.optInt("code")
-            error(if(code == -352) "B站暂时风控了视频详情请求（-352），可稍后重试；普通播放不要求登录" else detail.optString("message","视频信息获取失败"))
-        }
-        val d=detail.optJSONObject("data")?:error("视频信息为空")
         val pageArray = d.optJSONArray("pages")
         val parts = if (pageArray != null) (0 until pageArray.length()).mapNotNull { index ->
             val item = pageArray.optJSONObject(index) ?: return@mapNotNull null
@@ -146,70 +288,147 @@ object BiliPlaybackApi {
         val selectedIndex = pageIndex.coerceIn(0, (parts.size - 1).coerceAtLeast(0))
         val cid = parts.getOrNull(selectedIndex)?.cid ?: d.optLong("cid")
         if(cid<=0) error("没有获取到视频分P信息")
-        val params=mutableMapOf("cid" to cid.toString(),"qn" to qn.toString(),"fnver" to "0","fnval" to "4048","fourk" to "1")
-        params.putAll(id)
-        // 采用 bilimiao 的免登录播放接口：/x/player/playurl + avid/cid/qn/fnval。
-        // 不把 Cookie 或 WBI 签名作为必需条件；登录 Cookie 仅作为可选请求头。
         val resolvedAid = d.optLong("aid", aid)
-        // bilimiao2 同款：先尝试 gRPC PlayURL；不可用时自动回退公开 HTTP playurl。
-        tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex) }
-        val publicParams = mutableMapOf(
-            "avid" to resolvedAid.toString(),
-            "cid" to cid.toString(),
-            "qn" to qn.toString(),
-            "fnval" to "4048",
-            "fnver" to "0",
-            "force_host" to "2",
-            "type" to "",
-            "otype" to "json",
-            "fourk" to "1"
-        )
-        val publicQuery = publicParams.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
-        var play = get("https://api.bilibili.com/x/player/playurl?$publicQuery", cookie)
-        if (play.optInt("code") != 0) {
-            // 公开旧接口被临时限制时，回退到 WBI playurl；匿名状态仍然先尝试免登录线路。
-            play = get(signed("/x/player/wbi/playurl", params, cookie), cookie)
+        fun enrich(value: PlaybackInfo): PlaybackInfo {
+            val stat = d.optJSONObject("stat")
+            val owner = d.optJSONObject("owner")
+            return value.copy(
+                viewCount = stat?.optLong("view") ?: 0L,
+                danmakuCount = stat?.optLong("danmaku") ?: 0L,
+                pubdate = d.optLong("pubdate"),
+                description = d.optString("desc"),
+                cover = d.optString("pic"),
+                author = owner?.optString("name").orEmpty(),
+                likeCount = stat?.optLong("like") ?: 0L,
+                favoriteCount = stat?.optLong("favorite") ?: 0L,
+                coinCount = stat?.optLong("coin") ?: 0L,
+                shareCount = stat?.optLong("share") ?: 0L,
+                replyCount = stat?.optLong("reply") ?: 0L,
+                ownerFace = owner?.optString("face").orEmpty(),
+                ownerMid = owner?.optLong("mid") ?: 0L,
+                ownerSign = runCatching { authorSign(owner?.optLong("mid") ?: 0L, cookie) }.getOrDefault(""),
+                category = d.optString("tname"), duration = d.optInt("duration")
+            )
         }
-        if(play.optInt("code")!=0) {
-            val code=play.optInt("code")
-            error(if(code == -352) "B站暂时风控了免登录播放地址请求（-352），请稍后重试；如需更高画质再扫码登录" else play.optString("message","B站拒绝提供播放地址"))
+        // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
+        // 先请求用户选定档位；若匿名接口对最高档返回空结果，依次尝试常见档位，
+        // 但只显示响应中真实存在的视频轨 ID，绝不把请求值当成实际画质。
+        val httpCandidates = listOf(qn, 80, 64, 32, 16).distinct()
+        for (candidate in httpCandidates) {
+            val resolved = runCatching { httpPlayUrl(resolvedAid, cid, candidate, cookie) }.getOrNull()
+            if (resolved != null) return enrich(resolved.copy(parts = parts, selectedPart = selectedIndex))
         }
-        val data=play.optJSONObject("data")?:error("播放接口没有返回 data")
-        val ids=data.optJSONArray("accept_quality"); val names=data.optJSONArray("accept_description")
-        val qualities=mutableListOf<Pair<Int,String>>()
-        if(ids!=null&&names!=null) for(i in 0 until minOf(ids.length(),names.length())) qualities.add(ids.optInt(i) to names.optString(i))
-        val actual=data.optInt("quality",qn)
-        val dash=data.optJSONObject("dash")
-        if(dash!=null) {
-            val videos=dash.optJSONArray("video") ?: error("DASH 视频轨道为空")
-            val video=(0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull { it.optInt("id")==actual }
-                ?: (0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的视频轨道")
-            val audios=dash.optJSONArray("audio") ?: error("DASH 音频轨道为空")
-            val audio=(0 until audios.length()).mapNotNull { audios.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的音频轨道")
-            fun streamUrl(item: JSONObject): String {
-                val primary=item.optString("baseUrl").ifBlank { item.optString("base_url") }
-                val backups=item.optJSONArray("backupUrl") ?: item.optJSONArray("backup_url")
-                return primary.ifBlank { backups?.optString(0).orEmpty() }.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-                    ?: error("B站返回了无效的 DASH 资源地址")
+        // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
+        // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
+        if (videoCodec.isBlank() && audioCodec.isBlank()) {
+            tryGrpcPlayback(resolvedAid, cid, qn)?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
+        }
+
+        val upstream = runCatching {
+            com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
+                .getVideoPalyUrl(resolvedAid.toString(), cid.toString(), qn, 4048)
+        }.getOrElse { cause ->
+            val detail = cause.message.orEmpty()
+            if (detail.contains("Conversion") && detail.contains("万")) {
+                throw IllegalStateException("B站备用播放接口返回了异常格式数据；公开播放接口和 gRPC 线路均未取得可用流，请稍后重试", cause)
             }
-            return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true,streamUrl(video),streamUrl(audio), parts = parts, selectedPart = selectedIndex)
+            throw IllegalStateException("B站公开播放接口与 gRPC 均未取得可用流；备用线路失败：${detail.ifBlank { "未知解析错误" }}", cause)
         }
-        val durls = data.optJSONArray("durl")
-        val streams = durls?.let { array ->
-            (0 until array.length()).mapNotNull { index ->
-                val item = array.optJSONObject(index) ?: return@mapNotNull null
-                val primary = item.optString("url")
-                val backups = item.optJSONArray("backup_url") ?: item.optJSONArray("backupUrl")
-                val selected = primary.ifBlank { backups?.optString(0).orEmpty() }
-                selected.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        val dash = upstream.dash
+        if (dash != null) {
+            val returnedIds = dash.video.map { it.id }.filter { it > 0 }.toSet()
+            val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
+                if (quality !in returnedIds) null
+                else quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
+            }.distinctBy { it.first }.sortedByDescending { it.first }
+            val reportedQuality = upstream.quality.takeIf { it > 0 }
+            fun itemJson(item: com.a10miaomiao.bilimiao.comm.apis.PlayerAPI.DashItem): JSONObject {
+                val segment = JSONObject()
+                    .put("initialization", item.segment_base.initialization)
+                    .put("index_range", item.segment_base.index_range)
+                return JSONObject()
+                    .put("id", item.id)
+                    .put("bandwidth", item.bandwidth)
+                    .put("base_url", item.base_url)
+                    .put("backup_url", org.json.JSONArray(item.backup_url ?: emptyList<String>()))
+                    .put("mime_type", item.mime_type)
+                    .put("codecs", item.codecs)
+                    .put("width", item.width)
+                    .put("height", item.height)
+                    .put("frame_rate", item.frame_rate)
+                    .put("segment_base", segment)
             }
-        }.orEmpty()
-        if(streams.isEmpty()) error("B站未返回可播放的 DASH 或 MP4 音视频流")
-        // DURL 可能由多个连续分段组成；不能只取第一个分段，否则播放/下载会被截断。
+            val dashJson = JSONObject()
+                .put("duration", dash.duration)
+                .put("video", org.json.JSONArray().apply { dash.video.forEach { put(itemJson(it)) } })
+                .put("audio", org.json.JSONArray().apply { dash.audio.orEmpty().forEach { put(itemJson(it)) } })
+            val selectedVideoId = videoCodec.substringBefore('|').toIntOrNull()
+            val selectedVideoCodec = videoCodec.substringAfter('|', videoCodec)
+            val video = if (videoCodec.isNotBlank()) {
+                dash.video.firstOrNull { (reportedQuality == null || it.id == reportedQuality) && (selectedVideoId == null || it.id == selectedVideoId) && it.codecs == selectedVideoCodec }
+                    ?: error("B站没有返回所选视频编码：" + videoCodec)
+            } else dash.video.firstOrNull { it.id == reportedQuality }
+                ?: dash.video.maxByOrNull { it.bandwidth }
+                ?: error("BiliMiao 没有返回 DASH 视频轨道")
+            val actual = video.id.takeIf { it > 0 } ?: error("B站没有返回实际视频清晰度")
+            val selectedAudioId = audioCodec.substringBefore('|').toIntOrNull()
+            val selectedAudioCodec = audioCodec.substringAfter('|', audioCodec)
+            val audio = if (audioCodec.isNotBlank()) {
+                dash.audio.orEmpty().firstOrNull { (selectedAudioId == null || it.id == selectedAudioId) && it.codecs == selectedAudioCodec }
+                    ?: error("B站没有返回所选音频编码：" + audioCodec)
+            } else dash.audio?.firstOrNull()
+            fun bestUrl(primary: String, backups: List<String>?): String =
+                primary.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: backups.orEmpty().firstOrNull { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: error("BiliMiao 返回了无效的 CDN 地址")
+            return PlaybackInfo(
+                cid = cid,
+                url = DashManifestBuilder.toDataUri(dashJson, actual),
+                quality = actual,
+                name = qualities.firstOrNull { it.first == actual }?.second ?: "当前清晰度",
+                qualities = qualities,
+                isDash = audio != null,
+                videoUrl = bestUrl(video.base_url, video.backup_url),
+                audioUrl = audio?.let { bestUrl(it.base_url, it.backup_url) },
+                videoBackupUrls = video.backup_url.orEmpty().filter { it.isNotBlank() && it != video.base_url },
+                audioBackupUrls = audio?.let { selectedAudio -> selectedAudio.backup_url.orEmpty().filter { it.isNotBlank() && it != selectedAudio.base_url } }.orEmpty(),
+                parts = parts,
+                selectedPart = selectedIndex,
+                viewCount = d.optJSONObject("stat")?.optLong("view") ?: 0L,
+                danmakuCount = d.optJSONObject("stat")?.optLong("danmaku") ?: 0L,
+                pubdate = d.optLong("pubdate"), description = d.optString("desc"),
+                cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty(),
+            likeCount = d.optJSONObject("stat")?.optLong("like") ?: 0L,
+            favoriteCount = d.optJSONObject("stat")?.optLong("favorite") ?: 0L,
+            coinCount = d.optJSONObject("stat")?.optLong("coin") ?: 0L,
+            shareCount = d.optJSONObject("stat")?.optLong("share") ?: 0L,
+            replyCount = d.optJSONObject("stat")?.optLong("reply") ?: 0L,
+            category = d.optString("tname"), duration = d.optInt("duration")
+            )
+        }
+        val streams = upstream.durl.orEmpty().mapNotNull { segment ->
+            segment.url.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        }
+        if (streams.isEmpty()) error("BiliMiao 没有返回可播放的视频流")
+        val actual = upstream.quality.takeIf { it > 0 }
+            ?: error("B站没有返回实际清晰度，已停止显示预设画质")
+        val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
+            if (quality != actual) null
+            else quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
+        }.ifEmpty { listOf(actual to "清晰度 $actual") }
         return PlaybackInfo(
-            cid, streams.first(), actual,
-            qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",
-            qualities, false, segments = streams
+            cid = cid,
+            url = streams.first(),
+            quality = actual,
+            name = qualities.firstOrNull { it.first == actual }?.second ?: "当前清晰度",
+            qualities = qualities,
+            segments = streams,
+            parts = parts,
+            selectedPart = selectedIndex,
+            viewCount = d.optJSONObject("stat")?.optLong("view") ?: 0L,
+            danmakuCount = d.optJSONObject("stat")?.optLong("danmaku") ?: 0L,
+            pubdate = d.optLong("pubdate"), description = d.optString("desc"),
+            cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty()
         )
     }
 }

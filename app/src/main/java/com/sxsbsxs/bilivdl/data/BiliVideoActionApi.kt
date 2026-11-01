@@ -97,6 +97,19 @@ object BiliVideoActionApi {
         }
     }
 
+    fun isLiked(aid: Long, cookie: String): Boolean {
+        require(aid > 0L) { "视频 AV 号无效" }
+        val root = call(
+            "/x/web-interface/archive/has/like",
+            mapOf("aid" to aid.toString()),
+            cookie,
+            post = false,
+            appApi = false
+        )
+        check(root, "获取点赞状态失败")
+        return root.optBoolean("data", false)
+    }
+
     /** 点赞或取消点赞；与 bilimiao VideoAPI.like 使用相同接口语义。 */
     fun like(aid: Long, liked: Boolean, cookie: String) {
         val root = call(

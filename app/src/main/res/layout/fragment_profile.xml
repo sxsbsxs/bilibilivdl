@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background_dark" android:fillViewport="true">
  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="22dp">
   <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="我的账号" android:textColor="@color/text_primary" android:textSize="26sp" android:textStyle="bold"/>
-  <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" app:cardBackgroundColor="@color/surface_dark" app:cardCornerRadius="18dp">
+  <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" app:cardBackgroundColor="@color/surface_elevated" app:cardCornerRadius="18dp" app:strokeColor="@color/stroke_dark" app:strokeWidth="1dp">
    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
     <TextView android:id="@+id/account_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="未登录" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold"/>
     <TextView android:id="@+id/account_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="正在检查账号状态…" android:textColor="@color/text_secondary" android:textSize="13sp"/>

@@ -14,7 +14,11 @@ data class VideoComment(
     val likes: Int,
     val replyCount: Int,
     val mid: Long,
-    val liked: Boolean = false
+    val liked: Boolean = false,
+    val face: String = "",
+    val ctime: Long = 0L,
+    val isUp: Boolean = false,
+    val level: Int = 0
 )
 
 data class DanmakuItem(
@@ -140,6 +144,115 @@ object BiliInteractionApi {
 
     fun danmaku(cid: Long, cookie: String = ""): List<DanmakuItem> {
         require(cid > 0) { "视频分P编号无效" }
+        val headers = mapOf(
+            "User-Agent" to BiliHeaders.UA,
+            "Referer" to "https://www.bilibili.com/",
+            "Accept" to "*/*"
+        )
+        fun getBytes(url: String): ByteArray {
+            val c = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15000
+                readTimeout = 25000
+                setRequestProperty("User-Agent", headers.getValue("User-Agent"))
+                setRequestProperty("Referer", headers.getValue("Referer"))
+                setRequestProperty("Accept", headers.getValue("Accept"))
+                if (cookie.isNotBlank()) setRequestProperty("Cookie", cookie)
+            }
+            return try {
+                val code = c.responseCode
+                if (code !in 200..299) error("弹幕接口 HTTP $code")
+                c.inputStream.use { it.readBytes() }
+            } finally { c.disconnect() }
+        }
+        fun readVarint(data: ByteArray, startAt: Int): Pair<Long, Int> {
+            var value = 0L
+            var shift = 0
+            var index = startAt
+            while (index < data.size && shift < 64) {
+                val b = data[index++].toInt() and 0xff
+                value = value or ((b and 0x7f).toLong() shl shift)
+                if ((b and 0x80) == 0) return value to index
+                shift += 7
+            }
+            error("弹幕 Protobuf 数据格式错误")
+        }
+        fun skipField(data: ByteArray, startAt: Int, wire: Int): Int = when (wire) {
+            0 -> readVarint(data, startAt).second
+            1 -> (startAt + 8).also { require(it <= data.size) }
+            2 -> {
+                val (length, next) = readVarint(data, startAt)
+                (next + length.toInt()).also { require(length >= 0 && it <= data.size) }
+            }
+            5 -> (startAt + 4).also { require(it <= data.size) }
+            else -> error("不支持的弹幕 Protobuf 字段")
+        }
+        fun parseElem(data: ByteArray): DanmakuItem? {
+            var i = 0
+            var progress = 0L
+            var mode = 1
+            var size = 25
+            var color = 0xFFFFFF
+            var pool = 0
+            var message = ""
+            while (i < data.size) {
+                val (tag, next) = readVarint(data, i); i = next
+                val field = (tag shr 3).toInt()
+                val wire = (tag and 7).toInt()
+                when {
+                    field in setOf(2, 3, 4, 5, 9) && wire == 0 -> {
+                        val (v, n) = readVarint(data, i); i = n
+                        when (field) {
+                            2 -> progress = v
+                            3 -> mode = v.toInt()
+                            4 -> size = v.toInt()
+                            5 -> color = v.toInt()
+                            9 -> pool = v.toInt()
+                        }
+                    }
+                    field == 7 && wire == 2 -> {
+                        val (length, n) = readVarint(data, i); i = n
+                        require(length >= 0 && i + length.toInt() <= data.size)
+                        message = String(data, i, length.toInt(), Charsets.UTF_8)
+                        i += length.toInt()
+                    }
+                    else -> i = skipField(data, i, wire)
+                }
+            }
+            return message.takeIf { it.isNotBlank() }?.let {
+                DanmakuItem(progress, mode, size, color, it, pool)
+            }
+        }
+        fun parseSegment(data: ByteArray): List<DanmakuItem> {
+            val result = mutableListOf<DanmakuItem>()
+            var i = 0
+            while (i < data.size) {
+                val (tag, next) = readVarint(data, i); i = next
+                val field = (tag shr 3).toInt()
+                val wire = (tag and 7).toInt()
+                if (field == 1 && wire == 2) {
+                    val (length, n) = readVarint(data, i); i = n
+                    require(length >= 0 && i + length.toInt() <= data.size)
+                    parseElem(data.copyOfRange(i, i + length.toInt()))?.let(result::add)
+                    i += length.toInt()
+                } else i = skipField(data, i, wire)
+            }
+            return result
+        }
+        val protoResult = runCatching {
+            val view = JSONObject(String(getBytes("https://api.bilibili.com/x/v2/dm/web/view?type=1&oid=$cid"), Charsets.UTF_8))
+            if (view.optInt("code") != 0) error(view.optString("message", "弹幕分段信息获取失败"))
+            val total = view.optJSONObject("data")?.optJSONObject("dmSge")?.optInt("total", 1)
+                ?.coerceIn(1, 60) ?: 1
+            buildList {
+                for (segment in 1..total) {
+                    val bytes = getBytes("https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid=$cid&segment_index=$segment")
+                    addAll(parseSegment(bytes))
+                }
+            }.distinctBy { it.timeMs to it.text }.sortedBy { it.timeMs }
+        }.getOrNull()
+        if (!protoResult.isNullOrEmpty()) return protoResult
+
+        // Compatibility fallback for older videos/CDN responses that still expose XML.
         val c = (URL("https://api.bilibili.com/x/v1/dm/list.so?oid=$cid").openConnection() as HttpURLConnection).apply {
             connectTimeout = 15000
             readTimeout = 20000
@@ -151,7 +264,7 @@ object BiliInteractionApi {
             val stream = if (c.responseCode in 200..299) c.inputStream else c.errorStream
             stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         } finally { c.disconnect() }
-        if (xml.isBlank()) error("弹幕接口没有返回内容")
+        if (xml.isBlank()) error("弹幕加载失败：分段弹幕和旧版 XML 接口均未返回数据")
         val parser = Xml.newPullParser()
         parser.setInput(xml.reader())
         val result = ArrayList<DanmakuItem>()

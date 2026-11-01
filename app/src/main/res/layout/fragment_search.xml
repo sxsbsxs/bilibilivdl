@@ -10,11 +10,15 @@
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
         android:layout_marginTop="5dp" android:text="搜索视频、UP 主，或直接输入 BV / AV 号"
         android:textColor="@color/text_secondary" android:textSize="13sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:orientation="horizontal">
+        <com.google.android.material.button.MaterialButton android:id="@+id/search_video_mode" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="视频" android:textAllCaps="false" app:cornerRadius="12dp"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/search_bangumi_mode" android:layout_width="0dp" android:layout_height="40dp" android:layout_marginStart="8dp" android:layout_weight="1" android:text="番剧" android:textAllCaps="false" app:cornerRadius="12dp"/>
+    </LinearLayout>
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/search_input_layout" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:layout_marginTop="18dp"
+        android:layout_height="wrap_content" android:layout_marginTop="10dp"
         android:hint="输入关键词、BV 号或 AV 号"
-        app:boxBackgroundColor="@color/surface_dark" app:boxBackgroundMode="filled"
+        app:boxBackgroundColor="@color/surface_elevated" app:boxBackgroundMode="filled"
         app:boxCornerRadiusTopStart="14dp" app:boxCornerRadiusTopEnd="14dp"
         app:boxCornerRadiusBottomStart="14dp" app:boxCornerRadiusBottomEnd="14dp"
         app:hintTextColor="@color/text_secondary">

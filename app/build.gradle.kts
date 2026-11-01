@@ -1,14 +1,11 @@
-plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
+plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); alias(libs.plugins.ksp) }
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
- defaultConfig { applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=11; versionName="1.1.0" }
+ defaultConfig { applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=20; versionName="2.0.0" }
  buildFeatures { viewBinding=true }
  compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
-
 }
-
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
-
 dependencies {
  implementation("androidx.core:core-ktx:1.15.0")
  implementation("androidx.appcompat:appcompat:1.7.0")
@@ -27,4 +24,8 @@ dependencies {
  implementation(project(":danmaku-engine"))
  implementation("com.squareup.okhttp3:okhttp:4.10.0")
  implementation("com.google.zxing:core:3.5.3")
+ // Keep Room aligned with the upstream Kotlin/KSP toolchain.
+ implementation("androidx.room:room-runtime:2.7.2")
+ implementation("androidx.room:room-ktx:2.7.2")
+ ksp("androidx.room:room-compiler:2.7.2")
 }

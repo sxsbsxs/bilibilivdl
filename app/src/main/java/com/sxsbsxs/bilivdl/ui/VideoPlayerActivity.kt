@@ -1,10 +1,12 @@
 package com.sxsbsxs.bilivdl.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -15,9 +17,13 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
+import com.sxsbsxs.bilivdl.data.BangumiApiBridge
+import com.sxsbsxs.bilivdl.data.SubtitleApiBridge
+import com.sxsbsxs.bilivdl.data.BiliSubtitleTrack
 import com.sxsbsxs.bilivdl.data.BiliInteractionApi
 import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
@@ -26,7 +32,11 @@ import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
 import com.sxsbsxs.bilivdl.data.BiliDownloadService
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
 import com.sxsbsxs.bilivdl.data.VideoComment
+import com.sxsbsxs.bilivdl.data.DanmakuItem
 import com.sxsbsxs.bilivdl.databinding.ActivityVideoPlayerBinding
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.LazyHeaders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,11 +48,41 @@ class VideoPlayerActivity : AppCompatActivity() {
         const val EXTRA_BVID = "bvid"
         const val EXTRA_AID = "aid"
         const val EXTRA_TITLE = "title"
+        const val EXTRA_EP_ID = "ep_id"
+        const val EXTRA_SEASON_ID = "season_id"
+        const val EXTRA_COVER = "cover"
+        const val EXTRA_AUTHOR = "author"
     }
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
     private var info: PlaybackInfo? = null
+    private lateinit var relatedAdapter: VideoAdapter
+    private var videoBackupIndex = 0
+    private var audioBackupIndex = 0
+    private var selectedSubtitleUri: android.net.Uri? = null
+    private var selectedSubtitleLabel: String = ""
+    private var pendingSubtitleSrt = ""
+    private val subtitleExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/x-subrip")) { uri ->
+        if (uri != null) {
+            runCatching {
+                contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(pendingSubtitleSrt) }
+                    ?: error("无法写入字幕文件")
+            }.onSuccess { b.playerStatus.text = "字幕已导出" }
+             .onFailure { b.playerStatus.text = "字幕导出失败：${it.message}" }
+        }
+    }
     private var danmakuEnabled = true
+    private var loadedDanmaku: List<DanmakuItem> = emptyList()
+    private var pendingDanmakuXml = ""
+    private val danmakuExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/xml")) { uri ->
+        if (uri != null) {
+            runCatching {
+                contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(pendingDanmakuXml) }
+                    ?: error("无法写入弹幕文件")
+            }.onSuccess { b.playerStatus.text = "弹幕 XML 已导出" }
+             .onFailure { b.playerStatus.text = "弹幕导出失败：${it.message}" }
+        }
+    }
     private var commentPage = 1
     private var commentHasMore = true
     private var commentLoading = false
@@ -55,6 +95,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 0.75f)
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
     private val aid by lazy { intent.getLongExtra(EXTRA_AID, 0L) }
+    private val epId by lazy { intent.getLongExtra(EXTRA_EP_ID, 0L) }
+    private val seasonId by lazy { intent.getLongExtra(EXTRA_SEASON_ID, 0L) }
     private val cookie by lazy { BiliSession.cookie(this) }
 
     override fun onCreate(saved: Bundle?) {
@@ -62,17 +104,40 @@ class VideoPlayerActivity : AppCompatActivity() {
         b = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(b.root)
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        b.playerAuthor.text = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { "哔哩哔哩视频" }
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentsList.layoutManager = LinearLayoutManager(this)
         b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
+        relatedAdapter = VideoAdapter { video ->
+            startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                putExtra(EXTRA_BVID, video.bvid)
+                putExtra(EXTRA_AID, video.aid)
+                putExtra(EXTRA_TITLE, video.title)
+                putExtra(EXTRA_COVER, video.cover)
+                putExtra(EXTRA_AUTHOR, video.author)
+            })
+        }
+        b.relatedVideosList.layoutManager = LinearLayoutManager(this)
+        b.relatedVideosList.adapter = relatedAdapter
+        b.playerInfoTab.setOnClickListener { showDetailTab(true) }
+        b.playerCommentsTab.setOnClickListener { showDetailTab(false) }
+        showDetailTab(true)
+        loadRelatedVideos()
         b.qualityButton.setOnClickListener { showQuality() }
         b.partButton.setOnClickListener { showParts() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
+        b.shareVideoButton.setOnClickListener { shareCurrentVideo() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
+        b.subtitleButton.setOnClickListener { showSubtitles() }
+        b.moreActionsButton.setOnClickListener { showMoreActions() }
         b.danmakuButton.setOnClickListener {
             danmakuEnabled = !danmakuEnabled
             b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
-            b.danmakuButton.text = if (danmakuEnabled) "弹幕：开" else "弹幕：关"
+            b.danmakuButton.text = if (danmakuEnabled) "弹幕：开 · 长按导出" else "弹幕：关"
+        }
+        b.danmakuButton.setOnLongClickListener {
+            exportDanmaku()
+            true
         }
         b.commentSort.setOnClickListener {
             commentSort = if (commentSort == 3) 2 else 3
@@ -83,55 +148,143 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.videoLike.setOnClickListener { toggleVideoLike() }
         b.videoCoin.setOnClickListener { showCoinDialog() }
         b.videoFavorite.setOnClickListener { showFavoriteFolders() }
-        b.videoTriple.setOnClickListener { tripleAction() }
         b.danmakuSend.setOnClickListener { showDanmakuComposer() }
         // comments_list is inside a NestedScrollView with nested scrolling disabled;
         // listen to the parent scroll view or the RecyclerView never receives scroll events.
         b.playerScroll.setOnScrollChangeListener(
             NestedScrollView.OnScrollChangeListener { scroll, _, y, _, _ ->
                 val content = scroll.getChildAt(0) ?: return@OnScrollChangeListener
-                if (y + scroll.height >= content.measuredHeight - 650) {
+                if (b.playerCommentsPanel.visibility == View.VISIBLE &&
+                    y + scroll.height >= content.measuredHeight - 650) {
                     loadComments(false)
                 }
             }
         )
-        load(80)
+        load(127)
         loadComments(true)
+    }
+
+    private fun showDetailTab(showInfo: Boolean) {
+        b.playerInfoPanel.visibility = if (showInfo) View.VISIBLE else View.GONE
+        b.playerCommentsPanel.visibility = if (showInfo) View.GONE else View.VISIBLE
+        b.playerInfoTab.isSelected = showInfo
+        b.playerCommentsTab.isSelected = !showInfo
+        b.playerInfoTab.alpha = if (showInfo) 1f else 0.68f
+        b.playerCommentsTab.alpha = if (showInfo) 0.68f else 1f
+    }
+
+    private fun loadRelatedVideos() {
+        b.relatedVideosStatus.text = "正在加载相关视频…"
+        lifecycleScope.launch {
+            try {
+                val items = withContext(Dispatchers.IO) {
+                    BiliPlaybackApi.relatedVideos(bvid, aid, cookie)
+                }
+                relatedAdapter.submitList(items)
+                b.relatedVideosStatus.text = if (items.isEmpty()) "暂时没有相关推荐"
+                    else "根据当前视频推荐 · 共 ${items.size} 条"
+            } catch (error: Exception) {
+                b.relatedVideosStatus.text = "相关推荐加载失败：${error.message ?: "网络异常"}"
+            }
+        }
+    }
+
+    private fun showMoreActions() {
+        val labels = arrayOf("分享视频链接", "选择分P / 番剧选集", if (danmakuEnabled) "关闭弹幕" else "开启弹幕", "字幕设置", "发送弹幕")
+        MaterialAlertDialogBuilder(this).setTitle("更多功能")
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> shareCurrentVideo()
+                    1 -> showParts()
+                    2 -> b.danmakuButton.performClick()
+                    3 -> showSubtitles()
+                    4 -> showDanmakuComposer()
+                }
+            }.show()
+    }
+
+    private fun formatCount(value: Long): String = when {
+        value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
+        value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1万", value / 10_000.0)
+        else -> value.toString()
     }
 
     private fun load(qn: Int) {
         b.playerStatus.text = "正在获取播放地址…"
         lifecycleScope.launch {
             try {
-                val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
+                val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
+                videoLiked = if (cookie.isNotBlank() && aid > 0L) {
+                    runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }.getOrDefault(false)
+                } else false
+                b.videoLike.text = (if (videoLiked) "已赞 " else "点赞 ") + formatCount(p.likeCount)
+                b.videoCoin.text = "投币 " + formatCount(p.coinCount)
+                b.videoFavorite.text = "收藏 " + formatCount(p.favoriteCount)
+                b.shareVideoButton.text = "分享 " + formatCount(p.shareCount)
+                b.commentsTitle.text = "评论区 · " + formatCount(p.replyCount)
+                b.playerExtraStats.text = listOf(
+                    p.category,
+                    if (p.duration > 0) "${p.duration / 60}:${(p.duration % 60).toString().padStart(2, '0')}" else ""
+                ).filter { it.isNotBlank() }.joinToString("  ·  ")
+                val authorText = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { p.author }
+                if (authorText.isNotBlank()) b.playerAuthor.text = authorText
+                b.playerAuthorSign.text = p.ownerSign
+                b.playerAuthorSign.visibility = if (p.ownerSign.isBlank()) View.GONE else View.VISIBLE
+                b.playerAuthor.setOnClickListener { if (p.ownerMid > 0L) startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://space.bilibili.com/${p.ownerMid}"))) }
+                val face = p.ownerFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
+                if (face.isNotBlank()) Glide.with(this@VideoPlayerActivity)
+                    .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
+                    .placeholder(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar)
+                    .error(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar).circleCrop().into(b.playerAuthorAvatar)
+                b.playerStats.text = listOf(
+                    formatCount(p.viewCount) + " 播放",
+                    formatCount(p.danmakuCount) + " 弹幕",
+                    formatCount(p.likeCount) + " 点赞",
+                    formatCount(p.coinCount) + " 投币",
+                    formatCount(p.favoriteCount) + " 收藏",
+                    formatCount(p.shareCount) + " 分享",
+                    p.pubdate.takeIf { it > 0L }?.let {
+                        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(it * 1000))
+                    }.orEmpty()
+                ).filter { it.isNotBlank() }.joinToString("  ·  ")
+                b.playerDescription.text = p.description
+                b.playerDescription.visibility = if (p.description.isBlank()) View.GONE else View.VISIBLE
+                b.playerDescription.maxLines = 2
+                b.playerDescription.setOnClickListener {
+                    b.playerDescription.maxLines = if (b.playerDescription.maxLines == 2) 20 else 2
+                }
+                videoBackupIndex = 0
+                audioBackupIndex = 0
                 selectedPartIndex = p.selectedPart
-                b.partButton.text = if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
+                b.partButton.text = if (epId > 0L) "番剧选集" else if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
                 exo?.release()
-                val headers = mutableMapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com", "Accept" to "*/*")
-                if (cookie.isNotBlank()) headers["Cookie"] = cookie
+                // B站 gRPC 下发的 CDN 地址按官方客户端 UA 校验；不要把账号 Cookie 泄漏给 CDN 域名。
+                val headers = mapOf("Referer" to "https://www.bilibili.com/")
                 val http = DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
+                    .setUserAgent("Mozilla/5.0 BiliDroid/1.41.0 (bbcallen@gmail.com)")
                     .setConnectTimeoutMs(20000).setReadTimeoutMs(25000)
                     .setAllowCrossProtocolRedirects(true).setDefaultRequestProperties(headers)
                 val source = DefaultMediaSourceFactory(this@VideoPlayerActivity).setDataSourceFactory(http)
                 exo = ExoPlayer.Builder(this@VideoPlayerActivity).setMediaSourceFactory(source).build().also { player ->
                     b.playerView.player = player
                     if (p.isDash && p.videoUrl != null && p.audioUrl != null) {
-                        val videoSource = source.createMediaSource(MediaItem.fromUri(p.videoUrl))
-                        val audioSource = source.createMediaSource(MediaItem.fromUri(p.audioUrl))
+                        val videoSource = source.createMediaSource(buildMediaItem(p.videoUrl))
+                        val audioSource = source.createMediaSource(buildMediaItem(p.audioUrl))
                         player.setMediaSource(MergingMediaSource(videoSource, audioSource))
                     } else if (p.isDash) {
-                        player.setMediaItem(MediaItem.fromUri(p.videoUrl ?: p.url))
+                        player.setMediaItem(buildMediaItem(p.videoUrl ?: p.url))
                     } else if (p.segments.size > 1) {
                         // B站 DURL 分段必须按顺序连续播放，不能只播放第一段。
-                        player.setMediaItems(p.segments.map { MediaItem.fromUri(it) })
+                        player.setMediaItems(p.segments.map { buildMediaItem(it) })
                     } else {
-                        player.setMediaItem(MediaItem.fromUri(p.url))
+                        player.setMediaItem(buildMediaItem(p.url))
                     }
                     player.addListener(object : Player.Listener {
                         override fun onPlayerError(error: PlaybackException) {
-                            b.playerStatus.text = "播放失败：${error.errorCodeName}。请检查网络或账号权限"
+                            if (!tryNextCdn(player, p, source)) {
+                                b.playerStatus.text = "播放失败：${error.errorCodeName}。备用线路也已尝试完，请检查网络或清晰度"
+                            }
                         }
                         override fun onPlaybackStateChanged(state: Int) {
                             if (state == Player.STATE_READY) {
@@ -154,13 +307,186 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = "正在连接视频…"
                 loadDanmaku(p.cid)
             } catch (e: Exception) {
-                b.playerStatus.text = "获取播放地址失败：${e.message ?: "接口异常"}"
+                val reason = e.message.orEmpty()
+                b.playerStatus.text = if (reason.contains("Conversion") && reason.contains("万")) {
+                    "获取播放地址失败：B站返回了异常格式数据，已尝试备用线路，请稍后重试"
+                } else "获取播放地址失败：${reason.ifBlank { "接口异常" }}"
             }
         }
     }
 
+    /** 自动切换 B 站返回的备用 CDN，保留播放进度且不向 CDN 发送账号 Cookie。 */
+    private fun tryNextCdn(player: ExoPlayer, playback: PlaybackInfo, source: DefaultMediaSourceFactory): Boolean {
+        val nextVideo = playback.videoBackupUrls.getOrNull(videoBackupIndex)
+        val nextAudio = playback.audioBackupUrls.getOrNull(audioBackupIndex)
+        if (nextVideo == null && nextAudio == null) return false
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val wasPlaying = player.playWhenReady
+        val videoUrl = nextVideo ?: playback.videoUrl
+        val audioUrl = nextAudio ?: playback.audioUrl
+        if (nextVideo != null) videoBackupIndex++
+        if (nextAudio != null) audioBackupIndex++
+        return try {
+            if (playback.isDash && videoUrl != null && audioUrl != null) {
+                val videoSource = source.createMediaSource(buildMediaItem(videoUrl))
+                val audioSource = source.createMediaSource(buildMediaItem(audioUrl))
+                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
+            } else if (videoUrl != null) {
+                player.setMediaItem(buildMediaItem(videoUrl))
+            } else return false
+            player.prepare()
+            player.seekTo(position)
+            player.playWhenReady = wasPlaying
+            b.playerStatus.text = "主线路失败，正在切换备用 CDN…"
+            true
+        } catch (_: Exception) { false }
+    }
+    private fun buildMediaItem(url: String): MediaItem {
+        val builder = MediaItem.Builder().setUri(url)
+        val subtitle = selectedSubtitleUri
+        if (subtitle != null) {
+            builder.setSubtitleConfigurations(listOf(
+                MediaItem.SubtitleConfiguration.Builder(subtitle)
+                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setLanguage("und")
+                    .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+                    .build()
+            ))
+        }
+        return builder.build()
+    }
+
+    private fun showSubtitles() {
+        val playback = info ?: run { b.playerStatus.text = "请等待播放地址加载完成"; return }
+        b.playerStatus.text = "正在获取字幕列表…"
+        lifecycleScope.launch {
+            try {
+                val identifiers = withContext(Dispatchers.IO) {
+                    if (epId > 0L) {
+                        val episode = BangumiApiBridge.episode(epId)
+                        episode.aid to episode.cid
+                    } else aid to playback.cid
+                }
+                val tracks = withContext(Dispatchers.IO) {
+                    SubtitleApiBridge.tracks(identifiers.first, identifiers.second, epId, seasonId)
+                }
+                val labels = listOf("关闭字幕") + tracks.map { "${it.label}（${it.language}）" }
+                val chooser = MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                    .setTitle("选择字幕")
+                    .setItems(labels.toTypedArray()) { _, which ->
+                        lifecycleScope.launch {
+                            try {
+                                if (which == 0) {
+                                    selectedSubtitleUri = null
+                                    selectedSubtitleLabel = ""
+                                    b.subtitleButton.text = "字幕：关闭"
+                                } else {
+                                    val track = tracks[which - 1]
+                                    selectedSubtitleUri = withContext(Dispatchers.IO) {
+                                        SubtitleApiBridge.downloadAsVtt(this@VideoPlayerActivity, track)
+                                    }
+                                    selectedSubtitleLabel = track.label
+                                    b.subtitleButton.text = "字幕：${track.label}"
+                                }
+                                pendingSeekPosition = exo?.currentPosition ?: 0L
+                                load(playback.quality)
+                            } catch (e: Exception) {
+                                b.playerStatus.text = "字幕加载失败：${e.message}"
+                            }
+                        }
+                    }
+                    .setNeutralButton("导出 SRT 字幕", null)
+                    .create()
+                chooser.setOnShowListener {
+                    chooser.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        if (tracks.isEmpty()) {
+                            b.playerStatus.text = "没有可导出的字幕"
+                            chooser.dismiss()
+                        } else {
+                            MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                                .setTitle("选择要导出的字幕")
+                                .setItems(tracks.map { "${it.label}（${it.language}）" }.toTypedArray()) { _, index ->
+                                    val track = tracks[index]
+                                    lifecycleScope.launch {
+                                        try {
+                                            b.playerStatus.text = "正在下载字幕并转换为 SRT…"
+                                            pendingSubtitleSrt = withContext(Dispatchers.IO) {
+                                                SubtitleApiBridge.downloadAsSrt(this@VideoPlayerActivity, track)
+                                            }
+                                            if (pendingSubtitleSrt.isBlank()) error("字幕内容为空")
+                                            subtitleExportLauncher.launch("字幕_${track.language}.srt")
+                                        } catch (e: Exception) {
+                                            b.playerStatus.text = "字幕导出失败：${e.message}"
+                                        }
+                                    }
+                                }.show()
+                            chooser.dismiss()
+                        }
+                    }
+                }
+                chooser.show()
+                b.playerStatus.text = if (tracks.isEmpty()) "当前视频没有可用字幕" else "已找到 ${tracks.size} 条字幕"
+            } catch (e: Exception) {
+                b.playerStatus.text = "字幕列表获取失败：${e.message}"
+            }
+        }
+    }
+
+
+    private fun shareCurrentVideo() {
+        val url = when {
+            epId > 0L -> "https://www.bilibili.com/bangumi/play/ep$epId"
+            bvid.isNotBlank() -> "https://www.bilibili.com/video/$bvid"
+            aid > 0L -> "https://www.bilibili.com/video/av$aid"
+            else -> ""
+        }
+        if (url.isBlank()) {
+            b.playerStatus.text = "当前视频没有可分享的链接"
+            return
+        }
+        val shareText = buildString {
+            val title = b.playerTitle.text?.toString().orEmpty()
+            if (title.isNotBlank()) append(title).append("\\n")
+            append(url)
+        }
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, shareText)
+        }, "分享视频"))
+    }
+
     private fun showParts() {
         val p = info ?: return
+        if (epId > 0L) {
+            b.playerStatus.text = "正在获取番剧剧集…"
+            lifecycleScope.launch {
+                try {
+                    val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(seasonId, epId) }
+                    if (season.episodes.isEmpty()) error("没有获取到本季剧集")
+                    val labels = season.episodes.map { ep ->
+                        listOf(ep.title, ep.longTitle).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+                    }.toTypedArray()
+                    val selected = season.episodes.indexOfFirst { it.id == epId }.coerceAtLeast(0)
+                    MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                        .setTitle(season.title.ifBlank { "选择番剧剧集" })
+                        .setSingleChoiceItems(labels, selected) { dialog, which ->
+                            dialog.dismiss()
+                            val ep = season.episodes[which]
+                            if (ep.id != epId) {
+                                startActivity(android.content.Intent(this@VideoPlayerActivity, VideoPlayerActivity::class.java).apply {
+                                    putExtra(EXTRA_EP_ID, ep.id)
+                                    putExtra(EXTRA_SEASON_ID, season.seasonId)
+                                    putExtra(EXTRA_TITLE, listOf(season.title, ep.title, ep.longTitle).filter { it.isNotBlank() }.joinToString(" · "))
+                                })
+                            }
+                        }.setNegativeButton("取消", null).show()
+                    b.playerStatus.text = "番剧剧集已加载"
+                } catch (e: Exception) {
+                    b.playerStatus.text = "番剧剧集加载失败：${e.message}"
+                }
+            }
+            return
+        }
         if (p.parts.size <= 1) {
             b.playerStatus.text = "当前视频只有一个分P"
             return
@@ -206,23 +532,96 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun showDownloadQuality() {
         val p = info
         if (p == null) { b.downloadStatus.text = "请先等待播放地址加载完成"; return }
-        val choices = if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities
-        MaterialAlertDialogBuilder(this).setTitle("选择下载清晰度")
-            .setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, choices.map { it.second }.toTypedArray())) { _, i ->
-                startDownload(choices[i].first)
-            }.show()
+        b.downloadStatus.text = "正在读取账号可用的下载清晰度…"
+        lifecycleScope.launch {
+            try {
+                val choices = withContext(Dispatchers.IO) {
+                    if (epId <= 0L && aid > 0L && cookie.isNotBlank()) {
+                        runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie) }.getOrDefault(emptyList())
+                    } else emptyList()
+                }.ifEmpty {
+                    (if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities)
+                }.distinctBy { it.first }.sortedByDescending { it.first }
+                if (choices.isEmpty()) error("B站没有返回可用清晰度")
+                var selected = 0
+                MaterialAlertDialogBuilder(this@VideoPlayerActivity).setTitle("选择下载清晰度")
+                    .setSingleChoiceItems(choices.map { it.second + if (it.first == choices.first().first) " · 推荐" else "" }.toTypedArray(), 0) { _, which ->
+                        selected = which
+                    }
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(choices[selected].first) }
+                    .show()
+                b.downloadStatus.text = "已读取 ${choices.size} 档清晰度"
+            } catch (error: Exception) {
+                b.downloadStatus.text = "读取清晰度失败：${error.message ?: "网络异常"}"
+            }
+        }
     }
 
-    private fun startDownload(qn: Int) {
+    private fun loadDownloadStreamOptions(qn: Int) {
+        val p = info ?: return
+        if (epId <= 0L && aid <= 0L) {
+            startDownload(qn)
+            return
+        }
+        b.downloadStatus.text = "正在读取可选音视频资源…"
+        lifecycleScope.launch {
+            try {
+                val options = withContext(Dispatchers.IO) {
+                    if (epId > 0L) BangumiApiBridge.downloadStreamChoices(epId, p.cid, qn) else BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn, cookie)
+                }
+                if (options.video.isEmpty()) {
+                    startDownload(qn)
+                    return@launch
+                }
+                val videoLabels = options.video.map { it.label + if (it.bandwidth == options.video.maxOf { v -> v.bandwidth }) " · 推荐" else "" }.toTypedArray()
+                var videoIndex = 0
+                MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                    .setTitle("选择视频资源")
+                    .setSingleChoiceItems(videoLabels, 0) { _, which -> videoIndex = which }
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("下一步") { _, _ ->
+                        val selectedVideo = options.video[videoIndex]
+                        if (options.audio.isEmpty()) {
+                            startDownload(qn, selectedVideo.id.toString() + "|" + selectedVideo.codec, "")
+                        } else {
+                            var audioIndex = 0
+                            val audioLabels = options.audio.map {
+                                it.label + if (it.bandwidth == options.audio.maxOf { a -> a.bandwidth }) " · 推荐" else ""
+                            }.toTypedArray()
+                            MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                                .setTitle("选择音频资源")
+                                .setSingleChoiceItems(audioLabels, 0) { _, which -> audioIndex = which }
+                                .setNegativeButton("取消", null)
+                                .setPositiveButton("开始下载") { _, _ ->
+                                    startDownload(qn, selectedVideo.id.toString() + "|" + selectedVideo.codec, options.audio[audioIndex].id.toString() + "|" + options.audio[audioIndex].codec)
+                                }.show()
+                        }
+                    }.show()
+            } catch (error: Exception) {
+                b.downloadStatus.text = "读取资源选项失败，使用默认音视频轨道： " + (error.message ?: "未知错误")
+                startDownload(qn)
+            }
+        }
+    }
+
+    private fun startDownload(qn: Int, videoCodec: String = "", audioCodec: String = "") {
         val taskId = java.util.UUID.randomUUID().toString()
         val title = b.playerTitle.text.toString()
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .replace(Regex("[\\\\/:*?\\\"<>|]"), "_")
             .take(70)
             .ifBlank { "bilibili_video" }
         val task = JSONObject()
             .put("id", taskId)
             .put("title", title)
-            .put("quality", info?.name ?: "清晰度 $qn")
+            .put("quality", info?.name ?: "清晰度 " + qn)
+            .put("episodeId", epId)
+            .put("pageIndex", selectedPartIndex)
+            .put("cover", intent.getStringExtra(EXTRA_COVER).orEmpty())
+            .put("author", intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
+            .put("bvid", bvid)
+            .put("aid", aid)
+            .put("qn", qn)
             .put("status", "downloading")
             .put("progress", "等待后台下载服务启动")
             .put("time", System.currentTimeMillis())
@@ -230,10 +629,14 @@ class VideoPlayerActivity : AppCompatActivity() {
         val old = JSONArray(prefs.getString("tasks", "[]"))
         old.put(task)
         prefs.edit().putString("tasks", old.toString()).apply()
-
+        getSharedPreferences("download_options", MODE_PRIVATE).edit()
+            .putString(taskId + "_video", videoCodec)
+            .putString(taskId + "_audio", audioCodec)
+            .apply()
         try {
-            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn)
-            b.downloadStatus.text = "已加入后台下载 · 可离开播放页"
+            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec, selectedPartIndex, intent.getStringExtra(EXTRA_COVER).orEmpty(), intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
+            b.downloadStatus.text = "已加入后台下载 · " + (info?.name ?: "清晰度 " + qn) +
+                if (videoCodec.isNotBlank()) " · " + videoCodec else ""
         } catch (error: Exception) {
             task.put("status", "failed").put("progress", error.message ?: "无法启动下载服务")
             val current = JSONArray(prefs.getString("tasks", "[]"))
@@ -243,7 +646,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 updated.put(if (item.optString("id") == taskId) task else item)
             }
             prefs.edit().putString("tasks", updated.toString()).apply()
-            b.downloadStatus.text = "下载任务启动失败：${error.message}"
+            b.downloadStatus.text = "下载任务启动失败：" + error.message
         }
     }
 
@@ -251,15 +654,41 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val items = withContext(Dispatchers.IO) { BiliInteractionApi.danmaku(cid, cookie) }
+                loadedDanmaku = items
                 b.danmakuOverlay.setDanmaku(items)
                 b.danmakuOverlay.setPlaybackPositionProvider { exo?.currentPosition ?: 0L }
                 b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
-                b.danmakuButton.text = "弹幕：开（${items.size}）"
+                b.danmakuButton.text = "弹幕：开（${items.size}）· 长按导出"
             } catch (e: Exception) {
                 b.danmakuButton.text = "弹幕加载失败"
                 b.playerStatus.text = "播放中 · 弹幕暂不可用：${e.message}"
             }
         }
+    }
+
+
+    private fun exportDanmaku() {
+        if (loadedDanmaku.isEmpty()) {
+            b.playerStatus.text = "当前视频还没有加载到弹幕"
+            return
+        }
+        fun xml(value: String): String = value.replace("&", "&amp;")
+            .replace("<", "&lt;").replace(">", "&gt;")
+            .replace("\"", "&quot;").replace("'", "&apos;")
+        pendingDanmakuXml = buildString {
+            append("""<?xml version="1.0" encoding="UTF-8"?>\n""")
+            append("<i><chatserver>chat.bilibili.com</chatserver><chatid>0</chatid><mission>0</mission><maxlimit>")
+            append(loadedDanmaku.size).append("</maxlimit><state>0</state><real_name>0</real_name><source>k-v</source>\n")
+            loadedDanmaku.forEach { item ->
+                append("<d p=\"").append(item.timeMs / 1000.0).append(",").append(item.mode).append(",")
+                    .append(item.fontSize).append(",").append(item.color).append(",0,")
+                    .append(item.pool).append(",0,0\">").append(xml(item.text)).append("</d>\n")
+            }
+            append("</i>")
+        }
+        val file = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "视频" }
+            .replace(Regex("""[\\\\/:*?"<>|]"""), "_").take(60)
+        danmakuExportLauncher.launch("${file}_弹幕.xml")
     }
 
     private fun resetComments() {
@@ -280,6 +709,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 (b.commentsList.adapter as CommentAdapter).submit(result.comments, append = !reset)
                 commentPage = page + 1
                 commentHasMore = result.hasMore
+                b.commentsTitle.text = "评论区 · " + formatCount(result.total.toLong())
                 b.commentsStatus.text = "评论 · ${result.total} 条" + if (commentHasMore) " · 上滑加载更多" else " · 已加载完"
             } catch (e: Exception) {
                 b.commentsStatus.text = "评论加载失败：${e.message ?: "网络异常"}"
@@ -291,10 +721,18 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val replies = withContext(Dispatchers.IO) { BilimiaoApiBridge.replies(aid, comment.id, 1) }
-                val lines = replies.map { "${it.user}：${it.text}" }.toTypedArray()
+                val list = RecyclerView(this@VideoPlayerActivity).apply {
+                    layoutManager = LinearLayoutManager(this@VideoPlayerActivity)
+                    isNestedScrollingEnabled = true
+                    setPadding(16, 4, 16, 4)
+                    adapter = CommentAdapter(::showReplies, ::likeComment).apply {
+                        submit(listOf(comment) + replies)
+                    }
+                    layoutParams = android.view.ViewGroup.LayoutParams(-1, (resources.displayMetrics.heightPixels * 0.62f).toInt())
+                }
                 MaterialAlertDialogBuilder(this@VideoPlayerActivity)
-                    .setTitle("评论回复 · ${comment.replyCount}")
-                    .setItems(lines, null)
+                    .setTitle("全部回复 · ${comment.replyCount}")
+                    .setView(list)
                     .setPositiveButton("关闭", null)
                     .show()
             } catch (e: Exception) {
@@ -306,6 +744,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun likeComment(comment: VideoComment) {
         lifecycleScope.launch {
             try {
+                if (cookie.isBlank()) error("评论点赞需要先使用 B站 APP 扫码登录")
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.likeComment(aid, comment.id, !comment.liked) }
                 (b.commentsList.adapter as CommentAdapter).updateLike(comment.id, !comment.liked)
                 b.commentsStatus.text = result
@@ -318,6 +757,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         if (text.isBlank()) { b.commentsStatus.text = "先输入评论内容"; return }
         lifecycleScope.launch {
             try {
+                if (cookie.isBlank()) error("发表评论需要先使用 B站 APP 扫码登录")
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.sendComment(aid, text) }
                 b.commentInput.text?.clear()
                 b.commentsStatus.text = result
@@ -335,12 +775,13 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun toggleVideoLike() {
         lifecycleScope.launch {
             try {
+                if (cookie.isBlank()) error("点赞需要先使用 B站 APP 扫码登录")
                 val target = !videoLiked
                 withContext(Dispatchers.IO) {
                     BilimiaoApiBridge.likeVideo(requireAid(), target)
                 }
                 videoLiked = target
-                b.videoLike.text = if (target) "已点赞" else "点赞"
+                b.videoLike.text = (if (target) "已赞 " else "点赞 ") + formatCount(((info?.likeCount ?: 0L) + if (target) 1L else -1L).coerceAtLeast(0L))
                 b.playerStatus.text = if (target) "视频点赞成功" else "已取消点赞"
             } catch (e: Exception) {
                 b.playerStatus.text = e.message ?: "视频点赞失败"
@@ -349,6 +790,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun showCoinDialog() {
+        if (cookie.isBlank()) { b.playerStatus.text = "投币需要先使用 B站 APP 扫码登录"; return }
         MaterialAlertDialogBuilder(this)
             .setTitle("给视频投币")
             .setItems(arrayOf("投 1 枚硬币", "投 2 枚硬币", "投币并点赞")) { _, which ->
@@ -356,6 +798,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                     try {
                         withContext(Dispatchers.IO) {
                             BilimiaoApiBridge.coin(requireAid(), if (which == 1) 2 else 1, which == 2)
+                        }
+                        if (which == 2) {
+                            videoLiked = true
+                            b.videoLike.text = "已赞 " + formatCount((info?.likeCount ?: 0L) + 1L)
                         }
                         b.playerStatus.text = if (which == 2) "投币并点赞成功" else "投币成功"
                     } catch (e: Exception) {
@@ -404,27 +850,6 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun tripleAction() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("一键三连")
-            .setMessage("将尝试执行 B站一键三连操作。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("确认") { _, _ ->
-                lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            BilimiaoApiBridge.triple(requireAid())
-                        }
-                        videoLiked = true
-                        b.videoLike.text = "已点赞"
-                        b.playerStatus.text = "一键三连成功"
-                    } catch (e: Exception) {
-                        b.playerStatus.text = e.message ?: "一键三连失败"
-                    }
-                }
-            }.show()
-    }
-
     private fun showDanmakuComposer() {
         val input = EditText(this).apply {
             hint = "输入弹幕内容"
@@ -453,7 +878,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             }.show()
     }
 
-    private fun positionKey(): String = (bvid.ifBlank { "av$aid" }) + "_p" + selectedPartIndex
+    private fun positionKey(): String = if (epId > 0L) "ep$epId" else (bvid.ifBlank { "av$aid" }) + "_p" + selectedPartIndex
 
     override fun onStop() {
         exo?.let { player ->

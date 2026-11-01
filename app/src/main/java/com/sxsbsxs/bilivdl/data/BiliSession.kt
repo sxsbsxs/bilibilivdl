@@ -27,11 +27,12 @@ object BiliSession {
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
     }
-    fun profile(context: Context): JSONObject {
+    fun profile(context: Context, cookieOverride: String? = null): JSONObject {
+        val activeCookie = cookieOverride?.trim()?.takeIf { it.isNotBlank() } ?: cookie(context)
         val c = (URL("https://api.bilibili.com/x/web-interface/nav").openConnection() as HttpURLConnection).apply {
             connectTimeout = 12000; readTimeout = 15000
             setRequestProperty("User-Agent", BiliHeaders.UA); setRequestProperty("Referer", "https://www.bilibili.com/")
-            cookie(context).takeIf { it.isNotBlank() }?.let { setRequestProperty("Cookie", it) }
+            activeCookie.takeIf { it.isNotBlank() }?.let { setRequestProperty("Cookie", it) }
         }
         return try {
             val root = JSONObject(c.inputStream.bufferedReader().use { it.readText() })

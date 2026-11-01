@@ -36,7 +36,11 @@ object BiliApi {
                         duration = item.optString("duration", ""),
                         bvid = item.optString("bvid", ""),
                         aid = item.optLong("aid"),
-                        description = item.optString("description", "")
+                        description = item.optString("description", ""),
+                        danmaku = item.optLong("video_review").takeIf { item.has("video_review") },
+                        favorites = item.optLong("favorites").takeIf { item.has("favorites") },
+                        category = item.optString("typename"),
+                        pubdate = item.optLong("pubdate").takeIf { item.has("pubdate") }
                     ))
                 }
             }
