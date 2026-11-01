@@ -65,7 +65,7 @@ object BiliInteractionApi {
     fun commentsPage(aid: Long, page: Int, sort: Int = 3, cookie: String = ""): CommentPage {
         require(aid > 0) { "视频编号无效，无法加载评论" }
         val root = request(
-            "https://api.bilibili.com/x/v2/reply/main?oid=$aid&type=1&mode=$sort&next=${page - 1}&ps=20&plat=2",
+            "https://api.bilibili.com/x/v2/reply/main?oid=$aid&type=1&sort=$sort&pn=$page&ps=20&plat=2",
             cookie
         )
         val code = root.optInt("code", -1)
@@ -86,10 +86,9 @@ object BiliInteractionApi {
                 mid = member?.optLong("mid") ?: 0L
             )
         }
-        val cursor = data.optJSONObject("cursor")
-        val hasMore = cursor?.optBoolean("is_end") == false ||
-            (cursor == null && result.size >= 20)
-        return CommentPage(result, hasMore, data.optJSONObject("cursor")?.optInt("all_count") ?: result.size)
+        val pageInfo = data.optJSONObject("page")
+        val hasMore = result.size >= 20 && (pageInfo?.optInt("count") ?: Int.MAX_VALUE) > page * 20
+        return CommentPage(result, hasMore, pageInfo?.optInt("count") ?: result.size)
     }
 
     fun replies(aid: Long, rootId: Long, page: Int = 1, cookie: String = ""): List<VideoComment> {
