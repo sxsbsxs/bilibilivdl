@@ -1,0 +1,569 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="viewModel"
+            type="cc.kafuu.bilidownload.feature.viewbinding.viewmodel.activity.LocalResourceVideModel" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.ViewDataBindingUtilsKt" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.TimeUtils" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.FileUtils" />
+    </data>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/general_window_background_color"
+        android:fitsSystemWindows="true">
+
+        <include
+            android:id="@+id/include_title"
+            layout="@layout/include_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:title="@{viewModel.resourceLiveData.name}"
+            app:viewModel="@{viewModel}" />
+
+        <include
+            android:id="@+id/include_video_card"
+            layout="@layout/include_bilivideo_card"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="10dp"
+            app:cover="@{viewModel.taskDetailLiveData.cover}"
+            app:createTime="@{TimeUtils.INSTANCE.formatTimestamp(viewModel.taskDetailLiveData.downloadTask.createTime)}"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/include_title"
+            app:title="@{viewModel.taskDetailLiveData.title}" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/include_video_card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="10dp"
+                    app:cardCornerRadius="@dimen/card_item_corner_radius"
+                    app:cardElevation="@dimen/card_item_elevation">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="10dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_resource_name"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.resourceLiveData.name}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_download_time"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{TimeUtils.INSTANCE.formatTimestamp(viewModel.resourceLiveData.creationTime)}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_resource_size"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{FileUtils.INSTANCE.formatFileSize(viewModel.resourceLiveData.storageSizeBytes)}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            bindVisible="@{viewModel.localMediaDetailLiveData.format != null}"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_media_format"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.localMediaDetailLiveData.getAVFormatOrNull().name()}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            bindVisible="@{viewModel.localMediaDetailLiveData.formatDuration != null}"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_media_duration"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.localMediaDetailLiveData.formatDuration}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            bindVisible="@{viewModel.localMediaDetailLiveData.videoCodec != null}"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_media_video_codec"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.localMediaDetailLiveData.getVideoAVCodecOrNull().name()}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            bindVisible="@{viewModel.localMediaDetailLiveData.audioCodec != null}"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_media_audio_codec"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.localMediaDetailLiveData.getAudioAVCodecOrNull().name()}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            bindVisible="@{viewModel.localMediaDetailLiveData.frameRate != null}"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_media_frame_rate"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.localMediaDetailLiveData.frameRate}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            bindVisible="@{viewModel.localMediaDetailLiveData.resolution != null}"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_media_resolution"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.localMediaDetailLiveData.resolution}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            bindVisible="@{viewModel.localMediaDetailLiveData.audioSampleRate != null}"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@string/text_media_audio_sample_rate"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="2"
+                                android:ellipsize="end"
+                                android:gravity="center_vertical|start"
+                                android:maxLines="2"
+                                android:paddingHorizontal="10dp"
+                                android:text="@{viewModel.localMediaDetailLiveData.audioSampleRate}"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </androidx.cardview.widget.CardView>
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_resource_play"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/shape_button_general"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="100dp"
+                    android:minHeight="36dp"
+                    android:onClick="@{()->viewModel.tryPlayResource()}"
+                    android:text="@string/text_play"
+                    android:textColor="@color/common_white"
+                    android:textSize="@dimen/size_text_button_size" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_resource_open"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/shape_button_general"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="100dp"
+                    android:minHeight="36dp"
+                    android:onClick="@{()->viewModel.tryOpenResource()}"
+                    android:text="@string/text_open"
+                    android:textColor="@color/common_white"
+                    android:textSize="@dimen/size_text_button_size" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/tv_resource_export"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@{viewModel.isExportingLiveData ? @drawable/shape_button_disable : @drawable/shape_button_general}"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="100dp"
+                    android:minHeight="36dp"
+                    android:onClick="@{()->viewModel.tryExportResource()}"
+                    android:orientation="horizontal"
+                    android:textSize="@dimen/size_text_button_size"
+                    tools:background="@drawable/shape_button_general">
+
+                    <ProgressBar
+                        style="?android:attr/progressBarStyle"
+                        bindVisible="@{viewModel.isExportingLiveData}"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_margin="10dp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_export_text"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_export_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="16dp"
+                        android:text="@string/text_export"
+                        android:textColor="@color/common_white"
+                        android:textSize="@dimen/size_text_common_size"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/tv_resource_covert"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@{viewModel.isConvertingLiveData ? @drawable/shape_button_disable : @drawable/shape_button_general}"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="100dp"
+                    android:minHeight="36dp"
+                    android:onClick="@{()->viewModel.tryCovertResource()}"
+                    android:orientation="horizontal"
+                    android:textSize="@dimen/size_text_button_size"
+                    tools:background="@drawable/shape_button_general">
+
+                    <ProgressBar
+                        style="?android:attr/progressBarStyle"
+                        bindVisible="@{viewModel.isConvertingLiveData}"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_margin="10dp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_covert_text"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_covert_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="16dp"
+                        android:text="@{viewModel.isConvertingLiveData ? viewModel.convertProgressLiveData : @string/text_convert}"
+                        android:textColor="@color/common_white"
+                        android:textSize="@dimen/size_text_common_size"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        tools:text="@string/text_convert" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_resource_delete"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/shape_button_red"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="100dp"
+                    android:minHeight="36dp"
+                    android:onClick="@{()->viewModel.tryDeleteResource()}"
+                    android:text="@string/text_delete"
+                    android:textColor="@color/common_white"
+                    android:textSize="@dimen/size_text_button_size" />
+
+            </LinearLayout>
+
+        </androidx.core.widget.NestedScrollView>
+
+        <include
+            android:id="@+id/include_loading"
+            layout="@layout/include_loading_status"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:elevation="@{@dimen/card_item_elevation + 1}"
+            app:data="@{viewModel.loadingStatusLiveData}"
+            app:isCover="@{Boolean.TRUE}"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/include_title"
+            tools:visibility="gone" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>

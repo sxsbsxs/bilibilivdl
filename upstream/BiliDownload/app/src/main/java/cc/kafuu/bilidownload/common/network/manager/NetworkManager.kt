@@ -1,0 +1,82 @@
+package cc.kafuu.bilidownload.common.network.manager
+
+import cc.kafuu.bilidownload.common.manager.AccountManager
+import cc.kafuu.bilidownload.common.network.BiliInterceptor
+import cc.kafuu.bilidownload.common.network.NetworkConfig
+import cc.kafuu.bilidownload.common.network.repository.BiliAccountRepository
+import cc.kafuu.bilidownload.common.network.repository.BiliRiskControlRepository
+import cc.kafuu.bilidownload.common.network.repository.BiliSearchRepository
+import cc.kafuu.bilidownload.common.network.repository.BiliVideoStatsRepository
+import cc.kafuu.bilidownload.common.network.repository.BiliVideoRepository
+import cc.kafuu.bilidownload.common.network.service.BiliApiService
+import cc.kafuu.bilidownload.common.network.service.BiliOriginalContentService
+import cc.kafuu.bilidownload.common.network.service.BiliPassportService
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.converter.scalars.ScalarsConverterFactory
+import java.util.concurrent.TimeUnit
+
+
+object NetworkManager {
+    private val biliInterceptor = BiliInterceptor {
+        return@BiliInterceptor AccountManager.cookiesLiveData.value
+    }
+
+    private val biliService: BiliApiService by lazy {
+        createService(NetworkConfig.BILI_API_URL, BiliApiService::class.java)
+    }
+
+    private val biliPassportService: BiliPassportService by lazy {
+        createService(NetworkConfig.BILI_PASSPORT_URL, BiliPassportService::class.java)
+    }
+
+    private val biliOriginalContentService: BiliOriginalContentService by lazy {
+        createService(
+            NetworkConfig.BILI_MOBILE_URL,
+            BiliOriginalContentService::class.java,
+            ScalarsConverterFactory.create()
+        )
+    }
+
+    val okHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .addInterceptor(biliInterceptor)
+            .build()
+    }
+
+    /** 媒体传输允许更长的网络停顿，保留 API 客户端自身的超时和连接池配置。 */
+    val downloadClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private fun <T> createService(
+        baseUrl: String,
+        serviceClass: Class<T>,
+        converterFactory: retrofit2.Converter.Factory = GsonConverterFactory.create()
+    ): T {
+        return Retrofit.Builder()
+            .client(okHttpClient)
+            .baseUrl(baseUrl)
+            .addConverterFactory(converterFactory)
+            .build()
+            .create(serviceClass)
+    }
+
+
+    val biliRiskControlResponse = BiliRiskControlRepository(biliService, biliOriginalContentService)
+
+    val biliVideoRepository by lazy { BiliVideoRepository(biliService, biliOriginalContentService) }
+
+    /** 跨列表复用统计与在途请求，账号生命周期负责失效。 */
+    val biliVideoStatsRepository by lazy {
+        BiliVideoStatsRepository(requestStats = biliVideoRepository::requestVideoStats)
+    }
+
+    val biliAccountRepository by lazy { BiliAccountRepository(biliService, biliPassportService) }
+
+    val biliSearchRepository by lazy { BiliSearchRepository(biliService) }
+}

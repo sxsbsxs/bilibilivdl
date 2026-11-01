@@ -1,0 +1,130 @@
+package cn.a10miaomiao.bilimiao.compose.components.layout
+
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import cn.a10miaomiao.bilimiao.compose.components.layout.chain_scrollable.ChainScrollableLayout
+import cn.a10miaomiao.bilimiao.compose.components.layout.chain_scrollable.ChainScrollableLayoutState
+import kotlin.math.roundToInt
+
+@Composable
+fun DoubleColumnAutofitLayout(
+    modifier: Modifier = Modifier,
+    innerPadding: PaddingValues = PaddingValues(),
+    // 双栏展开断点：容器宽度大于该值时使用双栏布局
+    twoColumnMinWidth: Dp,
+    // 单栏布局时上方内容区域的高度
+    topContentHeight: Dp,
+    // 双栏布局时右栏的宽度上限，为 null 时右栏与左栏平分宽度
+    rightColumnMaxWidth: Dp? = null,
+    chainScrollableLayoutState: ChainScrollableLayoutState,
+    leftContent: @Composable BoxScope.(Orientation, PaddingValues) -> Unit,
+    content: @Composable BoxScope.(Orientation, PaddingValues) -> Unit,
+) {
+    BoxWithConstraints(
+        modifier = modifier
+    ) {
+        val layoutDirection = LocalLayoutDirection.current
+        if (maxWidth > twoColumnMinWidth) {
+            val containerWidth = maxWidth
+            Row() {
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    leftContent(
+                        Orientation.Horizontal,
+                        PaddingValues.Absolute(
+                            left = if (layoutDirection == LayoutDirection.Ltr)
+                                innerPadding.calculateStartPadding(layoutDirection) else 0.dp,
+                            right = if (layoutDirection == LayoutDirection.Rtl)
+                                innerPadding.calculateEndPadding(layoutDirection) else 0.dp,
+                            top = innerPadding.calculateTopPadding(),
+                            bottom = innerPadding.calculateBottomPadding(),
+                        )
+                    )
+                }
+                Box(
+                    modifier = if (rightColumnMaxWidth != null) {
+                        // 右栏宽度不超过上限，剩余宽度由左栏填充
+                        Modifier.width(minOf(containerWidth / 2, rightColumnMaxWidth))
+                    } else {
+                        Modifier.weight(1f)
+                    }
+                ) {
+                    content(
+                        Orientation.Horizontal,
+                        PaddingValues.Absolute(
+                            left = if (layoutDirection == LayoutDirection.Rtl)
+                                innerPadding.calculateStartPadding(layoutDirection) else 0.dp,
+                            right = if (layoutDirection == LayoutDirection.Ltr)
+                                innerPadding.calculateEndPadding(layoutDirection) else 0.dp,
+                            top = innerPadding.calculateTopPadding(),
+                            bottom = innerPadding.calculateBottomPadding(),
+                        )
+                    )
+                }
+            }
+        } else {
+            val scrollableState = rememberScrollableState { 0f }
+            ChainScrollableLayout(
+                modifier = modifier,
+                state = chainScrollableLayoutState,
+            ) { state ->
+                Box(
+                    modifier = Modifier
+                        .height(topContentHeight)
+                        // 偏移与透明度都在布局/绘制阶段读取 state，
+                        // 这样 topContentHeight 变化（如封面显示/隐藏的动画）
+                        // 以及滚动时都能立即跟随，无需等待重组
+                        .offset {
+                            IntOffset(0, (-state.getHeightOffset()).roundToInt())
+                        }
+                        .graphicsLayer {
+                            alpha = state.headerFraction
+                        }
+                        .scrollable(scrollableState, Orientation.Vertical),
+                ) {
+                    leftContent(
+                        Orientation.Vertical,
+                        PaddingValues.Absolute(
+                            top = innerPadding.calculateTopPadding(),
+                            left = if (layoutDirection == LayoutDirection.Ltr)
+                                innerPadding.calculateStartPadding(layoutDirection) else 0.dp,
+                            right = if (layoutDirection == LayoutDirection.Rtl)
+                                innerPadding.calculateEndPadding(layoutDirection) else 0.dp,
+                        )
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                0,
+                                (state.maxPx - state.getHeightOffset()).roundToInt()
+                            )
+                        }
+                ) {
+                    content(
+                        Orientation.Vertical,
+                        PaddingValues.Absolute(
+                            bottom = innerPadding.calculateBottomPadding() + chainScrollableLayoutState.minScrollPosition,
+                            left = if (layoutDirection == LayoutDirection.Ltr)
+                                innerPadding.calculateStartPadding(layoutDirection) else 0.dp,
+                            right = if (layoutDirection == LayoutDirection.Rtl)
+                                innerPadding.calculateEndPadding(layoutDirection) else 0.dp,
+                        )
+                    )
+                }
+            }
+        }
+    }
+}

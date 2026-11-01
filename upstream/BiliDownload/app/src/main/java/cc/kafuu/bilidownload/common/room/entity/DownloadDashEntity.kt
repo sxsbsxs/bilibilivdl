@@ -1,0 +1,38 @@
+package cc.kafuu.bilidownload.common.room.entity
+
+import androidx.room.Entity
+import cc.kafuu.bilidownload.common.utils.BiliCodeUtils
+import cc.kafuu.bilidownload.common.CommonLibs
+import cc.kafuu.bilidownload.common.utils.MimeTypeUtils
+import cc.kafuu.bilidownload.common.constant.DashType
+import java.io.File
+
+@Entity(primaryKeys = ["dashId", "taskId", "codecId"], tableName = "DownloadDash")
+data class DownloadDashEntity (
+    val dashId: Long,
+    val taskId: Long,
+    val codecId: Long,
+    @DashType val type: Int,
+    val mimeType: String,
+    val codecs: String,
+) {
+    private fun getOutputFileName(): String {
+        val suffix = MimeTypeUtils.getExtensionFromMimeType(mimeType) ?: "bin"
+        return "stream-$taskId-$dashId-$codecId.$suffix"
+    }
+
+    fun getOutputFile(): File {
+        // 根据mimetype取得文件后缀名
+        // 取得合成文件输出路径
+        return File(CommonLibs.requireResourceWorkingDir(), getOutputFileName())
+    }
+
+    /** 资源改为应用专属目录暂存前使用的旧输出位置。 */
+    fun getLegacyOutputFile() = File(CommonLibs.getPublicResourcesDir(), getOutputFileName())
+
+    fun getQualityDetails(defaultText: String) = when(type) {
+        DashType.AUDIO -> BiliCodeUtils.getAudioQualityDescribe(dashId)
+        DashType.VIDEO -> BiliCodeUtils.getVideoQualityDescription(dashId)
+        else -> defaultText
+    }
+}

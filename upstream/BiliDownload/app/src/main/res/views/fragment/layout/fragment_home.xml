@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="viewModel"
+            type="cc.kafuu.bilidownload.feature.viewbinding.viewmodel.fragment.HomeViewModel" />
+
+        <import type="cc.kafuu.bilidownload.common.manager.AccountManager" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.ViewDataBindingUtilsKt" />
+    </data>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/general_window_background_color"
+        tools:context=".view.fragment.HomeFragment">
+
+        <include
+            layout="@layout/include_home_top_bar"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:viewModel="@{viewModel}" />
+
+        <!-- 标签按内容宽度布局，窄屏或大字体时允许横向滚动，避免固定四等分将英文单词拆行。
+             高度随文本测量并保留最小触控区域，不能用缩小字号替代可读性适配。 -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tl_page_selector"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:background="@color/general_window_background_color"
+            android:contentDescription="@string/tl_page_selector_content_description"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/ll_top_bar"
+            app:tabBackground="@color/common_transparent"
+            app:tabGravity="center"
+            app:tabIndicatorAnimationMode="elastic"
+            app:tabIndicatorColor="@color/primary_color"
+            app:tabIndicatorFullWidth="false"
+            app:tabIndicatorHeight="3dp"
+            app:tabMode="auto"
+            app:tabRippleColor="@color/common_transparent"
+            app:tabSelectedTextColor="@color/primary_color"
+            app:tabTextColor="@color/general_text_color" />
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/vp2_home"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tl_page_selector" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>

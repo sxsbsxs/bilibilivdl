@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.appcompat.widget.AppCompatTextView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@android:id/text1"
+    style="?android:attr/spinnerItemStyle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/common_transparent"
+    android:ellipsize="marquee"
+    android:gravity="center"
+    android:minHeight="42dp"
+    android:singleLine="true"
+    android:textAlignment="inherit"
+    android:textColor="@color/general_text_color"
+    android:textSize="@dimen/size_text_card_content"
+    tools:text="@string/app_name" />

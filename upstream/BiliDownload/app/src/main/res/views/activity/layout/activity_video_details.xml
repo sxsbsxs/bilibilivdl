@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="viewModel"
+            type="cc.kafuu.bilidownload.feature.viewbinding.viewmodel.activity.VideoDetailsViewModel" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.ViewDataBindingUtilsKt" />
+
+        <import type="cc.kafuu.bilidownload.common.CommonLibs" />
+
+        <import type="cc.kafuu.bilidownload.R" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.GlideUtils" />
+    </data>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/general_window_background_color"
+        android:fitsSystemWindows="true"
+        tools:context=".view.activity.VideoDetailsActivity">
+
+        <include
+            android:id="@+id/include"
+            layout="@layout/include_title"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:title="@{viewModel.biliResourceModelLiveData.title}"
+            app:viewModel="@{viewModel}" />
+
+        <LinearLayout
+            android:id="@+id/video_header"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/include">
+
+            <include
+                layout="@layout/include_bilivideo_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="10dp"
+                android:layout_marginTop="10dp"
+                app:cover="@{viewModel.biliResourceModelLiveData.cover}"
+                app:createTime="@{viewModel.biliResourceModelLiveData.pubFormatterDate}"
+                app:onCoverClick="@{() -> viewModel.onCoverClick()}"
+                app:title="@{viewModel.biliResourceModelLiveData.title}" />
+
+            <cc.kafuu.bilidownload.feature.viewbinding.view.common.VideoStatsView
+                android:id="@+id/video_stats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="18dp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                tools:visibility="visible" />
+        </LinearLayout>
+
+        <LinearLayout
+            bindVisible="@{!viewModel.loadingStatusLiveData.visibility}"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/video_header">
+
+            <androidx.core.widget.NestedScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+                    <androidx.cardview.widget.CardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_margin="10dp"
+                        app:cardCornerRadius="@dimen/card_item_corner_radius"
+                        app:cardElevation="@dimen/card_item_elevation">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:onLongClick="@{() -> viewModel.onDescriptionLongClick()}"
+                            android:orientation="vertical"
+                            android:padding="10dp">
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/text_brief"
+                                android:textColor="@color/primary_color"
+                                android:textSize="@dimen/size_text_common_size"
+                                android:textStyle="bold" />
+
+                            <androidx.appcompat.widget.AppCompatTextView
+                                bindSpannable="@{viewModel.biliResourceModelLiveData.description}"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:autoLink="all"
+                                android:textColor="@color/general_text_color"
+                                android:textSize="@dimen/size_text_common_size" />
+
+                            <LinearLayout
+                                bindVisible="@{viewModel.biliUpDataLiveData != null}"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical|end"
+                                android:onClick="@{()->viewModel.onClickUp()}"
+                                android:orientation="horizontal"
+                                android:paddingTop="5dp">
+
+                                <ImageView
+                                    bindImageUrl="@{viewModel.biliUpDataLiveData.face}"
+                                    bindPlaceholder="@{CommonLibs.INSTANCE.getDrawable(R.drawable.ic_2233)}"
+                                    bindTransformation="@{GlideUtils.INSTANCE.circleCrop}"
+                                    android:layout_width="26dp"
+                                    android:layout_height="26dp"
+                                    android:contentDescription="@{viewModel.biliUpDataLiveData.name}" />
+
+                                <View
+                                    android:layout_width="5dp"
+                                    android:layout_height="5dp" />
+
+                                <androidx.appcompat.widget.AppCompatTextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@{viewModel.biliUpDataLiveData.name}"
+                                    android:textColor="@color/primary_color"
+                                    android:textSize="@dimen/size_text_common_size"
+                                    android:textStyle="bold"
+                                    tools:text="Kano" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </androidx.cardview.widget.CardView>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rv_parts"
+                        bindDataList="@{viewModel.biliVideoPageListLiveData}"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+
+            <LinearLayout
+                android:id="@+id/part_selection_actions"
+                bindVisible="@{viewModel.partSelectionLiveData.enabled}"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="10dp"
+                android:background="@drawable/shape_floating_multi_select_bar"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tv_part_selection_count"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="@color/general_text_color"
+                        android:textSize="@dimen/size_text_common_size" />
+
+                    <TextView
+                        android:id="@+id/btn_part_select_all"
+                        bindEnable="@{viewModel.batchProgressLiveData == null}"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:paddingHorizontal="12dp"
+                        android:onClick="@{()->viewModel.onToggleSelectAllParts()}"
+                        android:text="@string/text_select_all"
+                        android:textColor="@color/primary_color" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_part_batch_progress"
+                    bindVisible="@{viewModel.batchProgressLiveData != null}"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="8dp"
+                    android:textColor="@color/general_sub_text_color"
+                    android:textSize="@dimen/size_text_card_content" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btn_download_selected_parts"
+                        bindEnable="@{viewModel.batchProgressLiveData == null &amp;&amp; viewModel.partSelectionLiveData.hasSelection}"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:minHeight="48dp"
+                        android:background="@drawable/shape_button_general"
+                        android:gravity="center"
+                        android:padding="8dp"
+                        android:onClick="@{()->viewModel.onDownloadMultipleSelectItems()}"
+                        android:text="@string/text_download_selected_parts"
+                        android:textColor="@color/common_white" />
+
+                    <TextView
+                        android:id="@+id/btn_download_all_parts"
+                        bindEnable="@{viewModel.batchProgressLiveData == null}"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:minHeight="48dp"
+                        android:background="@drawable/shape_button_action_secondary"
+                        android:gravity="center"
+                        android:padding="8dp"
+                        android:onClick="@{()->viewModel.onDownloadAllParts()}"
+                        android:text="@string/text_download_all_video_parts"
+                        android:textColor="@color/general_text_color" />
+
+                    <TextView
+                        android:id="@+id/btn_cancel_part_selection"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:minHeight="48dp"
+                        android:background="@drawable/shape_button_action_secondary"
+                        android:gravity="center"
+                        android:padding="8dp"
+                        android:onClick="@{()->viewModel.onCancelPartSelection()}"
+                        android:text="@string/text_cancel"
+                        android:textColor="@color/general_text_color" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <include
+            layout="@layout/include_loading_status"
+            app:data="@{viewModel.loadingStatusLiveData}"
+            app:isCover="@{Boolean.FALSE}"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:visibility="gone" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>

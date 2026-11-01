@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="viewModel"
+            type="cc.kafuu.bilidownload.feature.viewbinding.viewmodel.common.BiliResourceRVViewModel" />
+
+        <variable
+            name="data"
+            type="cc.kafuu.bilidownload.common.model.bili.BiliVideoModel" />
+
+        <import type="cc.kafuu.bilidownload.common.CommonLibs" />
+
+        <import type="cc.kafuu.bilidownload.R" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.ViewDataBindingUtilsKt" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.GlideUtils" />
+    </data>
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="10dp"
+        app:cardBackgroundColor="@color/general_item_background_color"
+        app:cardCornerRadius="@dimen/card_item_corner_radius"
+        app:cardElevation="@dimen/card_item_elevation">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:onClick="@{() -> viewModel.onResourceClick(data)}"
+            android:onLongClick="@{() -> viewModel.onResourceLongClick(data)}">
+
+            <ImageView
+                android:id="@+id/iv_video_cover"
+                bindImageUrl="@{data.cover}"
+                bindPlaceholder="@{CommonLibs.INSTANCE.getDrawable(R.drawable.ic_2233)}"
+                bindTransformation="@{GlideUtils.INSTANCE.centerCrop}"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:contentDescription="@string/iv_video_cover_content_description"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:src="@drawable/ic_2233" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_duration"
+                bindSpannable="@{data.duration}"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_margin="3dp"
+                android:background="@drawable/shape_video_duration"
+                android:gravity="end"
+                android:ellipsize="end"
+                android:maxLines="1"
+                app:autoSizeTextType="uniform"
+                app:autoSizeMinTextSize="7sp"
+                app:autoSizeMaxTextSize="11sp"
+                app:autoSizeStepGranularity="1sp"
+                android:textColor="@color/common_white"
+                android:textSize="@dimen/size_text_card_sub"
+                app:layout_constraintBottom_toBottomOf="@id/iv_video_cover"
+                app:layout_constraintEnd_toEndOf="@id/iv_video_cover"
+                app:layout_constraintStart_toStartOf="@id/iv_video_cover"
+                tools:text="00:03:04" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_multi_select"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_margin="10dp"
+                android:contentDescription="@string/text_select"
+                android:src="@{viewModel.multipleSelectItemsLiveData.contains(data) ? @drawable/ic_checkbox_round_checked : @drawable/ic_checkbox_round_unchecked}"
+                bindVisible="@{viewModel.multipleSelectModeLiveData}"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:src="@drawable/ic_checkbox_round_checked"
+                tools:visibility="visible" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="80dp"
+                android:paddingVertical="4dp"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/iv_multi_select"
+                app:layout_constraintStart_toEndOf="@+id/iv_video_cover"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_history_title"
+                    bindSpannable="@{data.title}"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/primary_color"
+                    android:textSize="@dimen/size_text_card_title"
+                    android:textStyle="bold"
+                    tools:text="【Mili】A Turtle's Heart" />
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="8dp">
+
+                    <cc.kafuu.bilidownload.feature.viewbinding.view.common.VideoStatsView
+                        android:id="@+id/video_stats"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_description"
+                        bindSpannable="@{data.description}"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/general_text_color"
+                        android:textSize="@dimen/size_text_card_content"
+                        tools:text="Monday is a rainy day" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_formatter_date"
+                        bindSpannable="@{data.pubFormatterDate}"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/general_text_color"
+                        android:textSize="@dimen/size_text_card_content"
+                        tools:text="2016-06-07" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_author"
+                        bindSpannable="@{data.author}"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/general_text_color"
+                        android:textSize="@dimen/size_text_card_content"
+                        tools:text="Mili" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.cardview.widget.CardView>
+</layout>

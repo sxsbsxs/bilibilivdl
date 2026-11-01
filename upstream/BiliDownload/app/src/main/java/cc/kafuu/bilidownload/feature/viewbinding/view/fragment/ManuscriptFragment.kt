@@ -1,0 +1,35 @@
+package cc.kafuu.bilidownload.feature.viewbinding.view.fragment
+
+import cc.kafuu.bilidownload.common.core.viewbinding.CoreFragmentBuilder
+import cc.kafuu.bilidownload.common.model.LoadingStatus
+import cc.kafuu.bilidownload.feature.viewbinding.view.fragment.common.BiliResourceRVFragment
+import cc.kafuu.bilidownload.feature.viewbinding.viewmodel.fragment.ManuscriptViewModel
+
+class ManuscriptFragment :
+    BiliResourceRVFragment<ManuscriptViewModel>(ManuscriptViewModel::class.java) {
+    companion object {
+        const val KEY_MID = "mid"
+
+        class Builder(val mid: Long) : CoreFragmentBuilder<ManuscriptFragment>() {
+            override fun onMallocFragment() = ManuscriptFragment()
+            override fun onPreparationArguments() {
+                putArgument(KEY_MID, mid)
+            }
+        }
+
+        @JvmStatic
+        fun builder(mid: Long) = Builder(mid)
+    }
+
+    override fun initViews() {
+        super.initViews()
+        mViewModel.initData(arguments?.getLong(FavoriteListFragment.KEY_MID) ?: 0)
+        mViewModel.loadData(LoadingStatus.loadingStatus(true), loadMore = false)
+    }
+
+    fun search(keyword: String?) {
+        resetScrollPosition(false)
+        mViewModel.search(keyword)
+    }
+
+}

@@ -1,0 +1,306 @@
+package cn.a10miaomiao.bilimiao.danmaku.cache
+
+import cn.a10miaomiao.bilimiao.danmaku.context.DanmakuContext
+import cn.a10miaomiao.bilimiao.danmaku.model.BaseDanmaku
+import cn.a10miaomiao.bilimiao.danmaku.model.SpecialDanmaku
+import cn.a10miaomiao.bilimiao.danmaku.platform.DanmakuCanvas
+import cn.a10miaomiao.bilimiao.danmaku.platform.DanmakuPaint
+import cn.a10miaomiao.bilimiao.danmaku.platform.PaintStyle
+
+/**
+ * 弹幕绘制填充器基类
+ *
+ * 负责弹幕文本的测量和绘制。子类可覆写绘制方法实现自定义样式。
+ *
+ * 注意：这里只做「直接绘制」，不再有位图缓存（DFM 的 IDrawingCache / CacheStufferProxy
+ * 那套缓存与代理机制在本引擎里从未被启用，已移除）。
+ */
+abstract class BaseCacheStuffer {
+
+    companion object {
+        /** 默认描边宽度 */
+        const val DEFAULT_STROKE_WIDTH = 2f
+
+        /** 默认下划线高度 */
+        const val UNDERLINE_HEIGHT = 2f
+
+        /** 默认边框宽度 */
+        const val BORDER_WIDTH = 2f
+    }
+
+    /** 弹幕上下文 */
+    protected var mContext: DanmakuContext? = null
+
+    /**
+     * 设置弹幕上下文
+     */
+    fun setContext(context: DanmakuContext) {
+        mContext = context
+    }
+
+    /**
+     * 测量弹幕文本的宽高
+     *
+     * 测量结果写入 danmaku.paintWidth 和 danmaku.paintHeight。
+     *
+     * @param danmaku 弹幕对象
+     * @param paint 画笔
+     * @param fromWorkerThread 是否在工作线程
+     */
+    abstract fun measure(danmaku: BaseDanmaku, paint: DanmakuPaint, fromWorkerThread: Boolean)
+
+    /**
+     * 绘制弹幕文本
+     *
+     * @param danmaku 弹幕对象
+     * @param canvas 画布
+     * @param left 左边坐标
+     * @param top 上边坐标
+     * @param fromWorkerThread 是否在工作线程
+     * @param paint 画笔
+     */
+    abstract fun drawDanmaku(
+        danmaku: BaseDanmaku,
+        canvas: DanmakuCanvas,
+        left: Float,
+        top: Float,
+        fromWorkerThread: Boolean,
+        paint: DanmakuPaint
+    )
+}
+
+/**
+ * 纯文本弹幕绘制填充器
+ *
+ * 支持纯文本显示，处理文字描边、阴影、下划线和边框。
+ * 对应原始 Android 版本的 SimpleTextCacheStuffer。
+ */
+class SimpleTextCacheStuffer : BaseCacheStuffer() {
+
+    companion object {
+        /** 文本行高缓存，避免重复计算（按字号缓存，字号变化不会命中旧值） */
+        private val sTextHeightCache = mutableMapOf<Float, Float>()
+    }
+
+    /**
+     * 获取缓存的文本行高
+     *
+     * 相同字号的文本行高相同，使用缓存避免重复计算。
+     */
+    protected fun getCacheHeight(danmaku: BaseDanmaku, paint: DanmakuPaint): Float {
+        val textSize = paint.textSize
+        val cached = sTextHeightCache[textSize]
+        if (cached != null) return cached
+        val fontMetrics = paint.getFontMetrics()
+        val textHeight = fontMetrics.descent - fontMetrics.ascent + fontMetrics.leading
+        sTextHeightCache[textSize] = textHeight
+        return textHeight
+    }
+
+    override fun measure(danmaku: BaseDanmaku, paint: DanmakuPaint, fromWorkerThread: Boolean) {
+        var w = 0f
+        var textHeight = 0f
+        if (danmaku.lines == null) {
+            if (danmaku.text == null) {
+                w = 0f
+            } else {
+                w = paint.measureText(danmaku.text.toString())
+                textHeight = getCacheHeight(danmaku, paint)
+            }
+            danmaku.paintWidth = w
+            danmaku.paintHeight = textHeight
+        } else {
+            textHeight = getCacheHeight(danmaku, paint)
+            for (line in danmaku.lines!!) {
+                if (line.isNotEmpty()) {
+                    val tw = paint.measureText(line)
+                    w = maxOf(tw, w)
+                }
+            }
+            danmaku.paintWidth = w
+            danmaku.paintHeight = danmaku.lines!!.size * textHeight
+        }
+        // 带边框的弹幕（如本地发送的弹幕）需要把边框宽度计入占用尺寸，
+        // 否则文字会溢出边框（对齐 DFM DisplayConfig.setDanmakuPaintWidthAndHeight）
+        if (danmaku.borderColor != 0) {
+            danmaku.paintWidth += 2 * BORDER_WIDTH
+            danmaku.paintHeight += 2 * BORDER_WIDTH
+        }
+    }
+
+    /**
+     * 绘制描边文本
+     *
+     * @param danmaku 弹幕对象
+     * @param lineText 单行文本（null 时使用 danmaku.text）
+     * @param canvas 画布
+     * @param left 左边坐标
+     * @param top 上边坐标（基线位置）
+     * @param paint 画笔（已设置为描边样式）
+     */
+    protected open fun drawStroke(
+        danmaku: BaseDanmaku,
+        lineText: String?,
+        canvas: DanmakuCanvas,
+        left: Float,
+        top: Float,
+        paint: DanmakuPaint
+    ) {
+        val text = lineText ?: danmaku.text?.toString() ?: return
+        canvas.drawText(text, left, top, paint)
+    }
+
+    /**
+     * 绘制填充文本
+     *
+     * @param danmaku 弹幕对象
+     * @param lineText 单行文本（null 时使用 danmaku.text）
+     * @param canvas 画布
+     * @param left 左边坐标
+     * @param top 上边坐标（基线位置）
+     * @param paint 画笔（已设置为填充样式）
+     * @param fromWorkerThread 是否在工作线程
+     */
+    protected open fun drawText(
+        danmaku: BaseDanmaku,
+        lineText: String?,
+        canvas: DanmakuCanvas,
+        left: Float,
+        top: Float,
+        paint: DanmakuPaint,
+        fromWorkerThread: Boolean
+    ) {
+        // 特殊弹幕在工作线程绘制时设置完全不透明
+        if (fromWorkerThread && danmaku is SpecialDanmaku) {
+            paint.alpha = 255
+        } else if (danmaku !is SpecialDanmaku) {
+            // 重新应用全局透明度：paint.color 赋值（如 Android Paint.setColor）会覆盖 alpha 通道，
+            // 导致 Displayer 设置的透明度失效，这里以弹幕上下文的透明度为准
+            mContext?.let { paint.alpha = it.transparency }
+        }
+        val text = lineText ?: danmaku.text?.toString() ?: return
+        canvas.drawText(text, left, top, paint)
+    }
+
+    /**
+     * 绘制弹幕背景
+     *
+     * 默认无背景，子类可覆写添加背景绘制。
+     */
+    protected open fun drawBackground(
+        danmaku: BaseDanmaku,
+        canvas: DanmakuCanvas,
+        left: Float,
+        top: Float
+    ) {
+        // 默认无背景
+    }
+
+    override fun drawDanmaku(
+        danmaku: BaseDanmaku,
+        canvas: DanmakuCanvas,
+        left: Float,
+        top: Float,
+        fromWorkerThread: Boolean,
+        paint: DanmakuPaint
+    ) {
+        var _left = left
+        var _top = top
+        var textLeft = left + danmaku.padding
+        var textTop = top + danmaku.padding
+
+        // 边框偏移
+        if (danmaku.borderColor != 0) {
+            textLeft += BORDER_WIDTH
+            textTop += BORDER_WIDTH
+        }
+
+        // 配置画笔参数
+        val hasShadow = danmaku.textShadowColor != 0
+        val hasBorder = danmaku.borderColor != 0
+        val hasUnderline = danmaku.underlineColor != 0
+
+        drawBackground(danmaku, canvas, _left, _top)
+
+        val fontMetrics = paint.getFontMetrics()
+        val ascentOffset = -fontMetrics.ascent
+
+        if (danmaku.lines != null) {
+            val lines = danmaku.lines!!
+            if (lines.size == 1) {
+                // 单行文本
+                drawDanmakuLine(
+                    danmaku, lines[0], canvas, textLeft, textTop + ascentOffset,
+                    paint, fromWorkerThread, hasShadow
+                )
+            } else {
+                // 多行文本
+                val textHeight = (danmaku.paintHeight - 2 * danmaku.padding) / lines.size
+                for (t in lines.indices) {
+                    if (lines[t].isEmpty()) continue
+                    drawDanmakuLine(
+                        danmaku, lines[t], canvas,
+                        textLeft, t * textHeight + textTop + ascentOffset,
+                        paint, fromWorkerThread, hasShadow
+                    )
+                }
+            }
+        } else {
+            // 无多行拆分的文本
+            drawDanmakuLine(
+                danmaku, null, canvas, textLeft, textTop + ascentOffset,
+                paint, fromWorkerThread, hasShadow
+            )
+        }
+
+        // 绘制下划线
+        if (hasUnderline) {
+            paint.style = PaintStyle.FILL
+            paint.color = danmaku.underlineColor
+            paint.strokeWidth = UNDERLINE_HEIGHT
+            val bottom = _top + danmaku.paintHeight - UNDERLINE_HEIGHT
+            canvas.drawLine(_left, bottom, _left + danmaku.paintWidth, bottom, paint)
+        }
+
+        // 绘制边框
+        if (hasBorder) {
+            paint.style = PaintStyle.STROKE
+            paint.color = danmaku.borderColor
+            paint.strokeWidth = BORDER_WIDTH
+            canvas.drawRect(
+                _left, _top,
+                _left + danmaku.paintWidth, _top + danmaku.paintHeight,
+                paint
+            )
+        }
+    }
+
+    /**
+     * 绘制单行弹幕文本（描边 + 填充）
+     */
+    private fun drawDanmakuLine(
+        danmaku: BaseDanmaku,
+        lineText: String?,
+        canvas: DanmakuCanvas,
+        left: Float,
+        top: Float,
+        paint: DanmakuPaint,
+        fromWorkerThread: Boolean,
+        hasShadow: Boolean
+    ) {
+        if (hasShadow) {
+            // 绘制描边/阴影层
+            paint.style = PaintStyle.STROKE
+            paint.color = danmaku.textShadowColor
+            // 描边同样应用全局透明度（paint.color 会覆盖 alpha）
+            mContext?.let { paint.alpha = it.transparency }
+            paint.strokeWidth = DEFAULT_STROKE_WIDTH
+            drawStroke(danmaku, lineText, canvas, left, top, paint)
+        }
+
+        // 绘制填充层
+        paint.style = PaintStyle.FILL
+        paint.color = danmaku.textColor
+        drawText(danmaku, lineText, canvas, left, top, paint, fromWorkerThread)
+    }
+}

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="viewModel"
+            type="cc.kafuu.bilidownload.feature.viewbinding.viewmodel.activity.MainViewModel" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.ViewDataBindingUtilsKt" />
+
+        <import type="cc.kafuu.bilidownload.common.constant.MainTabType" />
+    </data>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/general_window_background_color"
+        android:fitsSystemWindows="true"
+        tools:context=".view.activity.MainActivity">
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/vp2_content"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintBottom_toTopOf="@+id/ll_main_tab"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/ll_main_tab"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <RadioButton
+                android:id="@+id/rb_home"
+                style="@style/style_main_tab"
+                android:checked="@{viewModel.tabPositionLiveData==MainTabType.TAB_HOME}"
+                android:onClick="@{()->viewModel.doChangeTabPosition(MainTabType.TAB_HOME)}"
+                android:drawableTop="@drawable/selector_tab_home"
+                android:gravity="center"
+                android:text="@string/rb_home_text" />
+
+            <RadioButton
+                android:id="@+id/rb_me"
+                style="@style/style_main_tab"
+                android:checked="@{viewModel.tabPositionLiveData==MainTabType.TAB_ME}"
+                android:onClick="@{()->viewModel.doChangeTabPosition(MainTabType.TAB_ME)}"
+                android:drawableTop="@drawable/selector_tab_me"
+                android:gravity="center"
+                android:text="@string/rb_me_text" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+        <variable
+            name="data"
+            type="cc.kafuu.bilidownload.common.model.LoadingStatus" />
+
+        <variable
+            name="isCover"
+            type="Boolean" />
+
+        <import type="cc.kafuu.bilidownload.common.utils.ViewDataBindingUtilsKt" />
+
+        <import type="android.text.TextUtils" />
+    </data>
+
+    <LinearLayout
+        bindVisible="@{data.visibility}"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@{isCover ? @color/general_window_background_color : @color/common_transparent}"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <ProgressBar
+            style="?android:attr/progressBarStyle"
+            bindVisible="@{data.loadAnimationVisible}"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <ImageView
+            bindVisible="@{data.icon != null}"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/loading_status_icon"
+            android:src="@{data.icon}"
+            tools:src="@drawable/ic_list_item_empty" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            bindVisible="@{!TextUtils.isEmpty(data.message)}"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="50dp"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:text="@{data.message}"
+            android:textColor="@color/general_sub_text_color"
+            android:textSize="@dimen/size_text_common_size"
+            tools:text="@string/list_is_empty" />
+    </LinearLayout>
+</layout>
