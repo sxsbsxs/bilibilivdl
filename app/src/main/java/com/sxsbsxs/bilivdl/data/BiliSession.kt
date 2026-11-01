@@ -1,6 +1,7 @@
 package com.sxsbsxs.bilivdl.data
 
 import android.content.Context
+import android.webkit.CookieManager
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -8,8 +9,24 @@ import java.net.URL
 object BiliSession {
     private const val PREFS = "bili_account"
     fun cookie(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("cookie", "").orEmpty().trim()
-    fun saveCookie(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("cookie", value.trim()).apply() }
-    fun clear(context: Context) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply() }
+    fun saveCookie(context: Context, value: String) {
+        val cookie = value.trim()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("cookie", cookie).apply()
+        val manager = CookieManager.getInstance()
+        listOf(
+            "https://bilibili.com",
+            "https://www.bilibili.com",
+            "https://api.bilibili.com",
+            "https://passport.bilibili.com",
+            "https://m.bilibili.com"
+        ).forEach { manager.setCookie(it, cookie) }
+        manager.flush()
+    }
+    fun clear(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+    }
     fun profile(context: Context): JSONObject {
         val c = (URL("https://api.bilibili.com/x/web-interface/nav").openConnection() as HttpURLConnection).apply {
             connectTimeout = 12000; readTimeout = 15000
