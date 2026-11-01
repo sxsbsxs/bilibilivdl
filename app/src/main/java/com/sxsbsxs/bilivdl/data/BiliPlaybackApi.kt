@@ -31,6 +31,36 @@ object BiliPlaybackApi {
     }
     private fun enc(s:String)=URLEncoder.encode(s,"UTF-8")
 
+    private val wbiMixinTable = intArrayOf(
+        46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,
+        33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,
+        61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,
+        36,20,34,44,52
+    )
+
+    private fun wbiPlayUrl(aid: Long, cid: Long, qn: Int, fnval: Int, cookie: String): String {
+        val nav = get("https://api.bilibili.com/x/web-interface/nav", cookie)
+        if (nav.optInt("code", -1) != 0) error("无法获取 B站 WBI 签名密钥")
+        val img = nav.optJSONObject("data")?.optJSONObject("wbi_img") ?: error("B站未返回 WBI 密钥")
+        fun key(name: String): String = img.optString(name).substringAfterLast('/').substringBeforeLast('.')
+        val raw = key("img_url") + key("sub_url")
+        if (raw.length < 64) error("B站 WBI 密钥长度无效")
+        val mixin = buildString { for (i in 0 until 32) append(raw[wbiMixinTable[i]]) }
+        val params = linkedMapOf(
+            "avid" to aid.toString(), "cid" to cid.toString(), "qn" to qn.toString(),
+            "fnval" to fnval.toString(), "fnver" to "0", "force_host" to "2",
+            "fourk" to "1", "wts" to (System.currentTimeMillis() / 1000L).toString()
+        )
+        val query = params.toSortedMap().entries.joinToString("&") {
+            enc(it.key) + "=" + enc(it.value.replace(Regex("[!'()*]"), ""))
+        }
+        val digest = java.security.MessageDigest.getInstance("MD5")
+            .digest((query + mixin).toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return "https://api.bilibili.com/x/player/wbi/playurl?$query&w_rid=$digest&otype=json"
+    }
+
+
     private fun authorSign(mid: Long, cookie: String): String {
         if (mid <= 0L) return ""
         val root = get("https://api.bilibili.com/x/space/acc/info?mid=$mid", cookie)
@@ -127,8 +157,10 @@ object BiliPlaybackApi {
     }
 
     suspend fun downloadStreamChoices(aid: Long, cid: Long, qn: Int, cookie: String = ""): DownloadStreamChoices {
-        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json"
-        val root = get(url, cookie)
+        val url = wbiPlayUrl(aid, cid, qn, 4048, cookie)
+        val root = runCatching { get(url, cookie) }.getOrElse {
+            get("https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+        }
         if (root.optInt("code", -1) == 0) {
             val dash = root.optJSONObject("data")?.optJSONObject("dash")
             if (dash != null) {
@@ -212,7 +244,9 @@ object BiliPlaybackApi {
     }
 
     private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048): PlaybackInfo? {
-        val root = get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=" + fnval + "&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+        val root = runCatching { get(wbiPlayUrl(aid, cid, qn, fnval, cookie), cookie) }.getOrElse {
+            get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=" + fnval + "&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+        }
         if (root.optInt("code", -1) != 0) return null
         val data = root.optJSONObject("data") ?: return null
         val qa = data.optJSONArray("accept_quality")
