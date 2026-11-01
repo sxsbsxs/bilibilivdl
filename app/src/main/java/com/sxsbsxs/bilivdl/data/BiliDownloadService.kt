@@ -10,6 +10,9 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +35,22 @@ class BiliDownloadService : Service() {
         private const val EXTRA_AID = "aid"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_QN = "qn"
+        private const val EXTRA_ACTION = "queue_action"
+        private const val ACTION_PAUSE = "pause"
+        private const val ACTION_CANCEL = "cancel"
+        private val running = ConcurrentHashMap<String, Job>()
+        private val requestedActions = ConcurrentHashMap<String, String>()
+
+        fun pause(context: Context, id: String) = sendControl(context, id, ACTION_PAUSE)
+        fun cancel(context: Context, id: String) = sendControl(context, id, ACTION_CANCEL)
+        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int) =
+            enqueue(context, id, bvid, aid, title, qn)
+
+        private fun sendControl(context: Context, id: String, action: String) {
+            val intent = Intent(context, BiliDownloadService::class.java)
+                .putExtra(EXTRA_ID, id).putExtra(EXTRA_ACTION, action)
+            ContextCompat.startForegroundService(context, intent)
+        }
 
         fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int) {
             val intent = Intent(context, BiliDownloadService::class.java).apply {
@@ -65,13 +84,19 @@ class BiliDownloadService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val taskId = intent?.getStringExtra(EXTRA_ID) ?: return START_NOT_STICKY
+        val action = intent.getStringExtra(EXTRA_ACTION)
+        if (action == ACTION_PAUSE || action == ACTION_CANCEL) {
+            requestedActions[taskId] = action
+            running[taskId]?.cancel(CancellationException(action))
+            return START_NOT_STICKY
+        }
         val bvid = intent.getStringExtra(EXTRA_BVID).orEmpty()
         val aid = intent.getLongExtra(EXTRA_AID, 0L)
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val qn = intent.getIntExtra(EXTRA_QN, 80)
         active.incrementAndGet()
 
-        scope.launch {
+        val taskJob = scope.launch {
             val task = JSONObject()
                 .put("id", taskId)
                 .put("title", title)
@@ -100,17 +125,29 @@ class BiliDownloadService : Service() {
                     .put("progress", "下载完成")
                 updateTask(task)
                 notificationManager.notify(NOTIFICATION_ID, notification("下载完成：$title", null, null))
+            } catch (cancelled: CancellationException) {
+                val requested = requestedActions.remove(taskId)
+                task.put("status", if (requested == ACTION_CANCEL) "cancelled" else "paused")
+                    .put("progress", if (requested == ACTION_CANCEL) "已取消" else "已暂停 · 可继续")
+                if (requested == ACTION_CANCEL) {
+                    val dir = java.io.File(cacheDir, "bili-download")
+                    val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
+                    dir.listFiles()?.filter { it.name.startsWith(safe) }?.forEach { it.delete() }
+                }
+                updateTask(task)
             } catch (error: Exception) {
                 task.put("status", "failed")
                     .put("progress", error.message ?: "下载失败")
                 updateTask(task)
                 notificationManager.notify(NOTIFICATION_ID, notification("下载失败：$title", null, null))
             } finally {
+                running.remove(taskId)
                 if (active.decrementAndGet() == 0) {
                     stopSelfResult(startId)
                 }
             }
         }
+        running[taskId] = taskJob
         return START_REDELIVER_INTENT
     }
 
