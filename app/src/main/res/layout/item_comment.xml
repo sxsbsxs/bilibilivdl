@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="10dp" android:paddingBottom="10dp">
-<TextView android:id="@+id/comment_user" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/brand" android:textSize="12sp" android:textStyle="bold"/>
-<TextView android:id="@+id/comment_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:textColor="@color/text_primary" android:textSize="14sp"/>
-<TextView android:id="@+id/comment_likes" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/text_secondary" android:textSize="11sp"/>
+ <TextView android:id="@+id/comment_user" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/brand" android:textSize="12sp" android:textStyle="bold"/>
+ <TextView android:id="@+id/comment_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:textColor="@color/text_primary" android:textSize="14sp"/>
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:gravity="center_vertical">
+  <TextView android:id="@+id/comment_likes" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/text_secondary" android:textSize="11sp" android:padding="5dp"/>
+  <TextView android:id="@+id/comment_replies" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:textColor="@color/brand" android:textSize="11sp" android:padding="5dp"/>
+ </LinearLayout>
 </LinearLayout>
