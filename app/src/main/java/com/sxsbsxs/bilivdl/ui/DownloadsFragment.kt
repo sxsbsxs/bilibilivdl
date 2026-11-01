@@ -20,6 +20,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         super.onViewCreated(view, savedInstanceState)
         _binding = FragmentDownloadBinding.bind(view)
         b.clearCompleted.setOnClickListener { removeTasks(completedOnly = true) }
+        b.retryFailed.setOnClickListener { retryFailedTasks() }
         b.clearHistory.setOnClickListener { removeTasks(completedOnly = false) }
         refreshTasks()
         viewLifecycleOwner.lifecycleScope.launch {
@@ -62,6 +63,30 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         }
         b.downloadSummary.text = "共 ${arr.length()} 个任务 · 下载中 $downloading · 已完成 $completed · 失败 $failed"
         b.downloadTasks.text = lines.asReversed().joinToString("\n\n")
+    }
+
+    private fun retryFailedTasks() {
+        val arr = JSONArray(prefs.getString("tasks", "[]"))
+        var count = 0
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            if (item.optString("status") != "failed") continue
+            val id = item.optString("id")
+            val bvid = item.optString("bvid")
+            val aid = item.optLong("aid")
+            val qn = item.optInt("qn", 80)
+            if (id.isBlank() || (bvid.isBlank() && aid <= 0L)) continue
+            com.sxsbsxs.bilivdl.data.BiliDownloadService.enqueue(
+                requireContext(), id, bvid, aid, item.optString("title", "视频"), qn
+            )
+            count++
+        }
+        if (count == 0) {
+            b.downloadSummary.text = "没有可重试的失败任务（旧任务可能缺少重试信息）"
+        } else {
+            b.downloadSummary.text = "已重新加入 $count 个失败任务"
+        }
+        refreshTasks()
     }
 
     private fun removeTasks(completedOnly: Boolean) {
