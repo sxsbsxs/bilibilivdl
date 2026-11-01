@@ -14,7 +14,7 @@
         android:id="@+id/search_input_layout" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:layout_marginTop="18dp"
         android:hint="输入关键词、BV 号或 AV 号"
-        app:boxBackgroundColor="@color/surface_dark" app:boxBackgroundMode="filled"
+        app:boxBackgroundColor="@color/surface_elevated" app:boxBackgroundMode="filled"
         app:boxCornerRadiusTopStart="14dp" app:boxCornerRadiusTopEnd="14dp"
         app:boxCornerRadiusBottomStart="14dp" app:boxCornerRadiusBottomEnd="14dp"
         app:hintTextColor="@color/text_secondary">
