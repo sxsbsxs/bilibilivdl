@@ -157,7 +157,7 @@ object BiliPlaybackApi {
         // 每次只在 B 站真实返回可播放资源时才接受结果，绝不把请求 qn 当作实际画质。
         val qualityCandidates = (listOf(qn) + listOf(127, 120, 116, 112, 80, 74, 64, 32, 16))
             .filter { it > 0 }.distinct()
-        var data: JSONObject? = null
+        var playbackData: JSONObject? = null
         var lastMessage = "B站没有返回可播放资源"
         var lastCode = 0
         playbackAttempts@ for (candidateQn in qualityCandidates) {
@@ -195,17 +195,17 @@ object BiliPlaybackApi {
                     val candidateData = response.optJSONObject("data")
                     val dashCandidate = candidateData?.optJSONObject("dash")
                     val hasDash = (dashCandidate?.optJSONArray("video")?.length() ?: 0) > 0 &&
-                        (dashCandidate.optJSONArray("audio")?.length() ?: 0) > 0
+                        (dashCandidate?.optJSONArray("audio")?.length() ?: 0) > 0
                     val hasDurl = (candidateData?.optJSONArray("durl")?.length() ?: 0) > 0
                     if (candidateData != null && (hasDash || hasDurl)) {
-                        data = candidateData
+                        playbackData = candidateData
                         break@playbackAttempts
                     }
                     lastMessage = "B站返回成功状态，但没有可用的视频/音频轨道"
                 }
             }
         }
-        val data = data ?: error(
+        val data = playbackData ?: error(
             if (lastCode == -352) "B站暂时风控了游客播放请求（-352）；可稍后重试，扫码登录通常能提高可用画质范围"
             else "获取播放地址失败：$lastMessage"
         )
