@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -49,6 +50,16 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var info: PlaybackInfo? = null
     private var selectedSubtitleUri: android.net.Uri? = null
     private var selectedSubtitleLabel: String = ""
+    private var pendingSubtitleSrt = ""
+    private val subtitleExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/x-subrip")) { uri ->
+        if (uri != null) {
+            runCatching {
+                contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(pendingSubtitleSrt) }
+                    ?: error("无法写入字幕文件")
+            }.onSuccess { b.playerStatus.text = "字幕已导出" }
+             .onFailure { b.playerStatus.text = "字幕导出失败：${it.message}" }
+        }
+    }
     private var danmakuEnabled = true
     private var commentPage = 1
     private var commentHasMore = true
@@ -199,7 +210,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     SubtitleApiBridge.tracks(identifiers.first, identifiers.second, epId, seasonId)
                 }
                 val labels = listOf("关闭字幕") + tracks.map { "${it.label}（${it.language}）" }
-                MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                val chooser = MaterialAlertDialogBuilder(this@VideoPlayerActivity)
                     .setTitle("选择字幕")
                     .setItems(labels.toTypedArray()) { _, which ->
                         lifecycleScope.launch {
@@ -222,7 +233,37 @@ class VideoPlayerActivity : AppCompatActivity() {
                                 b.playerStatus.text = "字幕加载失败：${e.message}"
                             }
                         }
-                    }.show()
+                    }
+                    .setNeutralButton("导出 SRT 字幕", null)
+                    .create()
+                chooser.setOnShowListener {
+                    chooser.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        if (tracks.isEmpty()) {
+                            b.playerStatus.text = "没有可导出的字幕"
+                            chooser.dismiss()
+                        } else {
+                            MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                                .setTitle("选择要导出的字幕")
+                                .setItems(tracks.map { "${it.label}（${it.language}）" }.toTypedArray()) { _, index ->
+                                    val track = tracks[index]
+                                    lifecycleScope.launch {
+                                        try {
+                                            b.playerStatus.text = "正在下载字幕并转换为 SRT…"
+                                            pendingSubtitleSrt = withContext(Dispatchers.IO) {
+                                                SubtitleApiBridge.downloadAsSrt(this@VideoPlayerActivity, track)
+                                            }
+                                            if (pendingSubtitleSrt.isBlank()) error("字幕内容为空")
+                                            subtitleExportLauncher.launch("字幕_${track.language}.srt")
+                                        } catch (e: Exception) {
+                                            b.playerStatus.text = "字幕导出失败：${e.message}"
+                                        }
+                                    }
+                                }.show()
+                            chooser.dismiss()
+                        }
+                    }
+                }
+                chooser.show()
                 b.playerStatus.text = if (tracks.isEmpty()) "当前视频没有可用字幕" else "已找到 ${tracks.size} 条字幕"
             } catch (e: Exception) {
                 b.playerStatus.text = "字幕列表获取失败：${e.message}"

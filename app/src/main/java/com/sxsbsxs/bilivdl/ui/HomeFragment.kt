@@ -52,12 +52,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
             })
         }
-        b.homeRecommendations.layoutManager = GridLayoutManager(requireContext(), 2).apply {
-            // A two-column cover feed, like the reference Bilibili discovery layout.
-            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
-                override fun getSpanSize(position: Int) = 1
-            }
-        }
+        b.homeRecommendations.layoutManager = GridLayoutManager(requireContext(), 2).apply {\n            // A two-column cover feed, like the reference Bilibili discovery layout.\n            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {\n                override fun getSpanSize(position: Int) = 1\n            }\n        }
         b.homeRecommendations.adapter = adapter
         b.homeSwipe.setOnRefreshListener { refresh() }
         b.homeScroll.setOnScrollChangeListener(

@@ -32,6 +32,30 @@ object SubtitleApiBridge {
   }
  }
 
+ suspend fun downloadAsSrt(context: Context, track: BiliSubtitleTrack): String {
+  val uri = downloadAsVtt(context, track)
+  val vtt = File(checkNotNull(uri.path)).readLines(Charsets.UTF_8)
+  val out = StringBuilder()
+  var index = 0
+  var i = 0
+  while (i < vtt.size) {
+   val line = vtt[i].trim()
+   if (line.contains(" --> ")) {
+    index++
+    val times = line.replace('.', ',')
+    out.append(index).append('\\n').append(times).append('\\n')
+    i++
+    while (i < vtt.size && vtt[i].isNotBlank()) {
+     out.append(vtt[i]).append('\\n')
+     i++
+    }
+    out.append('\\n')
+   }
+   i++
+  }
+  return out.toString()
+ }
+
  suspend fun downloadAsVtt(context: Context, track: BiliSubtitleTrack): Uri = withContext(Dispatchers.IO) {
   val connection = (URL(track.url).openConnection() as HttpURLConnection).apply {
    connectTimeout = 15000; readTimeout = 20000
