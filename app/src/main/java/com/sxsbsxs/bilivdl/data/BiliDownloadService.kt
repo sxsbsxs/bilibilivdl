@@ -128,7 +128,8 @@ class BiliDownloadService : Service() {
                 val result = BiliDownloadEngine.download(this@BiliDownloadService, playback, title, cookie) { done, total, stage ->
                     val progress = if (total > 0L) "$stage · ${(done * 100 / total).coerceIn(0, 100)}%" else "$stage · ${done / 1024} KB"
                     task.put("progress", progress)
-                    updateTask(task)
+                    // The engine callback is synchronous; persist asynchronously in the service scope.
+                    scope.launch { updateTask(task) }
                     notificationManager.notify(NOTIFICATION_ID, notification(title, done, total.takeIf { it > 0L }))
                 }
                 task.put("path", result)
