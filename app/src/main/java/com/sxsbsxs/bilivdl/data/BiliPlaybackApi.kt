@@ -45,20 +45,46 @@ object BiliPlaybackApi {
     fun load(bvid:String, aid:Long, qn:Int=80, cookie:String=""):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
-        val detail=get(signed("/x/web-interface/wbi/view",id,cookie),cookie)
+        // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
+        val detailUrl = "https://api.bilibili.com/x/web-interface/view?" +
+            id.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
+        var detail = get(detailUrl, cookie)
+        if (detail.optInt("code") != 0) {
+            // 兼容 B 站对公开详情接口的风控：最后再尝试 WBI 详情接口。
+            detail = get(signed("/x/web-interface/wbi/view", id, cookie), cookie)
+        }
         if(detail.optInt("code")!=0) {
             val code=detail.optInt("code")
-            error(if(code == -352) "B站风控拦截视频详情请求（-352）。请在“我的”中登录账号后重试" else detail.optString("message","视频信息获取失败"))
+            error(if(code == -352) "B站暂时风控了视频详情请求（-352），可稍后重试；普通播放不要求登录" else detail.optString("message","视频信息获取失败"))
         }
         val d=detail.optJSONObject("data")?:error("视频信息为空")
         val cid=d.optJSONArray("pages")?.optJSONObject(0)?.optLong("cid")?:d.optLong("cid")
         if(cid<=0) error("没有获取到视频分P信息")
         val params=mutableMapOf("cid" to cid.toString(),"qn" to qn.toString(),"fnver" to "0","fnval" to "4048","fourk" to "1")
         params.putAll(id)
-        val play=get(signed("/x/player/wbi/playurl",params,cookie),cookie)
+        // 采用 bilimiao 的免登录播放接口：/x/player/playurl + avid/cid/qn/fnval。
+        // 不把 Cookie 或 WBI 签名作为必需条件；登录 Cookie 仅作为可选请求头。
+        val resolvedAid = d.optLong("aid", aid)
+        val publicParams = mutableMapOf(
+            "avid" to resolvedAid.toString(),
+            "cid" to cid.toString(),
+            "qn" to qn.toString(),
+            "fnval" to "4048",
+            "fnver" to "0",
+            "force_host" to "2",
+            "type" to "",
+            "otype" to "json",
+            "fourk" to "1"
+        )
+        val publicQuery = publicParams.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
+        var play = get("https://api.bilibili.com/x/player/playurl?$publicQuery", cookie)
+        if (play.optInt("code") != 0) {
+            // 公开旧接口被临时限制时，回退到 WBI playurl；匿名状态仍然先尝试免登录线路。
+            play = get(signed("/x/player/wbi/playurl", params, cookie), cookie)
+        }
         if(play.optInt("code")!=0) {
             val code=play.optInt("code")
-            error(if(code == -352) "B站风控拦截播放地址请求（-352）。请登录账号或稍后重试" else play.optString("message","B站拒绝提供播放地址"))
+            error(if(code == -352) "B站暂时风控了免登录播放地址请求（-352），请稍后重试；如需更高画质再扫码登录" else play.optString("message","B站拒绝提供播放地址"))
         }
         val data=play.optJSONObject("data")?:error("播放接口没有返回 data")
         val ids=data.optJSONArray("accept_quality"); val names=data.optJSONArray("accept_description")
