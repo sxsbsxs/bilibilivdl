@@ -1,5 +1,6 @@
 package com.sxsbsxs.bilivdl.data
 import com.a10miaomiao.bilimiao.comm.apis.BangumiAPI
+import com.a10miaomiao.bilimiao.comm.apis.PlayerAPI
 import com.a10miaomiao.bilimiao.comm.network.MiaoHttp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -7,6 +8,7 @@ data class BangumiEpisode(val id: Long, val aid: Long, val cid: Long, val bvid: 
 data class BangumiSeason(val seasonId: Long, val title: String, val cover: String, val description: String, val episodes: List<BangumiEpisode>)
 object BangumiApiBridge {
  private val api = BangumiAPI()
+ private val playerApi = PlayerAPI()
  private suspend fun read(request: MiaoHttp): JSONObject {
   val raw = request.awaitString()
   if (raw.isBlank()) error("番剧接口没有返回内容")
