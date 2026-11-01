@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="24dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="BiliVdl"
+                android:textColor="@color/text_primary"
+                android:textSize="27sp"
+                android:textStyle="bold" />
+            <ImageButton
+                android:id="@+id/home_search_button"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="搜索"
+                android:src="@android:drawable/ic_menu_search"
+                android:tint="@color/text_primary" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="发现值得收藏的视频"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:scrollbars="none">
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/home_categories"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+                <com.google.android.material.chip.Chip
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="推荐" />
+                <com.google.android.material.chip.Chip
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="热门" />
+                <com.google.android.material.chip.Chip
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="番剧" />
+                <com.google.android.material.chip.Chip
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="游戏" />
+                <com.google.android.material.chip.Chip
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="知识" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="为你推荐"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/home_empty_state"
+            android:layout_width="match_parent"
+            android:layout_height="190dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_empty_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="20dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="准备好探索了吗？"
+                android:textColor="@color/text_primary"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="接入视频推荐接口后，这里将展示视频封面、标题和播放数据。"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
