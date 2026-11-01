@@ -110,6 +110,17 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/player_author_sign"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="52dp"
+                android:layout_marginTop="3dp"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
                 android:id="@+id/player_extra_stats"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
