@@ -33,7 +33,7 @@ object BilimiaoApiBridge {
     }
 
     suspend fun likeVideo(aid: Long, liked: Boolean) {
-        execute(videoApi.like(aid.toString(), dislike = 0, like = if (liked) 1 else 0))
+        execute(videoApi.like(aid.toString(), dislike = 0, like = if (liked) 1 else 2))
     }
 
     suspend fun coin(aid: Long, count: Int, alsoLike: Boolean) {
