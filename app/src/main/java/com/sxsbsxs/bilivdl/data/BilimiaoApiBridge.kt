@@ -14,11 +14,9 @@ object BilimiaoApiBridge {
     private val commentApi = CommentApi()
 
     private suspend fun execute(request: MiaoHttp): JSONObject {
-        val root = request.awaitCall().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (body.isBlank()) error("B站接口没有返回内容（HTTP ${response.code}）")
-            JSONObject(body)
-        }
+        val body = request.awaitString()
+        if (body.isBlank()) error("B站接口没有返回内容")
+        val root = JSONObject(body)
         val code = root.optInt("code", -1)
         if (code != 0) {
             val message = root.optString("message").ifBlank { "B站接口请求失败" }
