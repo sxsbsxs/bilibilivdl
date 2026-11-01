@@ -169,7 +169,11 @@ object BiliDownloadEngine {
                     while (true) {
                         val track = extractor.sampleTrackIndex
                         if (track < 0) break
-                        val outTrack = trackMap[track] ?: run { extractor.advance(); continue }
+                        val outTrack = trackMap[track]
+                        if (outTrack == null) {
+                            extractor.advance()
+                            continue
+                        }
                         buffer.clear()
                         val size = extractor.readSampleData(buffer, 0)
                         if (size < 0) break
