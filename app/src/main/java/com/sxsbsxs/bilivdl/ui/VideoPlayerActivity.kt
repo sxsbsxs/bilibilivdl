@@ -553,7 +553,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val choices = withContext(Dispatchers.IO) {
-                    if (epId <= 0L && aid > 0L && cookie.isNotBlank()) {
+                    if (epId <= 0L && aid > 0L) {
+                        // 游客也必须请求官方播放接口读取真实可下载轨道；Cookie 为空不代表不能请求 720P。
                         runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie) }.getOrDefault(emptyList())
                     } else emptyList()
                 }.ifEmpty {
