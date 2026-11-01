@@ -134,7 +134,7 @@ class BiliDownloadService : Service() {
             try {
                 updateTask(task)
                 val cookie = BiliSession.cookie(this@BiliDownloadService)
-                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, 0, videoCodec, audioCodec)
+                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn, videoCodec, audioCodec) else BiliPlaybackApi.load(bvid, aid, qn, cookie, 0, videoCodec, audioCodec)
                 task.put("quality", playback.name)
                 task.put("progress", "准备下载")
                 updateTask(task)

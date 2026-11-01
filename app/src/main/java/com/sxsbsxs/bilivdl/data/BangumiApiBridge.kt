@@ -42,7 +42,22 @@ object BangumiApiBridge {
         return parseEpisode(data) ?: data.optJSONObject("episode")?.let(::parseEpisode) ?: error("番剧单集信息不完整")
     }
 
-    suspend fun playback(episodeId: Long, qn: Int): PlaybackInfo {
+     suspend fun downloadStreamChoices(episodeId: Long, cid: Long, qn: Int): DownloadStreamChoices {
+        val result = playerApi.getBangumiUrl(episodeId.toString(), cid.toString(), qn, 4048)
+        val dash = result.dash ?: return DownloadStreamChoices(emptyList(), emptyList())
+        val videos = dash.video.map { item ->
+            DownloadStreamOption(item.id, item.codecs,
+                item.height.toString() + "P · " + item.codecs + " · " + (item.bandwidth / 1000) + " kbps",
+                item.bandwidth.toLong())
+        }
+        val audios = dash.audio.orEmpty().map { item ->
+            DownloadStreamOption(item.id, item.codecs,
+                item.codecs + " · " + (item.bandwidth / 1000) + " kbps", item.bandwidth.toLong())
+        }
+        return DownloadStreamChoices(videos, audios)
+    }
+
+    suspend fun playback(episodeId: Long, qn: Int, videoCodec: String = "", audioCodec: String = ""): PlaybackInfo {
         val ep = episode(episodeId)
         require(ep.cid > 0L) { "番剧剧集缺少 CID" }
         val result = playerApi.getBangumiUrl(episodeId.toString(), ep.cid.toString(), qn, 4048)
@@ -54,12 +69,23 @@ object BangumiApiBridge {
         val label = qualities.firstOrNull { it.first == actual }?.second ?: "清晰度 $actual"
         val dash = result.dash
         if (dash != null) {
-            val video = dash.video.firstOrNull { it.id == actual } ?: dash.video.firstOrNull() ?: error("番剧没有可用视频轨道")
-            val audio = dash.audio?.firstOrNull() ?: error("番剧没有可用音频轨道")
+            val videoId = videoCodec.substringBefore('|').toIntOrNull()
+            val videoName = videoCodec.substringAfter('|', videoCodec)
+            val video = if (videoCodec.isNotBlank()) {
+                dash.video.firstOrNull { (videoId == null || it.id == videoId) && it.codecs == videoName }
+                    ?: error("番剧没有返回所选视频编码：" + videoCodec)
+            } else dash.video.firstOrNull { it.id == actual } ?: dash.video.firstOrNull()
+                ?: error("番剧没有可用视频轨道")
+            val audioId = audioCodec.substringBefore('|').toIntOrNull()
+            val audioName = audioCodec.substringAfter('|', audioCodec)
+            val audio = if (audioCodec.isNotBlank()) {
+                dash.audio.orEmpty().firstOrNull { (audioId == null || it.id == audioId) && it.codecs == audioName }
+                    ?: error("番剧没有返回所选音频编码：" + audioCodec)
+            } else dash.audio?.firstOrNull() ?: error("番剧没有可用音频轨道")
             val videoUrl = video.base_url.ifBlank { video.backup_url?.firstOrNull().orEmpty() }
             val audioUrl = audio.base_url.ifBlank { audio.backup_url?.firstOrNull().orEmpty() }
             if (videoUrl.isBlank() || audioUrl.isBlank()) error("番剧 DASH 地址无效")
-            return PlaybackInfo(cid = ep.cid, url = videoUrl, quality = actual, name = label, qualities = qualities, isDash = true, videoUrl = videoUrl, audioUrl = audioUrl)
+            return PlaybackInfo(cid = ep.cid, url = videoUrl, quality = actual, name = label, qualities = qualities, isDash = true, videoUrl = videoUrl, audioUrl = audioUrl, videoBackupUrls = video.backup_url.orEmpty(), audioBackupUrls = audio.backup_url.orEmpty())
         }
         val segments = result.durl.orEmpty().sortedBy { it.order }.mapNotNull { it.url.takeIf { url -> url.startsWith("https://") || url.startsWith("http://") } }
         if (segments.isEmpty()) error("番剧接口没有返回可播放的视频流")

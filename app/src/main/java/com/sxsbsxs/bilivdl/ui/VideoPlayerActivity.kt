@@ -321,7 +321,7 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun loadDownloadStreamOptions(qn: Int) {
         val p = info ?: return
-        if (epId > 0L || aid <= 0L) {
+        if (epId <= 0L && aid <= 0L) {
             startDownload(qn)
             return
         }
@@ -329,7 +329,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val options = withContext(Dispatchers.IO) {
-                    BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn)
+                    if (epId > 0L) BangumiApiBridge.downloadStreamChoices(epId, p.cid, qn) else BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn)
                 }
                 if (options.video.isEmpty()) {
                     startDownload(qn)
