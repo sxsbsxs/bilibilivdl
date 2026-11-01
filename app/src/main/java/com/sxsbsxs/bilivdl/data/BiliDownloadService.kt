@@ -26,6 +26,7 @@ import com.sxsbsxs.bilivdl.data.queue.DownloadQueueStore
 import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.sync.Semaphore
 
 /**
  * Persistent foreground download runner. It keeps downloads alive after the player
@@ -48,11 +49,12 @@ class BiliDownloadService : Service() {
         private const val ACTION_CANCEL = "cancel"
         private val running = ConcurrentHashMap<String, Job>()
         private val requestedActions = ConcurrentHashMap<String, String>()
+        private val downloadSlots = Semaphore(2)
 
         fun pause(context: Context, id: String) = sendControl(context, id, ACTION_PAUSE)
         fun cancel(context: Context, id: String) = sendControl(context, id, ACTION_CANCEL)
-        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L) =
-            enqueue(context, id, bvid, aid, title, qn, episodeId)
+        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "") =
+            enqueue(context, id, bvid, aid, title, qn, episodeId, videoCodec, audioCodec)
 
         private fun sendControl(context: Context, id: String, action: String) {
             val intent = Intent(context, BiliDownloadService::class.java)
@@ -90,7 +92,27 @@ class BiliDownloadService : Service() {
                 }
             )
         }
-        startForeground(NOTIFICATION_ID, notification("下载任务准备中", null, null))
+        startForeground(NOTIFICATION_ID, notification("正在恢复下载队列", null, null))
+        scope.launch {
+            runCatching {
+                DownloadQueueStore.migrateLegacy(this@BiliDownloadService)
+                val dao = DownloadQueueDatabase.get(this@BiliDownloadService).tasks()
+                dao.recoverInterrupted()
+                dao.tasksByStatus("queued").forEach { task ->
+                    val restore = Intent(this@BiliDownloadService, BiliDownloadService::class.java).apply {
+                        putExtra(EXTRA_ID, task.taskId)
+                        putExtra(EXTRA_BVID, task.bvid)
+                        putExtra(EXTRA_AID, task.aid)
+                        putExtra(EXTRA_TITLE, task.title)
+                        putExtra(EXTRA_QN, task.qn)
+                        putExtra(EXTRA_EP_ID, task.episodeId)
+                        putExtra(EXTRA_VIDEO_CODEC, task.videoCodec)
+                        putExtra(EXTRA_AUDIO_CODEC, task.audioCodec)
+                    }
+                    startService(restore)
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -120,6 +142,7 @@ class BiliDownloadService : Service() {
         if (running.containsKey(taskId)) return START_REDELIVER_INTENT
 
         val taskJob = scope.launch(start = CoroutineStart.LAZY) {
+            var slotAcquired = false
             val task = JSONObject()
                 .put("id", taskId)
                 .put("title", title)
@@ -128,18 +151,24 @@ class BiliDownloadService : Service() {
                 .put("aid", aid)
                 .put("qn", qn)
                 .put("episodeId", episodeId)
-                .put("status", "downloading")
-                .put("progress", "正在获取视频信息")
+                .put("videoCodec", videoCodec)
+                .put("audioCodec", audioCodec)
+                .put("status", "queued")
+                .put("progress", "等待下载队列")
                 .put("time", System.currentTimeMillis())
             try {
                 updateTask(task)
+                downloadSlots.acquire()
+                slotAcquired = true
+                task.put("status", "downloading").put("progress", "正在获取视频信息")
+                updateTask(task)
                 val cookie = BiliSession.cookie(this@BiliDownloadService)
                 val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn, videoCodec, audioCodec) else BiliPlaybackApi.load(bvid, aid, qn, cookie, 0, videoCodec, audioCodec)
-                task.put("quality", playback.name)
+                task.put("cid", playback.cid).put("quality", playback.name)
                 task.put("progress", "准备下载")
                 updateTask(task)
                 val lastProgressWrite = AtomicLong(0L)
-                val result = BiliDownloadEngine.download(this@BiliDownloadService, playback, title, cookie) { done, total, stage ->
+                val result = BiliDownloadEngine.download(this@BiliDownloadService, playback, title, cookie, taskId) { done, total, stage ->
                     val progress = if (total > 0L) "$stage · ${(done * 100 / total).coerceIn(0, 100)}%" else "$stage · ${done / 1024} KB"
                     task.put("completedBytes", done).put("totalBytes", total).put("progress", progress)
                     // Network callbacks can fire for every chunk; persist detached snapshots at most once per second.
@@ -161,9 +190,7 @@ class BiliDownloadService : Service() {
                 task.put("status", if (requested == ACTION_CANCEL) "cancelled" else "paused")
                     .put("progress", if (requested == ACTION_CANCEL) "已取消" else "已暂停 · 可继续")
                 if (requested == ACTION_CANCEL) {
-                    val dir = java.io.File(cacheDir, "bili-download")
-                    val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
-                    dir.listFiles()?.filter { it.name.startsWith(safe) }?.forEach { it.delete() }
+                    BiliDownloadEngine.cleanupTask(this@BiliDownloadService, taskId, title)
                 }
                 updateTask(task)
             } catch (error: Exception) {
@@ -172,9 +199,10 @@ class BiliDownloadService : Service() {
                 updateTask(task)
                 notificationManager.notify(NOTIFICATION_ID, notification("下载失败：$title", null, null))
             } finally {
+                if (slotAcquired) downloadSlots.release()
                 running.remove(taskId, this.coroutineContext[Job])
                 if (active.decrementAndGet() == 0) {
-                    stopSelf()
+                    stopSelfResult(startId)
                 }
             }
         }
@@ -194,9 +222,7 @@ class BiliDownloadService : Service() {
                 if (item.optString("id") != id) continue
                 item.put("status", status).put("progress", progress)
                 if (status == "cancelled") {
-                    val safe = item.optString("title").replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70)
-                    val dir = java.io.File(cacheDir, "bili-download")
-                    dir.listFiles()?.filter { it.name.startsWith(safe) }?.forEach { it.delete() }
+                    BiliDownloadEngine.cleanupTask(this, id, item.optString("title"))
                 }
                 break
             }
@@ -246,6 +272,9 @@ class BiliDownloadService : Service() {
             status = task.optString("status", "queued"),
             progress = task.optString("progress"),
             outputPath = task.optString("path"),
+            videoCodec = task.optString("videoCodec"),
+            audioCodec = task.optString("audioCodec"),
+            cid = task.optLong("cid"),
             completedBytes = task.optLong("completedBytes", 0L),
             totalBytes = task.optLong("totalBytes", -1L),
             createdAt = task.optLong("time", System.currentTimeMillis())

@@ -2,16 +2,19 @@ package com.sxsbsxs.bilivdl.data
 
 import com.a10miaomiao.bilimiao.comm.apis.BangumiAPI
 import com.a10miaomiao.bilimiao.comm.apis.PlayerAPI
+import com.a10miaomiao.bilimiao.comm.apis.SearchApi
 import com.a10miaomiao.bilimiao.comm.network.MiaoHttp
 import org.json.JSONArray
 import org.json.JSONObject
 
 data class BangumiEpisode(val id: Long, val aid: Long, val cid: Long, val bvid: String, val title: String, val longTitle: String, val cover: String, val durationMs: Long)
 data class BangumiSeason(val seasonId: Long, val title: String, val cover: String, val description: String, val episodes: List<BangumiEpisode>)
+data class BangumiSearchResult(val seasonId: Long, val title: String, val cover: String, val description: String, val newestEpisode: String = "")
 
 object BangumiApiBridge {
     private val api = BangumiAPI()
     private val playerApi = PlayerAPI()
+    private val searchApi = SearchApi()
 
     private suspend fun read(request: MiaoHttp): JSONObject {
         val raw = request.awaitString()
@@ -26,6 +29,30 @@ object BangumiApiBridge {
         val ep = o.optLong("id", o.optLong("ep_id"))
         if (ep <= 0L) return null
         return BangumiEpisode(ep, o.optLong("aid"), o.optLong("cid"), o.optString("bvid"), o.optString("title").ifBlank { "番剧剧集" }, o.optString("long_title"), o.optString("cover"), o.optLong("duration"))
+    }
+
+    suspend fun search(keyword: String, page: Int = 1, pageSize: Int = 20): List<BangumiSearchResult> {
+        require(keyword.isNotBlank()) { "请输入番剧名称" }
+        val raw = searchApi.searchBangumi(keyword.trim(), page.coerceAtLeast(1), pageSize.coerceIn(1, 50)).awaitString()
+        if (raw.isBlank()) error("番剧搜索接口没有返回内容")
+        val root = JSONObject(raw)
+        val code = root.optInt("code", 0)
+        if (code != 0) error(root.optString("message").ifBlank { "番剧搜索失败（$code）" })
+        val data = root.optJSONObject("data") ?: root.optJSONObject("result") ?: JSONObject()
+        val array = data.optJSONArray("result") ?: data.optJSONArray("items") ?: JSONArray()
+        return (0 until array.length()).mapNotNull { index ->
+            val item = array.optJSONObject(index) ?: return@mapNotNull null
+            val seasonId = item.optLong("season_id", item.optLong("seasonId"))
+            if (seasonId <= 0L) return@mapNotNull null
+            val newest = item.optJSONObject("newest_ep")?.optString("index_show").orEmpty()
+            BangumiSearchResult(
+                seasonId = seasonId,
+                title = item.optString("title").replace(Regex("<[^>]+>"), "").ifBlank { "未命名番剧" },
+                cover = item.optString("cover").let { if (it.startsWith("//")) "https:$it" else it },
+                description = item.optString("desc").ifBlank { item.optString("evaluate") },
+                newestEpisode = newest
+            )
+        }.distinctBy { it.seasonId }
     }
 
     suspend fun season(seasonId: Long, episodeId: Long = 0L): BangumiSeason {

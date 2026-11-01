@@ -15,13 +15,20 @@ object DownloadQueueStore {
     val o = arr.optJSONObject(i) ?: continue
     val id = o.optString("id")
     if (id.isBlank()) continue
-    add(DownloadTaskEntity(id, o.optString("title", "视频"), o.optString("bvid"), o.optLong("aid"), qn = o.optInt("qn", 80), quality = o.optString("quality"), status = o.optString("status", "queued"), progress = o.optString("progress"), outputPath = o.optString("path"), createdAt = o.optLong("time", System.currentTimeMillis())))
+    add(DownloadTaskEntity(
+     taskId=id, title=o.optString("title","视频"), bvid=o.optString("bvid"), aid=o.optLong("aid"),
+     cid=o.optLong("cid"), episodeId=o.optLong("episodeId"), qn=o.optInt("qn",80),
+     quality=o.optString("quality"), status=o.optString("status","queued").let { if(it=="downloading") "queued" else it },
+     progress=o.optString("progress"), outputPath=o.optString("path"), videoCodec=o.optString("videoCodec"),
+     audioCodec=o.optString("audioCodec"), completedBytes=o.optLong("completedBytes"),
+     totalBytes=o.optLong("totalBytes",-1L), createdAt=o.optLong("time",System.currentTimeMillis())
+    ))
    }
   }
   DownloadQueueDatabase.get(context).tasks().upsertAll(tasks)
-  prefs.edit().putBoolean(MIGRATED, true).apply()
+  prefs.edit().putBoolean(MIGRATED,true).apply()
  }
  suspend fun save(context: Context, task: DownloadTaskEntity) {
-  DownloadQueueDatabase.get(context).tasks().upsert(task.copy(updatedAt = System.currentTimeMillis()))
+  DownloadQueueDatabase.get(context).tasks().upsert(task.copy(updatedAt=System.currentTimeMillis()))
  }
 }
