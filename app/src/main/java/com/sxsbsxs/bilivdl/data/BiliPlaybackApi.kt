@@ -151,17 +151,21 @@ object BiliPlaybackApi {
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
         val detailUrl = "https://api.bilibili.com/x/web-interface/view?" +
             id.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
-        // 先复用 BiliMiao 的 VideoAPI（app.bilibili.com/x/v2/view），它是游客详情链路；
-        // 仅在上游接口失败时回退公开 web-interface/view，绝不因游客未登录强制调用 WBI。
+        // 游客详情必须先走公开 Web 接口：不调用需要 WBI/登录态的资料聚合接口。
+        // 公开接口被风控或暂不可用时，再回退 BiliMiao 的 app 端详情接口。
         val d = runCatching {
-            BilimiaoApiBridge.videoInfo(if (bvid.isNotBlank()) bvid else aid.toString(), if (bvid.isNotBlank()) "BV" else "AV")
-        }.getOrElse {
             val detail = get(detailUrl, cookie)
             if (detail.optInt("code") != 0) {
                 val code = detail.optInt("code")
                 error(if (code == -352) "B站暂时限制了游客视频详情请求（-352），请稍后重试" else detail.optString("message", "视频信息获取失败"))
             }
             detail.optJSONObject("data") ?: error("视频信息为空")
+        }.getOrElse { publicError ->
+            runCatching {
+                BilimiaoApiBridge.videoInfo(if (bvid.isNotBlank()) bvid else aid.toString(), if (bvid.isNotBlank()) "BV" else "AV")
+            }.getOrElse { fallbackError ->
+                throw IllegalStateException("公开视频详情和 BiliMiao 备用详情均失败：${publicError.message}；${fallbackError.message}", fallbackError)
+            }
         }
         val pageArray = d.optJSONArray("pages")
         val parts = if (pageArray != null) (0 until pageArray.length()).mapNotNull { index ->
