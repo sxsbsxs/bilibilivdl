@@ -1,98 +1,177 @@
 package com.sxsbsxs.bilivdl.ui
 
+import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliDownloadService
 import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
 import com.sxsbsxs.bilivdl.data.queue.DownloadTaskEntity
 import com.sxsbsxs.bilivdl.databinding.FragmentDownloadBinding
-import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 class DownloadsFragment : Fragment(R.layout.fragment_download) {
- private var _binding: FragmentDownloadBinding? = null
- private val b get() = _binding!!
- private val dao by lazy { DownloadQueueDatabase.get(requireContext()).tasks() }
+    private var _binding: FragmentDownloadBinding? = null
+    private val b get() = _binding!!
+    private val dao by lazy { DownloadQueueDatabase.get(requireContext()).tasks() }
 
- override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-  super.onViewCreated(view, savedInstanceState)
-  _binding = FragmentDownloadBinding.bind(view)
-  b.clearCompleted.setOnClickListener { viewLifecycleOwner.lifecycleScope.launch { dao.clearCompleted() } }
-  b.retryFailed.setOnClickListener { retryFailedTasks() }
-  b.clearHistory.setOnClickListener { viewLifecycleOwner.lifecycleScope.launch { dao.clearHistory() } }
-  viewLifecycleOwner.lifecycleScope.launch {
-   dao.observeAll().collect { tasks -> if (_binding != null) refreshTasks(tasks) }
-  }
- }
-
- private fun refreshTasks(tasks: List<DownloadTaskEntity>) {
-  b.downloadTaskControls.removeAllViews()
-  if (tasks.isEmpty()) {
-   b.downloadSummary.text = "共 0 个任务"
-   b.downloadTasks.text = "还没有下载任务\n打开任意视频，在播放页点击“下载”即可添加任务"
-   return
-  }
-  val downloading = tasks.count { it.status == "downloading" }
-  val completed = tasks.count { it.status == "completed" }
-  val failed = tasks.count { it.status == "failed" }
-  b.downloadSummary.text = "共 ${tasks.size} 个任务 · 下载中 $downloading · 已完成 $completed · 失败 $failed"
-  b.downloadTasks.text = tasks.joinToString("\n\n") { task ->
-   val state = when (task.status) {
-    "downloading" -> "正在下载 · ${task.progress}"
-    "completed" -> "已完成 · ${task.outputPath.ifBlank { "Movies/BiliVdl" }}"
-    "failed" -> "下载失败 · ${task.progress}"
-    "paused" -> "已暂停 · ${task.progress}"
-    "cancelled" -> "已取消"
-    else -> task.progress.ifBlank { "等待处理" }
-   }
-   "• ${task.title}（${task.quality}）\n  $state"
-  }
-  tasks.forEach { addTaskControls(it) }
- }
-
- private fun addTaskControls(task: DownloadTaskEntity) {
-  val context = requireContext()
-  val row = LinearLayout(context).apply {
-   orientation = LinearLayout.VERTICAL
-   setPadding(14, 10, 14, 10)
-   background = context.getDrawable(R.drawable.bg_empty_card)
-   layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 8 }
-  }
-  row.addView(TextView(context).apply { text = task.title; textSize = 14f; setTextColor(context.getColor(R.color.text_primary)) })
-  val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-  fun action(label: String, click: () -> Unit) {
-   actions.addView(MaterialButton(context).apply {
-    text = label; isAllCaps = false
-    setOnClickListener { click() }
-    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 6 }
-   })
-  }
-  when (task.status) {
-   "downloading" -> action("暂停") { BiliDownloadService.pause(context, task.taskId) }
-   "paused", "failed", "queued" -> action("继续") { BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId) }
-  }
-  if (task.status in setOf("downloading", "paused", "failed", "queued")) action("取消") { BiliDownloadService.cancel(context, task.taskId) }
-  row.addView(actions)
-  b.downloadTaskControls.addView(row)
- }
-
- private fun retryFailedTasks() {
-  viewLifecycleOwner.lifecycleScope.launch {
-   val tasks = dao.tasksByStatus("failed")
-   tasks.forEach { task ->
-    if (task.bvid.isNotBlank() || task.aid > 0L) {
-     BiliDownloadService.enqueue(requireContext(), task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        _binding = FragmentDownloadBinding.bind(view)
+        b.clearCompleted.setOnClickListener {
+            AlertDialog.Builder(requireContext()).setTitle("清理已完成")
+                .setMessage("只清除下载记录，不会删除已保存到系统视频库的文件。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("清理") { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch { dao.clearCompleted() }
+                }.show()
+        }
+        b.retryFailed.setOnClickListener { retryFailedTasks() }
+        b.clearHistory.setOnClickListener {
+            AlertDialog.Builder(requireContext()).setTitle("清空下载历史")
+                .setMessage("清除已完成、失败和已取消的任务记录，不会删除已下载的视频文件。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("清空") { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch { dao.clearHistory() }
+                }.show()
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            dao.observeAll().collect { tasks -> if (_binding != null) refreshTasks(tasks) }
+        }
     }
-   }
-   b.downloadSummary.text = if (tasks.isEmpty()) "没有可重试的失败任务" else "已重新加入 ${tasks.size} 个失败任务"
-  }
- }
 
- override fun onDestroyView() { _binding = null; super.onDestroyView() }
+    private fun refreshTasks(tasks: List<DownloadTaskEntity>) {
+        b.downloadTaskControls.removeAllViews()
+        if (tasks.isEmpty()) {
+            b.downloadSummary.text = "还没有下载记录"
+            b.downloadTasks.text = "打开视频，点击下载即可添加任务"
+            return
+        }
+        val active = tasks.count { it.status == "queued" || it.status == "downloading" || it.status == "paused" }
+        val completed = tasks.count { it.status == "completed" }
+        val failed = tasks.count { it.status == "failed" }
+        b.downloadSummary.text = "全部 " + tasks.size + "    下载中 " + active + "    已完成 " + completed + "    失败 " + failed
+        b.downloadTasks.text = "点击已完成的文件可查看详情、播放、分享或删除；其他任务可管理下载状态。"
+        tasks.forEach { addTaskCard(it) }
+    }
+
+    private fun addTaskCard(task: DownloadTaskEntity) {
+        val context = requireContext()
+        val card = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = context.getDrawable(R.drawable.bg_empty_card)
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(10) }
+        }
+        card.addView(TextView(context).apply {
+            text = task.title
+            textSize = 15f
+            maxLines = 2
+            setTextColor(context.getColor(R.color.text_primary))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        card.addView(TextView(context).apply {
+            text = (task.quality.ifBlank { "视频" }) + "  ·  " + statusText(task)
+            textSize = 12f
+            setPadding(0, dp(5), 0, dp(7))
+            setTextColor(context.getColor(R.color.text_secondary))
+        })
+        if (task.status == "downloading" || task.status == "queued") {
+            card.addView(ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+                isIndeterminate = task.totalBytes <= 0L
+                if (!isIndeterminate) {
+                    max = 1000
+                    progress = ((task.completedBytes.toDouble() / task.totalBytes).coerceIn(0.0, 1.0) * 1000).toInt()
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)))
+        }
+        val actions = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        }
+        fun action(label: String, click: () -> Unit) {
+            actions.addView(MaterialButton(context).apply {
+                text = label
+                isAllCaps = false
+                minHeight = dp(38)
+                setOnClickListener { click() }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)
+                ).apply { marginStart = dp(6) }
+            })
+        }
+        when (task.status) {
+            "downloading" -> action("暂停") { BiliDownloadService.pause(context, task.taskId) }
+            "paused", "failed", "queued" -> action(if (task.status == "failed") "重试" else "继续") {
+                BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId)
+            }
+        }
+        if (task.status == "downloading" || task.status == "paused" || task.status == "failed" || task.status == "queued") {
+            action("取消") { BiliDownloadService.cancel(context, task.taskId) }
+        }
+        if (task.status == "completed" && task.outputPath.isNotBlank()) {
+            action("文件详情") { openResource(task) }
+            card.setOnClickListener { openResource(task) }
+        } else {
+            card.setOnClickListener { if (task.status == "failed") showFailure(task) }
+        }
+        card.addView(actions)
+        b.downloadTaskControls.addView(card)
+    }
+
+    private fun openResource(task: DownloadTaskEntity) {
+        startActivity(Intent(requireContext(), DownloadedResourceActivity::class.java).apply {
+            putExtra(DownloadedResourceActivity.EXTRA_URI, task.outputPath)
+            putExtra(DownloadedResourceActivity.EXTRA_TITLE, task.title)
+            putExtra(DownloadedResourceActivity.EXTRA_QUALITY, task.quality)
+        })
+    }
+
+    private fun showFailure(task: DownloadTaskEntity) {
+        AlertDialog.Builder(requireContext()).setTitle("下载失败")
+            .setMessage(task.progress.ifBlank { "下载失败，未收到详细错误信息。" })
+            .setPositiveButton("知道了", null).show()
+    }
+
+    private fun retryFailedTasks() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val tasks = dao.tasksByStatus("failed")
+            tasks.forEach { task ->
+                if (task.bvid.isNotBlank() || task.aid > 0L || task.episodeId > 0L) {
+                    BiliDownloadService.enqueue(requireContext(), task.taskId, task.bvid, task.aid,
+                        task.title, task.qn, task.episodeId)
+                }
+            }
+            b.downloadSummary.text = if (tasks.isEmpty()) "没有可重试的失败任务" else "已重新加入 " + tasks.size + " 个失败任务"
+        }
+    }
+
+    private fun statusText(task: DownloadTaskEntity): String = when (task.status) {
+        "downloading" -> task.progress.ifBlank { "正在下载" }
+        "completed" -> "已完成 · 点击查看文件"
+        "failed" -> "失败 · " + task.progress
+        "paused" -> "已暂停"
+        "cancelled" -> "已取消"
+        else -> task.progress.ifBlank { "等待下载" }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
+    }
 }
