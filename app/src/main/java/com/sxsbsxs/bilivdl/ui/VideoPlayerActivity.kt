@@ -50,6 +50,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var videoLiked = false
     private var playbackSpeedIndex = 0
     private var pendingSeekPosition = 0L
+    private var resumePosition = 0L
     private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 0.75f)
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
     private val aid by lazy { intent.getLongExtra(EXTRA_AID, 0L) }
@@ -60,6 +61,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(b.root)
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentsList.layoutManager = LinearLayoutManager(this)
         b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
         b.qualityButton.setOnClickListener { showQuality() }
@@ -129,10 +131,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                         }
                         override fun onPlaybackStateChanged(state: Int) {
                             if (state == Player.STATE_READY) {
-                                if (pendingSeekPosition > 0L) {
-                                    player.seekTo(pendingSeekPosition)
-                                    pendingSeekPosition = 0L
-                                }
+                                val targetPosition = if (pendingSeekPosition > 0L) pendingSeekPosition else resumePosition
+                                if (targetPosition > 0L) player.seekTo(targetPosition)
+                                pendingSeekPosition = 0L
+                                resumePosition = 0L
                                 player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
                                 b.playerStatus.text = "正在播放 · ${p.name}"
                             }
@@ -423,7 +425,18 @@ class VideoPlayerActivity : AppCompatActivity() {
             }.show()
     }
 
-    override fun onStop() { exo?.pause(); super.onStop() }
+    private fun positionKey(): String = bvid.ifBlank { "av$aid" }
+
+    override fun onStop() {
+        exo?.let { player ->
+            getSharedPreferences("playback_positions", MODE_PRIVATE)
+                .edit()
+                .putLong(positionKey(), player.currentPosition.coerceAtLeast(0L))
+                .apply()
+            player.pause()
+        }
+        super.onStop()
+    }
     override fun onDestroy() {
         b.playerView.player = null
         exo?.release()
