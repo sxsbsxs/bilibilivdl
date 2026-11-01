@@ -334,14 +334,14 @@ object BiliPlaybackApi {
             }
             throw IllegalStateException("B站公开播放接口与 gRPC 均未取得可用流；备用线路失败：${detail.ifBlank { "未知解析错误" }}", cause)
         }
-        val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
-            quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
-        }.distinctBy { it.first }.sortedByDescending { it.first }
-        val actual = upstream.quality.takeIf { it > 0 }
-            ?: upstream.dash?.video?.maxByOrNull { it.bandwidth }?.id
-            ?: error("B站没有返回实际清晰度，已停止显示预设画质")
         val dash = upstream.dash
         if (dash != null) {
+            val returnedIds = dash.video.map { it.id }.filter { it > 0 }.toSet()
+            val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
+                if (quality !in returnedIds) null
+                else quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
+            }.distinctBy { it.first }.sortedByDescending { it.first }
+            val reportedQuality = upstream.quality.takeIf { it > 0 }
             fun itemJson(item: com.a10miaomiao.bilimiao.comm.apis.PlayerAPI.DashItem): JSONObject {
                 val segment = JSONObject()
                     .put("initialization", item.segment_base.initialization)
@@ -367,8 +367,10 @@ object BiliPlaybackApi {
             val video = if (videoCodec.isNotBlank()) {
                 dash.video.firstOrNull { it.id == actual && (selectedVideoId == null || it.id == selectedVideoId) && it.codecs == selectedVideoCodec }
                     ?: error("B站没有返回所选视频编码：" + videoCodec)
-            } else dash.video.firstOrNull { it.id == actual } ?: dash.video.lastOrNull()
+            } else dash.video.firstOrNull { it.id == reportedQuality }
+                ?: dash.video.maxByOrNull { it.bandwidth }
                 ?: error("BiliMiao 没有返回 DASH 视频轨道")
+            val actual = video.id.takeIf { it > 0 } ?: error("B站没有返回实际视频清晰度")
             val selectedAudioId = audioCodec.substringBefore('|').toIntOrNull()
             val selectedAudioCodec = audioCodec.substringAfter('|', audioCodec)
             val audio = if (audioCodec.isNotBlank()) {
@@ -408,6 +410,12 @@ object BiliPlaybackApi {
             segment.url.takeIf { it.startsWith("https://") || it.startsWith("http://") }
         }
         if (streams.isEmpty()) error("BiliMiao 没有返回可播放的视频流")
+        val actual = upstream.quality.takeIf { it > 0 }
+            ?: error("B站没有返回实际清晰度，已停止显示预设画质")
+        val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
+            if (quality != actual) null
+            else quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
+        }.ifEmpty { listOf(actual to "清晰度 $actual") }
         return PlaybackInfo(
             cid = cid,
             url = streams.first(),
