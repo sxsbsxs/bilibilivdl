@@ -197,7 +197,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             tasks.forEach { task ->
                 if (task.bvid.isNotBlank() || task.aid > 0L || task.episodeId > 0L) {
                     BiliDownloadService.enqueue(requireContext(), task.taskId, task.bvid, task.aid,
-                        task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec)
+                        task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec, task.pageIndex)
                 }
             }
             b.downloadSummary.text = if (tasks.isEmpty()) "没有可重试的失败任务" else "已重新加入 " + tasks.size + " 个失败任务"
