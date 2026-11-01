@@ -2,7 +2,7 @@ name: Android Debug APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, v2.0-integration ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
