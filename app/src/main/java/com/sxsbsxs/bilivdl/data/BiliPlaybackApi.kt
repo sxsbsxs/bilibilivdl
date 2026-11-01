@@ -1,5 +1,9 @@
 package com.sxsbsxs.bilivdl.data
 
+import bilibili.app.playurl.v1.PlayURLGRPC
+import bilibili.app.playurl.v1.PlayViewReq
+import bilibili.app.playurl.v1.Stream
+import com.a10miaomiao.bilimiao.comm.network.BiliGRPCHttp
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -42,7 +46,76 @@ object BiliPlaybackApi {
         val query=p.entries.joinToString("&"){"${enc(it.key)}=${enc(it.value).replace(Regex("[!'()*]"),"")}"}
         return "https://api.bilibili.com$path?$query&w_rid=${md5(query+mixin(cookie))}"
     }
-    fun load(bvid:String, aid:Long, qn:Int=80, cookie:String=""):PlaybackInfo {
+
+
+    /**
+     * gRPC 优先的匿名播放线路。gRPC 不可用时返回 null，由调用方继续 HTTP 备用线路。
+     */
+    private suspend fun tryGrpcPlayback(aid: Long, cid: Long, requestedQuality: Int): PlaybackInfo? {
+        return try {
+            val request = PlayViewReq(
+                aid = aid,
+                cid = cid,
+                qn = requestedQuality.toLong(),
+                download = 0,
+                fnval = 4048,
+                fnver = 0,
+                forceHost = 2,
+                fourk = true
+            )
+            val response = BiliGRPCHttp.request { PlayURLGRPC.playView(request) }.awaitCall()
+            val videoInfo = response.videoInfo ?: return null
+            val streams = videoInfo.streamList.filter { it.content != null }
+            if (streams.isEmpty()) return null
+            val selected = streams.firstOrNull { it.streamInfo?.quality == requestedQuality }
+                ?: streams.firstOrNull()
+                ?: return null
+            val actualQuality = selected.streamInfo?.quality ?: videoInfo.quality
+            val qualities = streams.mapNotNull { stream ->
+                stream.streamInfo?.let { it.quality to it.newDescription }
+            }.distinctBy { it.first }
+            when (val content = selected.content ?: return null) {
+                is Stream.Content.DashVideo -> {
+                    val dash = content.value
+                    val videoUrl = dash.baseUrl.ifBlank { dash.backupUrl.firstOrNull().orEmpty() }
+                    if (videoUrl.isBlank()) return null
+                    val audio = videoInfo.dashAudio.firstOrNull {
+                        it.id == dash.audioId && it.baseUrl.isNotBlank()
+                    } ?: videoInfo.dashAudio.firstOrNull { it.baseUrl.isNotBlank() }
+                    val audioUrl = audio?.baseUrl?.ifBlank { audio.backupUrl.firstOrNull().orEmpty() }
+                    PlaybackInfo(
+                        cid = cid,
+                        url = videoUrl,
+                        quality = actualQuality,
+                        name = qualities.firstOrNull { it.first == actualQuality }?.second ?: "当前清晰度",
+                        qualities = qualities,
+                        isDash = audioUrl?.isNotBlank() == true,
+                        videoUrl = videoUrl,
+                        audioUrl = audioUrl?.takeIf { it.isNotBlank() }
+                    )
+                }
+                is Stream.Content.SegmentVideo -> {
+                    val segments = content.value.segment.mapNotNull { segment ->
+                        segment.url.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    }
+                    if (segments.isEmpty()) return null
+                    PlaybackInfo(
+                        cid = cid,
+                        url = segments.first(),
+                        quality = actualQuality,
+                        name = qualities.firstOrNull { it.first == actualQuality }?.second ?: "当前清晰度",
+                        qualities = qualities,
+                        segments = segments
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            // 某些网络环境可能无法访问 gRPC；不可因此阻断匿名 HTTP 播放。
+            null
+        }
+    }
+
+    suspend fun load(bvid:String, aid:Long, qn:Int=80, cookie:String=""):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
@@ -65,6 +138,8 @@ object BiliPlaybackApi {
         // 采用 bilimiao 的免登录播放接口：/x/player/playurl + avid/cid/qn/fnval。
         // 不把 Cookie 或 WBI 签名作为必需条件；登录 Cookie 仅作为可选请求头。
         val resolvedAid = d.optLong("aid", aid)
+        // bilimiao2 同款：先尝试 gRPC PlayURL；不可用时自动回退公开 HTTP playurl。
+        tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it }
         val publicParams = mutableMapOf(
             "avid" to resolvedAid.toString(),
             "cid" to cid.toString(),
