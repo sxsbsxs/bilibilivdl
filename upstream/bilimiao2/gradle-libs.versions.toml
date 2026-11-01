@@ -1,7 +1,7 @@
 [versions]
 agp = "8.13.2"
-kotlin = "2.2.20"
-composeMultiplatform = "1.9.3"
+kotlin = "2.3.10"
+composeMultiplatform = "1.10.1"
 # jetpack
 core = "1.13.1"
 appcompat = "1.6.1"
@@ -26,7 +26,7 @@ okhttp = "4.10.0"
 pbandk = "0.16.0"
 # database
 room = "2.7.2"
-ksp = "2.2.20-2.0.2"
+ksp = "2.3.11"
 accompanist = "0.37.3"
 materialKolor = "2.1.1"
 microgSafeParcel = "1.7.1"
@@ -45,7 +45,7 @@ androidToolsSdkCommon = "31.6.0"
 xpp3 = "1.1.6"
 guava = "23.0"
 # mediamp
-mediamp = "0.5.0"
+mediamp = "0.3.2"
 jna = "5.13.0"
 # test
 junit = "4.14-SNAPSHOT"
