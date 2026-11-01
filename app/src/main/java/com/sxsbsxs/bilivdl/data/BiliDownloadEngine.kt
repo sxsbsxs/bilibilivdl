@@ -22,7 +22,7 @@ import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** BVD-inspired resumable DASH transfer and FFmpeg stream-copy muxing. GPL-3.0. */
+/** BVD-inspired resumable DASH transfer and Android native stream muxing. GPL-3.0. */
 object BiliDownloadEngine {
     private const val BUFFER_SIZE = 262144
     private const val MAX_RETRIES = 4
@@ -47,10 +47,8 @@ object BiliDownloadEngine {
                     v.await(); a.await()
                 }
                 onProgress(0, 0, "正在合并音视频")
-                val session = FFmpegKit.executeWithArguments(arrayOf("-y", "-i", vf.absolutePath, "-i", af.absolutePath,
-                    "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", "-movflags", "+faststart", merged.absolutePath))
-                if (!ReturnCode.isSuccess(session.returnCode) || !merged.isFile || merged.length() == 0L)
-                    error("音视频合并失败（FFmpeg \${session.returnCode}）")
+                muxDashTracks(vf, af, merged)
+                if (!merged.isFile || merged.length() == 0L) error("音视频合并失败：输出文件为空")
                 vf.delete(); af.delete()
             } else {
                 transfer(playback.url, merged, headers) { n, total -> onProgress(n, total, "下载视频") }

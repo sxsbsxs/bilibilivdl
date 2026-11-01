@@ -171,7 +171,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.downloadStatus.text = "正在下载并校验资源…"
                 val result = withContext(Dispatchers.IO) {
                     BiliDownloadEngine.download(this@VideoPlayerActivity, p, title, cookie) { done, total, stage ->
-                        val label = if (total > 0L) "$stage · \${done * 100 / total}%" else "$stage · \${done / 1024} KB"
+                        val label = if (total > 0L) "$stage · ${done * 100 / total}%" else "$stage · ${done / 1024} KB"
                         task.put("progress", label)
                         saveTask()
                         runOnUiThread { b.downloadStatus.text = label }
@@ -183,7 +183,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 task.put("status", "failed").put("progress", e.message ?: "下载失败")
                 saveTask()
-                b.downloadStatus.text = "下载失败：\${e.message ?: "接口异常"}"
+                b.downloadStatus.text = "下载失败：${e.message ?: "接口异常"}"
             }
         }
     }
