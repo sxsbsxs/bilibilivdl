@@ -324,8 +324,16 @@ object BiliPlaybackApi {
             tryGrpcPlayback(resolvedAid, cid, qn)?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
         }
 
-        val upstream = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
-            .getVideoPalyUrl(resolvedAid.toString(), cid.toString(), qn, 4048)
+        val upstream = runCatching {
+            com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
+                .getVideoPalyUrl(resolvedAid.toString(), cid.toString(), qn, 4048)
+        }.getOrElse { cause ->
+            val detail = cause.message.orEmpty()
+            if (detail.contains("Conversion") && detail.contains("万")) {
+                throw IllegalStateException("B站备用播放接口返回了异常格式数据；公开播放接口和 gRPC 线路均未取得可用流，请稍后重试", cause)
+            }
+            throw IllegalStateException("B站公开播放接口与 gRPC 均未取得可用流；备用线路失败：${detail.ifBlank { "未知解析错误" }}", cause)
+        }
         val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
             quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
         }.distinctBy { it.first }.sortedByDescending { it.first }
