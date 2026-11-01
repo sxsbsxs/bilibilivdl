@@ -137,23 +137,35 @@ object BiliPlaybackApi {
     }
 
     suspend fun downloadQualities(aid: Long, cid: Long, cookie: String): List<Pair<Int, String>> {
-        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=127&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json"
-        val root = get(url, cookie)
-        if (root.optInt("code", -1) != 0) {
-            val code = root.optInt("code")
-            error(root.optString("message", "获取可下载清晰度失败") + "（$code）")
+        // 不只依赖 qn=127 的一次响应：部分账号/视频在不同 qn 请求下返回的可用轨道集合不同。
+        // 汇总每次接口真实返回的 DASH 视频轨道，绝不把 accept_quality 中未返回的档位伪造出来。
+        val requested = listOf(127, 120, 116, 112, 80, 74, 64, 32, 16)
+        val found = linkedMapOf<Int, String>()
+        for (qn in requested) {
+            val root = runCatching {
+                get(wbiPlayUrl(aid, cid, qn, 4048, cookie), cookie)
+            }.getOrElse {
+                get("https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+            }
+            if (root.optInt("code", -1) != 0) continue
+            val data = root.optJSONObject("data") ?: continue
+            val labels = data.optJSONArray("accept_description")
+            val accepted = data.optJSONArray("accept_quality")
+            val dashVideo = data.optJSONObject("dash")?.optJSONArray("video")
+            val actualIds = if (dashVideo != null) {
+                (0 until dashVideo.length()).mapNotNull { dashVideo.optJSONObject(it)?.optInt("id")?.takeIf { id -> id > 0 } }.toSet()
+            } else {
+                setOf(data.optInt("quality").takeIf { it > 0 } ?: continue)
+            }
+            for (i in 0 until (accepted?.length() ?: 0)) {
+                val id = accepted?.optInt(i) ?: 0
+                if (id > 0 && id in actualIds) {
+                    found[id] = labels?.optString(i).orEmpty().ifBlank { "清晰度 $id" }
+                }
+            }
+            actualIds.forEach { id -> found.putIfAbsent(id, "清晰度 $id") }
         }
-        val data = root.optJSONObject("data") ?: error("清晰度响应缺少 data")
-        val accepted = data.optJSONArray("accept_quality") ?: return emptyList()
-        val labels = data.optJSONArray("accept_description")
-        val dashVideo = data.optJSONObject("dash")?.optJSONArray("video")
-        val returnedIds = if (dashVideo != null) {
-            (0 until dashVideo.length()).mapNotNull { dashVideo.optJSONObject(it)?.optInt("id")?.takeIf { id -> id > 0 } }.toSet()
-        } else setOf(data.optInt("quality").takeIf { it > 0 } ?: return emptyList())
-        return (0 until accepted.length()).mapNotNull { index ->
-            val qn = accepted.optInt(index)
-            if (qn <= 0 || qn !in returnedIds) null else qn to (labels?.optString(index).orEmpty().ifBlank { "清晰度 $qn" })
-        }.distinctBy { it.first }.sortedByDescending { it.first }
+        return found.entries.sortedByDescending { it.key }.map { it.key to it.value }
     }
 
     suspend fun downloadStreamChoices(aid: Long, cid: Long, qn: Int, cookie: String = ""): DownloadStreamChoices {
