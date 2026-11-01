@@ -87,7 +87,9 @@ class BiliDownloadService : Service() {
         val action = intent.getStringExtra(EXTRA_ACTION)
         if (action == ACTION_PAUSE || action == ACTION_CANCEL) {
             requestedActions[taskId] = action
-            running[taskId]?.cancel(CancellationException(action))
+            val job = running[taskId]
+            job?.cancel(CancellationException(action))
+            if (job == null && running.isEmpty()) stopSelfResult(startId)
             return START_NOT_STICKY
         }
         val bvid = intent.getStringExtra(EXTRA_BVID).orEmpty()
@@ -143,7 +145,7 @@ class BiliDownloadService : Service() {
             } finally {
                 running.remove(taskId)
                 if (active.decrementAndGet() == 0) {
-                    stopSelfResult(startId)
+                    stopSelf()
                 }
             }
         }
