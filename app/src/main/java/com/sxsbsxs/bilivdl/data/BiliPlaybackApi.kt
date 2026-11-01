@@ -274,9 +274,16 @@ object BiliPlaybackApi {
             val aa = dash.optJSONArray("audio")
             val videos = (0 until (va?.length() ?: 0)).mapNotNull { va?.optJSONObject(it) }
             val audios = (0 until (aa?.length() ?: 0)).mapNotNull { aa?.optJSONObject(it) }
-            val video = videos.firstOrNull { it.optInt("id") == reportedQuality }
-                ?: videos.firstOrNull { it.optInt("id") == qn }
-                ?: videos.maxByOrNull { it.optLong("bandwidth") } ?: return null
+            // B站的 data.quality 可能是本次请求协商出的档位（例如 64/720P），
+            // 但 dash.video 里仍可能包含更高的真实可用轨道。不能优先照搬 data.quality，
+            // 否则 qn=127 也会被应用固定选成 720P。
+            // 按用户请求上限，从实际返回的 DASH 轨道中选最高档；手动选低档时不会越级。
+            val video = videos
+                .filter { it.optInt("id") > 0 && it.optInt("id") <= qn }
+                .maxByOrNull { it.optInt("id") }
+                ?: videos.firstOrNull { it.optInt("id") == reportedQuality }
+                ?: videos.maxByOrNull { it.optLong("bandwidth") }
+                ?: return null
             val actual = video.optInt("id").takeIf { it > 0 } ?: reportedQuality.takeIf { it > 0 } ?: return null
             val audio = audios.maxByOrNull { it.optLong("bandwidth") }
             fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
