@@ -153,28 +153,62 @@ object BiliPlaybackApi {
         val resolvedAid = d.optLong("aid", aid)
         // bilimiao2 同款：先尝试 gRPC PlayURL；不可用时自动回退公开 HTTP playurl。
         tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex, title=d.optString("title"), description=d.optString("desc"), ownerName=d.optJSONObject("owner")?.optString("name").orEmpty(), ownerFace=d.optJSONObject("owner")?.optString("face").orEmpty(), viewCount=d.optJSONObject("stat")?.optLong("view") ?: 0L, danmakuCount=d.optJSONObject("stat")?.optLong("danmaku") ?: 0L, likeCount=d.optJSONObject("stat")?.optLong("like") ?: 0L, coinCount=d.optJSONObject("stat")?.optLong("coin") ?: 0L, favoriteCount=d.optJSONObject("stat")?.optLong("favorite") ?: 0L, shareCount=d.optJSONObject("stat")?.optLong("share") ?: 0L, publishTime=d.optLong("pubdate")) }
-        val publicParams = mutableMapOf(
-            "avid" to resolvedAid.toString(),
-            "cid" to cid.toString(),
-            "qn" to qn.toString(),
-            "fnval" to "4048",
-            "fnver" to "0",
-            "force_host" to "2",
-            "type" to "",
-            "otype" to "json",
-            "fourk" to "1"
+        // 游客线路采用多层回退：DASH 优先；接口即使 code=0 但没有可用轨道，也继续尝试。
+        // 每次只在 B 站真实返回可播放资源时才接受结果，绝不把请求 qn 当作实际画质。
+        val qualityCandidates = (listOf(qn) + listOf(127, 120, 116, 112, 80, 74, 64, 32, 16))
+            .filter { it > 0 }.distinct()
+        var data: JSONObject? = null
+        var lastMessage = "B站没有返回可播放资源"
+        var lastCode = 0
+        playbackAttempts@ for (candidateQn in qualityCandidates) {
+            for (fnval in listOf("4048", "1")) {
+                val candidateParams = mutableMapOf(
+                    "avid" to resolvedAid.toString(),
+                    "cid" to cid.toString(),
+                    "qn" to candidateQn.toString(),
+                    "fnval" to fnval,
+                    "fnver" to "0",
+                    "force_host" to "2",
+                    "type" to "",
+                    "otype" to "json",
+                    "fourk" to "1"
+                )
+                val publicQuery = candidateParams.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
+                val attempts = mutableListOf<JSONObject>()
+                try {
+                    attempts += get("https://api.bilibili.com/x/player/playurl?$publicQuery", cookie)
+                } catch (e: Exception) {
+                    lastMessage = e.message ?: "公开播放接口连接失败"
+                }
+                // WBI 只作为备用请求，不作为游客播放的前置条件。
+                try {
+                    attempts += get(signed("/x/player/wbi/playurl", candidateParams, cookie), cookie)
+                } catch (e: Exception) {
+                    lastMessage = e.message ?: lastMessage
+                }
+                for (response in attempts) {
+                    lastCode = response.optInt("code", -1)
+                    if (lastCode != 0) {
+                        lastMessage = response.optString("message", "B站播放接口拒绝请求")
+                        continue
+                    }
+                    val candidateData = response.optJSONObject("data")
+                    val dashCandidate = candidateData?.optJSONObject("dash")
+                    val hasDash = (dashCandidate?.optJSONArray("video")?.length() ?: 0) > 0 &&
+                        (dashCandidate.optJSONArray("audio")?.length() ?: 0) > 0
+                    val hasDurl = (candidateData?.optJSONArray("durl")?.length() ?: 0) > 0
+                    if (candidateData != null && (hasDash || hasDurl)) {
+                        data = candidateData
+                        break@playbackAttempts
+                    }
+                    lastMessage = "B站返回成功状态，但没有可用的视频/音频轨道"
+                }
+            }
+        }
+        val data = data ?: error(
+            if (lastCode == -352) "B站暂时风控了游客播放请求（-352）；可稍后重试，扫码登录通常能提高可用画质范围"
+            else "获取播放地址失败：$lastMessage"
         )
-        val publicQuery = publicParams.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
-        var play = get("https://api.bilibili.com/x/player/playurl?$publicQuery", cookie)
-        if (play.optInt("code") != 0) {
-            // 公开旧接口被临时限制时，回退到 WBI playurl；匿名状态仍然先尝试免登录线路。
-            play = get(signed("/x/player/wbi/playurl", publicParams, cookie), cookie)
-        }
-        if(play.optInt("code")!=0) {
-            val code=play.optInt("code")
-            error(if(code == -352) "B站暂时风控了免登录播放地址请求（-352），请稍后重试；如需更高画质再扫码登录" else play.optString("message","B站拒绝提供播放地址"))
-        }
-        val data=play.optJSONObject("data")?:error("播放接口没有返回 data")
         val ids=data.optJSONArray("accept_quality"); val names=data.optJSONArray("accept_description")
         val qualities=mutableListOf<Pair<Int,String>>()
         if(ids!=null&&names!=null) for(i in 0 until minOf(ids.length(),names.length())) qualities.add(ids.optInt(i) to names.optString(i))
