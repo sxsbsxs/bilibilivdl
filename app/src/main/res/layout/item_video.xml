@@ -6,6 +6,7 @@
   <ImageView android:id="@+id/video_cover" android:layout_width="match_parent" android:layout_height="104dp" android:background="@drawable/bg_empty_card" android:contentDescription="视频封面" android:scaleType="centerCrop"/>
   <TextView android:id="@+id/video_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:maxLines="3" android:ellipsize="end" android:textColor="@color/text_primary" android:textSize="13sp" android:textStyle="bold"/>
   <TextView android:id="@+id/video_author" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:maxLines="1" android:ellipsize="end" android:textColor="@color/text_secondary" android:textSize="11sp"/>
-  <TextView android:id="@+id/video_meta" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:maxLines="1" android:ellipsize="end" android:textColor="@color/text_secondary" android:textSize="10sp"/>
+  <TextView android:id="@+id/video_meta" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:maxLines="2" android:ellipsize="end" android:textColor="@color/text_secondary" android:textSize="10sp"/>
+  <TextView android:id="@+id/video_extra_meta" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:maxLines="2" android:ellipsize="end" android:textColor="@color/text_secondary" android:textSize="10sp"/>
  </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

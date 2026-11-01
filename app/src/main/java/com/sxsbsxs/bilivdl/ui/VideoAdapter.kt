@@ -22,11 +22,28 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
         Glide.with(holder.itemView).clear(holder.binding.videoCover)
         super.onViewRecycled(holder)
     }
+    private fun formatCount(value: Long): String = when {
+        value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
+        value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1f万", value / 10_000.0)
+        else -> value.toString()
+    }
     inner class Holder(val binding: ItemVideoBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(v: BiliVideo) {
             binding.videoTitle.text = v.title
             binding.videoAuthor.text = "UP主 · " + v.author
-            binding.videoMeta.text = "播放 " + v.play + " · " + v.duration
+            binding.videoMeta.text = listOf(
+                "播放 " + v.play,
+                if (v.danmaku != null) "弹幕 " + formatCount(v.danmaku) else "",
+                v.duration.takeIf { it.isNotBlank() } ?: ""
+            ).filter { it.isNotBlank() }.joinToString("  ·  ")
+            binding.videoExtraMeta.text = listOf(
+                v.likes?.let { "点赞 " + formatCount(it) }.orEmpty(),
+                v.favorites?.let { "收藏 " + formatCount(it) }.orEmpty(),
+                v.coins?.let { "投币 " + formatCount(it) }.orEmpty(),
+                v.shares?.let { "分享 " + formatCount(it) }.orEmpty(),
+                v.comments?.let { "评论 " + formatCount(it) }.orEmpty()
+            ).filter { it.isNotBlank() }.joinToString("  ·  ")
+            binding.videoExtraMeta.visibility = if (binding.videoExtraMeta.text.isNullOrBlank()) android.view.View.GONE else android.view.View.VISIBLE
             val imageUrl = v.cover.trim().let {
                 when {
                     it.startsWith("//") -> "https:$it"

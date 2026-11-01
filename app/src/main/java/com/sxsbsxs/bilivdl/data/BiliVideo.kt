@@ -8,5 +8,13 @@ data class BiliVideo(
     val duration: String,
     val bvid: String,
     val aid: Long,
-    val description: String
+    val description: String,
+    val danmaku: Long? = null,
+    val likes: Long? = null,
+    val favorites: Long? = null,
+    val coins: Long? = null,
+    val shares: Long? = null,
+    val comments: Long? = null,
+    val category: String = "",
+    val pubdate: Long? = null
 )
