@@ -360,13 +360,22 @@ object BiliPlaybackApi {
         // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
         // 先请求用户选定档位；若匿名接口对最高档返回空结果，依次尝试常见档位，
         // 但只显示响应中真实存在的视频轨 ID，绝不把请求值当成实际画质。
-        val httpCandidates = listOf(qn, 127, 120, 116, 112, 80, 74, 64, 32, 16).distinct()
+        val httpCandidates = listOf(qn, 127, 120, 116, 112, 80, 74, 64, 32, 16)
+            .filter { it <= qn }.distinct()
+        var bestHttp: PlaybackInfo? = null
         for (fnval in listOf(4048, 1)) {
             for (candidate in httpCandidates) {
                 val resolved = runCatching { httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval) }.getOrNull()
-                if (resolved != null) return enrich(resolved.copy(parts = parts, selectedPart = selectedIndex))
+                    ?: continue
+                if (bestHttp == null || resolved.quality > bestHttp!!.quality) bestHttp = resolved
+                // Exact requested tier is authoritative; otherwise continue probing lower qn requests
+                // because B站 may silently downgrade qn=127 to 480P while a subsequent qn request works.
+                if (resolved.quality == qn) {
+                    return enrich(resolved.copy(parts = parts, selectedPart = selectedIndex))
+                }
             }
         }
+        bestHttp?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
         // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
         if (videoCodec.isBlank() && audioCodec.isBlank()) {
