@@ -86,8 +86,9 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentPage = 1
     private var commentHasMore = true
     private var commentLoading = false
-    private var commentSort = 0
+    private var commentSort = 2
     private var videoLiked = false
+    private var currentOwnerMid = 0L
     private var playbackSpeedIndex = 0
     private var pendingSeekPosition = 0L
     private var selectedPartIndex = 0
@@ -105,6 +106,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         setContentView(b.root)
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         b.playerAuthor.text = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { "哔哩哔哩视频" }
+        b.playerAuthor.setOnClickListener { if (currentOwnerMid > 0L) openUserSpace(currentOwnerMid) }
+        b.playerAuthorAvatar.setOnClickListener { if (currentOwnerMid > 0L) openUserSpace(currentOwnerMid) }
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentSort.text = "按热度"
         b.commentsList.layoutManager = LinearLayoutManager(this)
@@ -141,8 +144,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             true
         }
         b.commentSort.setOnClickListener {
-            commentSort = if (commentSort == 0) 1 else 0
-            b.commentSort.text = if (commentSort == 0) "按热度" else "按时间"
+            commentSort = if (commentSort == 2) 0 else 2
+            b.commentSort.text = if (commentSort == 2) "按热度" else "按时间"
             resetComments()
         }
         b.commentSend.setOnClickListener { sendComment() }
