@@ -108,7 +108,7 @@ class BiliDownloadService : Service() {
         val bvid = intent.getStringExtra(EXTRA_BVID).orEmpty()
         val aid = intent.getLongExtra(EXTRA_AID, 0L)
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
-        val qn = intent.getIntExtra(EXTRA_QN, 80)
+        val qn = intent.getIntExtra(EXTRA_QN, 127)
         val episodeId = intent.getLongExtra(EXTRA_EP_ID, 0L)
         // Prevent duplicate workers when a task is resumed repeatedly or an intent is redelivered.
         if (running.containsKey(taskId)) return START_REDELIVER_INTENT
