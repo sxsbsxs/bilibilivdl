@@ -33,6 +33,9 @@ import com.sxsbsxs.bilivdl.data.PlaybackInfo
 import com.sxsbsxs.bilivdl.data.VideoComment
 import com.sxsbsxs.bilivdl.data.DanmakuItem
 import com.sxsbsxs.bilivdl.databinding.ActivityVideoPlayerBinding
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.LazyHeaders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -209,7 +212,12 @@ class VideoPlayerActivity : AppCompatActivity() {
                     if (p.duration > 0) "${p.duration / 60}:${(p.duration % 60).toString().padStart(2, '0')}" else ""
                 ).filter { it.isNotBlank() }.joinToString("  ·  ")
                 val authorText = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { p.author }
-                if (authorText.isNotBlank()) b.playerAuthor.text = "UP主 · $authorText"
+                if (authorText.isNotBlank()) b.playerAuthor.text = authorText
+                val face = p.ownerFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
+                if (face.isNotBlank()) Glide.with(this@VideoPlayerActivity)
+                    .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
+                    .placeholder(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar)
+                    .error(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar).circleCrop().into(b.playerAuthorAvatar)
                 b.playerStats.text = listOf(
                     formatCount(p.viewCount) + " 播放",
                     formatCount(p.danmakuCount) + " 弹幕",
