@@ -12,6 +12,8 @@ import java.security.MessageDigest
 import java.util.TreeMap
 
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
+data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
+data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
 data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList())
 
 object BiliPlaybackApi {
@@ -118,7 +120,32 @@ object BiliPlaybackApi {
         }
     }
 
-    suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0):PlaybackInfo {
+    suspend fun downloadStreamChoices(aid: Long, cid: Long, qn: Int): DownloadStreamChoices {
+        val data = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
+            .getVideoPalyUrl(aid.toString(), cid.toString(), qn, 4048)
+        val dash = data.dash ?: return DownloadStreamChoices(emptyList(), emptyList())
+        val videos = dash.video.map { item ->
+            DownloadStreamOption(
+                id = item.id,
+                codec = item.codecs,
+                label = item.height.toString() + "P · " + item.codecs + " · " +
+                    (item.bandwidth / 1000).toString() + " kbps",
+                bandwidth = item.bandwidth
+            )
+        }
+        val audios = dash.audio.orEmpty().map { item ->
+            DownloadStreamOption(
+                id = item.id,
+                codec = item.codecs,
+                label = item.codecs + " · " + (item.bandwidth / 1000).toString() + " kbps",
+                bandwidth = item.bandwidth
+            )
+        }
+        return DownloadStreamChoices(videos, audios)
+    }
+
+    suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0,
+        videoCodec: String = "", audioCodec: String = ""):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
@@ -153,7 +180,9 @@ object BiliPlaybackApi {
         val resolvedAid = d.optLong("aid", aid)
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
         // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
-        tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex) }
+        if (videoCodec.isBlank() && audioCodec.isBlank()) {
+            tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex) }
+        }
 
         val upstream = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
             .getVideoPalyUrl(resolvedAid.toString(), cid.toString(), qn, 4048)
@@ -183,9 +212,16 @@ object BiliPlaybackApi {
                 .put("duration", dash.duration)
                 .put("video", org.json.JSONArray().apply { dash.video.forEach { put(itemJson(it)) } })
                 .put("audio", org.json.JSONArray().apply { dash.audio.orEmpty().forEach { put(itemJson(it)) } })
-            val video = dash.video.firstOrNull { it.id == actual } ?: dash.video.lastOrNull()
+            val video = if (videoCodec.isNotBlank()) {
+                dash.video.firstOrNull { it.id == actual && it.codecs == videoCodec }
+                    ?: error("B站没有返回所选视频编码：" + videoCodec)
+            } else dash.video.firstOrNull { it.id == actual } ?: dash.video.lastOrNull()
                 ?: error("BiliMiao 没有返回 DASH 视频轨道")
-            val audio = dash.audio?.firstOrNull()
+            val audio = if (audioCodec.isNotBlank()) {
+                dash.audio.orEmpty().firstOrNull { it.id == audioCodec.toIntOrNull() && it.codecs == audioCodec.substringAfter('|', audioCodec) }
+                    ?: dash.audio.orEmpty().firstOrNull { it.codecs == audioCodec }
+                    ?: error("B站没有返回所选音频编码：" + audioCodec)
+            } else dash.audio?.firstOrNull()
             fun bestUrl(primary: String, backups: List<String>?): String =
                 primary.takeIf { it.startsWith("https://") || it.startsWith("http://") }
                     ?: backups.orEmpty().firstOrNull { it.startsWith("https://") || it.startsWith("http://") }

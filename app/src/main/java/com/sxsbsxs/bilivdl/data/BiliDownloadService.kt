@@ -41,6 +41,8 @@ class BiliDownloadService : Service() {
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_QN = "qn"
         private const val EXTRA_EP_ID = "episode_id"
+        private const val EXTRA_VIDEO_CODEC = "video_codec"
+        private const val EXTRA_AUDIO_CODEC = "audio_codec"
         private const val EXTRA_ACTION = "queue_action"
         private const val ACTION_PAUSE = "pause"
         private const val ACTION_CANCEL = "cancel"
@@ -58,7 +60,7 @@ class BiliDownloadService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L) {
+        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "") {
             val intent = Intent(context, BiliDownloadService::class.java).apply {
                 putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_BVID, bvid)
@@ -66,6 +68,8 @@ class BiliDownloadService : Service() {
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_QN, qn)
                 putExtra(EXTRA_EP_ID, episodeId)
+                putExtra(EXTRA_VIDEO_CODEC, videoCodec)
+                putExtra(EXTRA_AUDIO_CODEC, audioCodec)
             }
             ContextCompat.startForegroundService(context, intent)
         }
@@ -109,6 +113,9 @@ class BiliDownloadService : Service() {
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val qn = intent.getIntExtra(EXTRA_QN, 127)
         val episodeId = intent.getLongExtra(EXTRA_EP_ID, 0L)
+        val savedOptions = getSharedPreferences("download_options", MODE_PRIVATE)
+        val videoCodec = intent.getStringExtra(EXTRA_VIDEO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_video", "").orEmpty() }
+        val audioCodec = intent.getStringExtra(EXTRA_AUDIO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_audio", "").orEmpty() }
         // Prevent duplicate workers when a task is resumed repeatedly or an intent is redelivered.
         if (running.containsKey(taskId)) return START_REDELIVER_INTENT
 
@@ -127,7 +134,7 @@ class BiliDownloadService : Service() {
             try {
                 updateTask(task)
                 val cookie = BiliSession.cookie(this@BiliDownloadService)
-                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie)
+                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, 0, videoCodec, audioCodec)
                 task.put("quality", playback.name)
                 task.put("progress", "准备下载")
                 updateTask(task)

@@ -307,30 +307,75 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun showDownloadQuality() {
         val p = info
         if (p == null) { b.downloadStatus.text = "请先等待播放地址加载完成"; return }
-        // Default to the highest quality actually returned by Bilibili for this account/video.
         val choices = (if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities)
-            .distinctBy { it.first }
-            .sortedByDescending { it.first }
+            .distinctBy { it.first }.sortedByDescending { it.first }
         var selected = 0
-        MaterialAlertDialogBuilder(this).setTitle("选择下载清晰度（默认最高）")
-            .setSingleChoiceItems(choices.map { it.second }.toTypedArray(), 0) { _, which ->
+        MaterialAlertDialogBuilder(this).setTitle("选择下载清晰度")
+            .setSingleChoiceItems(choices.map { it.second + if (it.first == choices.first().first) " · 推荐" else "" }.toTypedArray(), 0) { _, which ->
                 selected = which
             }
             .setNegativeButton("取消", null)
-            .setPositiveButton("开始下载") { _, _ -> startDownload(choices[selected].first) }
+            .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(choices[selected].first) }
             .show()
     }
 
-    private fun startDownload(qn: Int) {
+    private fun loadDownloadStreamOptions(qn: Int) {
+        val p = info ?: return
+        if (epId > 0L || aid <= 0L) {
+            startDownload(qn)
+            return
+        }
+        b.downloadStatus.text = "正在读取可选音视频资源…"
+        lifecycleScope.launch {
+            try {
+                val options = withContext(Dispatchers.IO) {
+                    BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn)
+                }
+                if (options.video.isEmpty()) {
+                    startDownload(qn)
+                    return@launch
+                }
+                val videoLabels = options.video.map { it.label + if (it.bandwidth == options.video.maxOf { v -> v.bandwidth }) " · 推荐" else "" }.toTypedArray()
+                var videoIndex = 0
+                MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                    .setTitle("选择视频资源")
+                    .setSingleChoiceItems(videoLabels, 0) { _, which -> videoIndex = which }
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("下一步") { _, _ ->
+                        val selectedVideo = options.video[videoIndex]
+                        if (options.audio.isEmpty()) {
+                            startDownload(qn, selectedVideo.codec, "")
+                        } else {
+                            var audioIndex = 0
+                            val audioLabels = options.audio.map {
+                                it.label + if (it.bandwidth == options.audio.maxOf { a -> a.bandwidth }) " · 推荐" else ""
+                            }.toTypedArray()
+                            MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                                .setTitle("选择音频资源")
+                                .setSingleChoiceItems(audioLabels, 0) { _, which -> audioIndex = which }
+                                .setNegativeButton("取消", null)
+                                .setPositiveButton("开始下载") { _, _ ->
+                                    startDownload(qn, selectedVideo.codec, options.audio[audioIndex].codec)
+                                }.show()
+                        }
+                    }.show()
+            } catch (error: Exception) {
+                b.downloadStatus.text = "读取资源选项失败，使用默认音视频轨道： " + (error.message ?: "未知错误")
+                startDownload(qn)
+            }
+        }
+    }
+
+    private fun startDownload(qn: Int, videoCodec: String = "", audioCodec: String = "") {
         val taskId = java.util.UUID.randomUUID().toString()
         val title = b.playerTitle.text.toString()
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .replace(Regex("[\\\\/:*?""<>|]"), "_")
             .take(70)
             .ifBlank { "bilibili_video" }
         val task = JSONObject()
             .put("id", taskId)
             .put("title", title)
-            .put("quality", info?.name ?: "清晰度 $qn")
+            .put("quality", info?.name ?: "清晰度 " + qn)
             .put("episodeId", epId)
             .put("status", "downloading")
             .put("progress", "等待后台下载服务启动")
@@ -339,10 +384,14 @@ class VideoPlayerActivity : AppCompatActivity() {
         val old = JSONArray(prefs.getString("tasks", "[]"))
         old.put(task)
         prefs.edit().putString("tasks", old.toString()).apply()
-
+        getSharedPreferences("download_options", MODE_PRIVATE).edit()
+            .putString(taskId + "_video", videoCodec)
+            .putString(taskId + "_audio", audioCodec)
+            .apply()
         try {
-            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId)
-            b.downloadStatus.text = "已加入后台下载 · 可离开播放页"
+            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec)
+            b.downloadStatus.text = "已加入后台下载 · " + (info?.name ?: "清晰度 " + qn) +
+                if (videoCodec.isNotBlank()) " · " + videoCodec else ""
         } catch (error: Exception) {
             task.put("status", "failed").put("progress", error.message ?: "无法启动下载服务")
             val current = JSONArray(prefs.getString("tasks", "[]"))
@@ -352,7 +401,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 updated.put(if (item.optString("id") == taskId) task else item)
             }
             prefs.edit().putString("tasks", updated.toString()).apply()
-            b.downloadStatus.text = "下载任务启动失败：${error.message}"
+            b.downloadStatus.text = "下载任务启动失败：" + error.message
         }
     }
 
