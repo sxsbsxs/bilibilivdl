@@ -16,8 +16,9 @@
 - 上游仓库：https://github.com/KafuuNeko/BiliDownload
 - 许可证：GNU General Public License v3.0
 - 源码位置：`upstream/BiliDownload/`
-- 应用当前下载实现：`BiliDownloadEngine.kt` 负责 DASH 音视频轨道并行下载、HTTP Range 续传、失败重试、MediaExtractor/MediaMuxer 合并和 MediaStore 发布；`BiliDownloadService.kt` 负责前台服务下载、任务状态持久化和通知；播放页将下载任务交给该服务。
-- 登录适配：`BiliQrLoginApi.kt` 与账号页参考上游二维码登录事务，包含二维码申请、状态轮询、扫码确认、Cookie 接收与账号验证；应用 UI 为独立设计。\n- 说明：上游 BVD 完整 Room 数据库、原版 DownloadService 与批量任务 UI 仍保留在上游源码目录中，当前应用没有将其全部替换为原版实现。因此应用下载模块应称为 BVD 架构适配，不应称为完整原样移植。
+- 应用当前下载实现：`BiliDownloadEngine.kt` 负责 DASH 音视频轨道并行下载、HTTP Range 续传、失败重试、MediaExtractor/MediaMuxer 合并（包括 DURL 多段媒体轨道及时间戳合并）和 MediaStore 发布；`BiliDownloadService.kt` 负责前台服务下载、任务状态持久化和通知；播放页将下载任务交给该服务；下载管理页支持任务统计、清理已完成/历史记录和重试失败任务。
+- 登录适配：`BiliQrLoginApi.kt` 与账号页参考上游二维码登录事务，包含二维码申请、状态轮询、扫码确认、Cookie 接收与账号验证；应用 UI 为独立设计。
+- 说明：上游 BVD 完整 Room 数据库、原版 DownloadService 与批量任务 UI 仍保留在上游源码目录中，当前应用没有将其全部替换为原版实现。因此应用下载模块应称为 BVD 架构适配，不应称为完整原样移植。
 
 ## 本项目修改说明
 
