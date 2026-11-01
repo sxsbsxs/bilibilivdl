@@ -110,7 +110,14 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val source = DefaultMediaSourceFactory(this@VideoPlayerActivity).setDataSourceFactory(http)
                 exo = ExoPlayer.Builder(this@VideoPlayerActivity).setMediaSourceFactory(source).build().also { player ->
                     b.playerView.player = player
-                    player.setMediaItem(if (p.isDash) MediaItem.Builder().setUri(p.url).setMimeType(MimeTypes.APPLICATION_MPD).build() else MediaItem.fromUri(p.url))
+                    if (p.isDash) {
+                        player.setMediaItem(MediaItem.Builder().setUri(p.url).setMimeType(MimeTypes.APPLICATION_MPD).build())
+                    } else if (p.segments.size > 1) {
+                        // B站 DURL 分段必须按顺序连续播放，不能只播放第一段。
+                        player.setMediaItems(p.segments.map { MediaItem.fromUri(it) })
+                    } else {
+                        player.setMediaItem(MediaItem.fromUri(p.url))
+                    }
                     player.addListener(object : Player.Listener {
                         override fun onPlayerError(error: PlaybackException) {
                             b.playerStatus.text = "播放失败：${error.errorCodeName}。请检查网络或账号权限"
