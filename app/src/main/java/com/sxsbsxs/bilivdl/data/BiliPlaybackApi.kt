@@ -246,9 +246,9 @@ object BiliPlaybackApi {
         val urls = (0 until durl.length()).mapNotNull { durl.optJSONObject(it)?.optString("url")?.takeIf { u -> u.startsWith("http") } }
         if (urls.isEmpty()) return null
         val actual = reportedQuality.takeIf { it > 0 } ?: return null
-        return PlaybackInfo(cid, urls.first(), actual,
-            choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual,
-            choices.ifEmpty { listOf(actual to ("清晰度 " + actual)) }, segments = urls)
+        val actualLabel = choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual
+        return PlaybackInfo(cid, urls.first(), actual, actualLabel,
+            listOf(actual to actualLabel), segments = urls)
     }
 
     suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0,
