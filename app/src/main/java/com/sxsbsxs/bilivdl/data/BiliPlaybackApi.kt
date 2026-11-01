@@ -291,7 +291,7 @@ object BiliPlaybackApi {
                 shareCount = stat?.optLong("share") ?: 0L,
                 replyCount = stat?.optLong("reply") ?: 0L,
                 ownerFace = owner?.optString("face").orEmpty(),
-                category = d.optString("tname"), duration = d.optInt("duration"), ownerFace = d.optJSONObject("owner")?.optString("face").orEmpty()
+                category = d.optString("tname"), duration = d.optInt("duration")
             )
         }
         // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
