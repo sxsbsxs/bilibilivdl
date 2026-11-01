@@ -140,30 +140,30 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/home_empty_state"
+        <ProgressBar
+            android:id="@+id/home_progress"
+            style="?android:attr/progressBarStyle"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="20dp"
+            android:indeterminateTint="@color/brand"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/home_feed_status"
             android:layout_width="match_parent"
-            android:layout_height="174dp"
-            android:layout_marginTop="13dp"
-            android:background="@drawable/bg_empty_card"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
             android:gravity="center"
-            android:orientation="vertical"
-            android:padding="20dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="这里留给好视频"
-                android:textColor="@color/text_primary"
-                android:textSize="17sp"
-                android:textStyle="bold" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:text="视频推荐流将在后续接入。现在可以进入「发现」搜索真实视频。"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
-        </LinearLayout>
+            android:text="正在加载热门视频…"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/home_recommendations"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:nestedScrollingEnabled="false"
+            android:clipToPadding="false" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
