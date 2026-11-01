@@ -19,6 +19,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
 import com.sxsbsxs.bilivdl.data.BiliInteractionApi
 import com.sxsbsxs.bilivdl.data.BiliSession
+import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideoActionApi
 import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
@@ -229,7 +230,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val page = commentPage
-                val result = withContext(Dispatchers.IO) { BiliInteractionApi.commentsPage(aid, page, commentSort, cookie) }
+                val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.commentsPage(aid, page, commentSort) }
                 (b.commentsList.adapter as CommentAdapter).submit(result.comments, append = !reset)
                 commentPage = page + 1
                 commentHasMore = result.hasMore
@@ -243,7 +244,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun showReplies(comment: VideoComment) {
         lifecycleScope.launch {
             try {
-                val replies = withContext(Dispatchers.IO) { BiliInteractionApi.replies(aid, comment.id, 1, cookie) }
+                val replies = withContext(Dispatchers.IO) { BilimiaoApiBridge.replies(aid, comment.id, 1) }
                 val lines = replies.map { "${it.user}：${it.text}" }.toTypedArray()
                 MaterialAlertDialogBuilder(this@VideoPlayerActivity)
                     .setTitle("评论回复 · ${comment.replyCount}")
@@ -259,7 +260,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun likeComment(comment: VideoComment) {
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) { BiliInteractionApi.likeComment(aid, comment.id, !comment.liked, cookie) }
+                val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.likeComment(aid, comment.id, !comment.liked) }
                 (b.commentsList.adapter as CommentAdapter).updateLike(comment.id, !comment.liked)
                 b.commentsStatus.text = result
             } catch (e: Exception) { b.commentsStatus.text = e.message ?: "点赞失败" }
@@ -271,7 +272,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         if (text.isBlank()) { b.commentsStatus.text = "先输入评论内容"; return }
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) { BiliInteractionApi.sendComment(aid, text, cookie) }
+                val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.sendComment(aid, text) }
                 b.commentInput.text?.clear()
                 b.commentsStatus.text = result
                 resetComments()
@@ -290,7 +291,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             try {
                 val target = !videoLiked
                 withContext(Dispatchers.IO) {
-                    BiliVideoActionApi.like(requireAid(), target, cookie)
+                    BilimiaoApiBridge.likeVideo(requireAid(), target)
                 }
                 videoLiked = target
                 b.videoLike.text = if (target) "已点赞" else "点赞"
@@ -308,7 +309,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
-                            BiliVideoActionApi.coin(requireAid(), if (which == 1) 2 else 1, which == 2, cookie)
+                            BilimiaoApiBridge.coin(requireAid(), if (which == 1) 2 else 1, which == 2)
                         }
                         b.playerStatus.text = if (which == 2) "投币并点赞成功" else "投币成功"
                     } catch (e: Exception) {
@@ -329,7 +330,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val folders = withContext(Dispatchers.IO) {
-                    BiliVideoActionApi.favoriteFolders(cookie)
+                    BilimiaoApiBridge.favoriteFolders(requireAid())
                 }
                 if (folders.isEmpty()) {
                     b.playerStatus.text = "没有可用的收藏夹"
@@ -341,7 +342,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                         lifecycleScope.launch {
                             try {
                                 withContext(Dispatchers.IO) {
-                                    BiliVideoActionApi.addFavorite(requireAid(), folders[index].first, cookie)
+                                    BilimiaoApiBridge.addFavorite(requireAid(), folders[index].first)
                                 }
                                 b.playerStatus.text = "已收藏到「${folders[index].second}」"
                             } catch (e: Exception) {
@@ -366,7 +367,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     try {
                         withContext(Dispatchers.IO) {
-                            BiliVideoActionApi.triple(requireAid(), cookie)
+                            BilimiaoApiBridge.triple(requireAid())
                         }
                         videoLiked = true
                         b.videoLike.text = "已点赞"
