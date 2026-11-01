@@ -152,7 +152,7 @@ object BiliPlaybackApi {
         // 不把 Cookie 或 WBI 签名作为必需条件；登录 Cookie 仅作为可选请求头。
         val resolvedAid = d.optLong("aid", aid)
         // bilimiao2 同款：先尝试 gRPC PlayURL；不可用时自动回退公开 HTTP playurl。
-        tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex) }
+        tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex, title=d.optString("title"), description=d.optString("desc"), ownerName=d.optJSONObject("owner")?.optString("name").orEmpty(), ownerFace=d.optJSONObject("owner")?.optString("face").orEmpty(), viewCount=d.optJSONObject("stat")?.optLong("view") ?: 0L, danmakuCount=d.optJSONObject("stat")?.optLong("danmaku") ?: 0L, likeCount=d.optJSONObject("stat")?.optLong("like") ?: 0L, coinCount=d.optJSONObject("stat")?.optLong("coin") ?: 0L, favoriteCount=d.optJSONObject("stat")?.optLong("favorite") ?: 0L, shareCount=d.optJSONObject("stat")?.optLong("share") ?: 0L, publishTime=d.optLong("pubdate")) }
         val publicParams = mutableMapOf(
             "avid" to resolvedAid.toString(),
             "cid" to cid.toString(),
@@ -182,8 +182,10 @@ object BiliPlaybackApi {
         val dash=data.optJSONObject("dash")
         if(dash!=null) {
             val videos=dash.optJSONArray("video") ?: error("DASH 视频轨道为空")
-            val video=(0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull { it.optInt("id")==actual }
-                ?: (0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的视频轨道")
+            val videoList=(0 until videos.length()).mapNotNull { videos.optJSONObject(it) }
+            val video=videoList.firstOrNull { actual > 0 && it.optInt("id")==actual }
+                ?: videoList.firstOrNull() ?: error("没有可下载的视频轨道")
+            val resolvedQuality=video.optInt("id", actual).takeIf { it > 0 } ?: error("B站没有返回真实视频画质")
             val audios=dash.optJSONArray("audio") ?: error("DASH 音频轨道为空")
             val audio=(0 until audios.length()).mapNotNull { audios.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的音频轨道")
             fun streamUrl(item: JSONObject): String {
@@ -192,7 +194,7 @@ object BiliPlaybackApi {
                 return primary.ifBlank { backups?.optString(0).orEmpty() }.takeIf { it.startsWith("https://") || it.startsWith("http://") }
                     ?: error("B站返回了无效的 DASH 资源地址")
             }
-            return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true,streamUrl(video),streamUrl(audio), parts = parts, selectedPart = selectedIndex)
+            return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,resolvedQuality),resolvedQuality,qualities.firstOrNull{it.first==resolvedQuality}?.second ?: "清晰度 $resolvedQuality",qualities,true,streamUrl(video),streamUrl(audio), parts = parts, selectedPart = selectedIndex, title=d.optString("title"), description=d.optString("desc"), ownerName=d.optJSONObject("owner")?.optString("name").orEmpty(), ownerFace=d.optJSONObject("owner")?.optString("face").orEmpty(), viewCount=d.optJSONObject("stat")?.optLong("view") ?: 0L, danmakuCount=d.optJSONObject("stat")?.optLong("danmaku") ?: 0L, likeCount=d.optJSONObject("stat")?.optLong("like") ?: 0L, coinCount=d.optJSONObject("stat")?.optLong("coin") ?: 0L, favoriteCount=d.optJSONObject("stat")?.optLong("favorite") ?: 0L, shareCount=d.optJSONObject("stat")?.optLong("share") ?: 0L, publishTime=d.optLong("pubdate"))
         }
         val durls = data.optJSONArray("durl")
         val streams = durls?.let { array ->
@@ -204,12 +206,13 @@ object BiliPlaybackApi {
                 selected.takeIf { it.startsWith("https://") || it.startsWith("http://") }
             }
         }.orEmpty()
-        if(streams.isEmpty()) error("B站未返回可播放的 DASH 或 MP4 音视频流")\n        if (actual <= 0) error("B站播放接口未返回真实画质编号，已停止显示猜测画质")
+        if(streams.isEmpty()) error("B站未返回可播放的 DASH 或 MP4 音视频流")
+        if (actual <= 0) error("B站播放接口未返回真实画质编号，已停止显示猜测画质")
         // DURL 可能由多个连续分段组成；不能只取第一个分段，否则播放/下载会被截断。
         return PlaybackInfo(
             cid, streams.first(), actual,
             qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",
-            qualities, false, segments = streams
+            qualities, false, segments = streams, parts = parts, selectedPart = selectedIndex, title=d.optString("title"), description=d.optString("desc"), ownerName=d.optJSONObject("owner")?.optString("name").orEmpty(), ownerFace=d.optJSONObject("owner")?.optString("face").orEmpty(), viewCount=d.optJSONObject("stat")?.optLong("view") ?: 0L, danmakuCount=d.optJSONObject("stat")?.optLong("danmaku") ?: 0L, likeCount=d.optJSONObject("stat")?.optLong("like") ?: 0L, coinCount=d.optJSONObject("stat")?.optLong("coin") ?: 0L, favoriteCount=d.optJSONObject("stat")?.optLong("favorite") ?: 0L, shareCount=d.optJSONObject("stat")?.optLong("share") ?: 0L, publishTime=d.optLong("pubdate")
         )
     }
 }
