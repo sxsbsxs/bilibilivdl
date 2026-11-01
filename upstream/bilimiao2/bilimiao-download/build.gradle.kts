@@ -49,7 +49,7 @@ kotlin {
 
 android {
     namespace = "cn.a10miaomiao.bilimiao.download"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 21
