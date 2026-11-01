@@ -11,6 +11,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -103,7 +104,7 @@ class BiliDownloadService : Service() {
         val qn = intent.getIntExtra(EXTRA_QN, 80)
         active.incrementAndGet()
 
-        val taskJob = scope.launch {
+        val taskJob = scope.launch(start = CoroutineStart.LAZY) {
             val task = JSONObject()
                 .put("id", taskId)
                 .put("title", title)
@@ -155,6 +156,7 @@ class BiliDownloadService : Service() {
             }
         }
         running[taskId] = taskJob
+        taskJob.start()
         return START_REDELIVER_INTENT
     }
 
