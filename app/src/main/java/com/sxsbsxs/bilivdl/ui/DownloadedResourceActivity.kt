@@ -1,19 +1,32 @@
 package com.sxsbsxs.bilivdl.ui
 
+import android.content.ContentValues
 import android.content.Intent
 import android.database.Cursor
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.sxsbsxs.bilivdl.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.nio.ByteBuffer
 
-/** BVD 风格的本地资源详情：文件信息、播放、分享和删除。 */
+/** 本地资源详情：信息、播放、音频提取、分享和删除。 */
 class DownloadedResourceActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_URI = "resource_uri"
@@ -23,13 +36,13 @@ class DownloadedResourceActivity : AppCompatActivity() {
 
     private lateinit var resourceUri: Uri
     private lateinit var titleText: String
+    private var extractedAudioUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val raw = intent.getStringExtra(EXTRA_URI).orEmpty()
-        val parsed = runCatching { Uri.parse(raw) }.getOrNull()
-        if (parsed == null) { finish(); return }
-        resourceUri = parsed
+        if (raw.isBlank()) { finish(); return }
+        resourceUri = Uri.parse(raw)
         titleText = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "已下载视频" }
         val quality = intent.getStringExtra(EXTRA_QUALITY).orEmpty()
         val root = LinearLayout(this).apply {
@@ -58,8 +71,13 @@ class DownloadedResourceActivity : AppCompatActivity() {
             setPadding(0, dp(16), 0, dp(22))
         })
         addAction(root, "播放视频") { playResource() }
-        addAction(root, "分享文件") { shareResource() }
-        addAction(root, "删除文件") { confirmDelete() }
+        addAction(root, "提取音频（保存为 M4A）") { extractAudio() }
+        addAction(root, "分享视频") { shareUri(resourceUri, "video/*", "分享视频") }
+        addAction(root, "分享提取的音频") {
+            extractedAudioUri?.let { shareUri(it, "audio/mp4", "分享音频") }
+                ?: Toast.makeText(this, "请先提取音频", Toast.LENGTH_SHORT).show()
+        }
+        addAction(root, "删除视频文件") { confirmDelete() }
         setContentView(root)
     }
 
@@ -84,9 +102,8 @@ class DownloadedResourceActivity : AppCompatActivity() {
             }
         }
         val sizeText = if (size >= 0) android.text.format.Formatter.formatFileSize(this, size) else "未知"
-        return "文件名：" + name + "\n清晰度：" + quality.ifBlank { "未知" } +
-            "\n文件大小：" + sizeText + "\n保存时间：" + date.ifBlank { "未知" } +
-            "\n文件类型：" + mime + "\n保存位置：系统视频库 · Movies/BiliVdl"
+        return "文件名：$name\n清晰度：${quality.ifBlank { "未知" }}\n文件大小：$sizeText" +
+            "\n保存时间：${date.ifBlank { "未知" }}\n文件类型：$mime\n保存位置：系统视频库 · Movies/BiliVdl"
     }
 
     private fun playResource() {
@@ -99,13 +116,112 @@ class DownloadedResourceActivity : AppCompatActivity() {
         }
     }
 
-    private fun shareResource() {
+    private fun shareUri(uri: Uri, mime: String, chooser: String) {
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = contentResolver.getType(resourceUri) ?: "video/*"
-            putExtra(Intent.EXTRA_STREAM, resourceUri)
+            type = contentResolver.getType(uri) ?: mime
+            putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(send, "分享视频"))
+        startActivity(Intent.createChooser(send, chooser))
+    }
+
+    /**
+     * Remuxes the existing AAC audio track without re-encoding. No network request,
+     * external encoder, or quality loss is involved. Android 10+ MediaStore owns output.
+     */
+    private fun extractAudio() {
+        if (Build.VERSION.SDK_INT < 29) {
+            Toast.makeText(this, "音频提取目前需要 Android 10 或更高版本", Toast.LENGTH_LONG).show()
+            return
+        }
+        val progress = ProgressBar(this).apply { isIndeterminate = true }
+        val dialog = AlertDialog.Builder(this).setTitle("正在提取音频")
+            .setMessage("正在读取视频音轨并封装为 M4A，请稍候。")
+            .setView(progress).setNegativeButton("取消", null).create()
+        dialog.show()
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { remuxAudioTrack() } }
+            dialog.dismiss()
+            result.onSuccess { uri ->
+                extractedAudioUri = uri
+                Toast.makeText(this@DownloadedResourceActivity, "音频已保存到音乐库", Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                Toast.makeText(this@DownloadedResourceActivity,
+                    "提取失败：${error.message ?: "不支持的音频格式"}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun remuxAudioTrack(): Uri {
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        var outputUri: Uri? = null
+        var outputFd: ParcelFileDescriptor? = null
+        var muxerStarted = false
+        try {
+            contentResolver.openFileDescriptor(resourceUri, "r")?.use { pfd ->
+                extractor.setDataSource(pfd.fileDescriptor)
+            } ?: error("无法读取视频文件")
+            var sourceTrack = -1
+            var sourceFormat: MediaFormat? = null
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+                if (mime.startsWith("audio/")) {
+                    if (mime != "audio/mp4a-latm") error("当前音轨不是 AAC，暂不支持无损封装为 M4A（格式：$mime）")
+                    sourceTrack = i
+                    sourceFormat = format
+                    break
+                }
+            }
+            if (sourceTrack < 0 || sourceFormat == null) error("视频中没有可提取的音轨")
+            val safeName = titleText.replace(Regex("[\\\\/:*?\\"<>|]"), "_").take(70).ifBlank { "bilibili_audio" }
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "$safeName.m4a")
+                put(MediaStore.MediaColumns.MIME_TYPE, "audio/mp4")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "Music/BiliVdl")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            outputUri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                ?: error("无法在音乐库创建输出文件")
+            outputFd = contentResolver.openFileDescriptor(outputUri, "w") ?: error("无法写入音频文件")
+            muxer = MediaMuxer(outputFd.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            extractor.selectTrack(sourceTrack)
+            val outputTrack = muxer.addTrack(sourceFormat)
+            muxer.start()
+            muxerStarted = true
+            val buffer = ByteBuffer.allocate(1024 * 1024)
+            val info = android.media.MediaCodec.BufferInfo()
+            while (true) {
+                buffer.clear()
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) break
+                info.offset = 0
+                info.size = size
+                info.presentationTimeUs = extractor.sampleTime.coerceAtLeast(0L)
+                info.flags = extractor.sampleFlags
+                muxer.writeSampleData(outputTrack, buffer, info)
+                extractor.advance()
+            }
+            muxer.stop()
+            muxerStarted = false
+            muxer.release()
+            muxer = null
+            outputFd.close()
+            outputFd = null
+            contentResolver.update(outputUri, ContentValues().apply {
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }, null, null)
+            return outputUri
+        } catch (error: Exception) {
+            if (outputUri != null) runCatching { contentResolver.delete(outputUri, null, null) }
+            throw error
+        } finally {
+            if (muxerStarted) runCatching { muxer?.stop() }
+            runCatching { muxer?.release() }
+            runCatching { outputFd?.close() }
+            extractor.release()
+        }
     }
 
     private fun confirmDelete() {
