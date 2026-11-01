@@ -45,8 +45,8 @@ object BiliDownloadEngine {
                 val vf = File(dir, "$safe.video.m4s")
                 val af = File(dir, "$safe.audio.m4s")
                 coroutineScope {
-                    val v = async { transfer(video, vf, headers) { n, _ -> onProgress(n + af.length(), -1, "下载视频轨道") } }
-                    val a = async { transfer(audio, af, headers) { n, _ -> onProgress(n + vf.length(), -1, "下载音频轨道") } }
+                    val v = async { transferCandidates(listOf(video) + playback.videoBackupUrls, vf, headers) { n, _ -> onProgress(n + af.length(), -1, "下载视频轨道") } }
+                    val a = async { transferCandidates(listOf(audio) + playback.audioBackupUrls, af, headers) { n, _ -> onProgress(n + vf.length(), -1, "下载音频轨道") } }
                     v.await(); a.await()
                 }
                 onProgress(0, 0, "正在合并音视频")
@@ -68,7 +68,7 @@ object BiliDownloadEngine {
                 // Keep partial segments when cancelled; remove only after a successful mux.
                 segmentFiles.forEach { it.delete() }
             } else {
-                transfer(playback.url, merged, headers) { n, total -> onProgress(n, total, "下载视频") }
+                transferCandidates(listOf(playback.url), merged, headers) { n, total -> onProgress(n, total, "下载视频") }
             }
             publish(context, merged, safe)
         } catch (error: Exception) {
@@ -77,13 +77,38 @@ object BiliDownloadEngine {
         }
     }
 
+    /** 按 BVD 的候选源轮换策略处理 CDN 403；切换源时丢弃不可信的跨源临时前缀。 */
+    private suspend fun transferCandidates(urls: List<String>, file: File, headers: Map<String, String>,
+        progress: (Long, Long) -> Unit) {
+        val candidates = urls.filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
+        require(candidates.isNotEmpty()) { "B站没有返回可用的 CDN 地址" }
+        var last: Exception? = null
+        for ((index, url) in candidates.withIndex()) {
+            try {
+                transfer(url, file, headers, progress)
+                return
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                last = error
+                if (index < candidates.lastIndex) {
+                    file.delete()
+                    progress(0L, -1L)
+                }
+            }
+        }
+        throw last ?: IllegalStateException("所有 CDN 地址均不可用")
+    }
+
+    private class CdnHttpException(val status: Int) : java.io.IOException("CDN 返回 HTTP " + status)
+
     private suspend fun transfer(url: String, file: File, headers: Map<String, String>,
         progress: (Long, Long) -> Unit) {
         var last: Exception? = null
         for (attempt in 0..MAX_RETRIES) {
             try { transferOnce(url, file, headers, progress); return }
             catch (e: CancellationException) { throw e }
-            catch (e: Exception) { last = e; if (attempt == MAX_RETRIES) break; delay((1000L shl attempt).coerceAtMost(8000L)) }
+            catch (e: Exception) { last = e; if (e is CdnHttpException && (e.status == 403 || e.status == 412)) break; if (attempt == MAX_RETRIES) break; delay((1000L shl attempt).coerceAtMost(8000L)) }
         }
         throw last ?: IllegalStateException("下载失败")
     }
@@ -104,7 +129,7 @@ object BiliDownloadEngine {
             }
         try {
             val code = c.responseCode
-            if (code != 200 && code != 206) error("CDN 返回 HTTP $code")
+            if (code != 200 && code != 206) throw CdnHttpException(code)
             val append = offset > 0 && code == 206
             if (append) {
                 val range = Regex("bytes (\\d+)-(\\d+)/(\\d+|\\*)").matchEntire(c.getHeaderField("Content-Range").orEmpty())

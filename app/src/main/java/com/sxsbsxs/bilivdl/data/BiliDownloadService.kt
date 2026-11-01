@@ -134,7 +134,7 @@ class BiliDownloadService : Service() {
                 val lastProgressWrite = AtomicLong(0L)
                 val result = BiliDownloadEngine.download(this@BiliDownloadService, playback, title, cookie) { done, total, stage ->
                     val progress = if (total > 0L) "$stage · ${(done * 100 / total).coerceIn(0, 100)}%" else "$stage · ${done / 1024} KB"
-                    task.put("progress", progress)
+                    task.put("completedBytes", done).put("totalBytes", total).put("progress", progress)
                     // Network callbacks can fire for every chunk; persist detached snapshots at most once per second.
                     val now = System.currentTimeMillis()
                     val previous = lastProgressWrite.get()
@@ -239,6 +239,8 @@ class BiliDownloadService : Service() {
             status = task.optString("status", "queued"),
             progress = task.optString("progress"),
             outputPath = task.optString("path"),
+            completedBytes = task.optLong("completedBytes", 0L),
+            totalBytes = task.optLong("totalBytes", -1L),
             createdAt = task.optLong("time", System.currentTimeMillis())
         ))
     }

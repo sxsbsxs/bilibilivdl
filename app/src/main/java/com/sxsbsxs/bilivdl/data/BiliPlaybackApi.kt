@@ -12,7 +12,7 @@ import java.security.MessageDigest
 import java.util.TreeMap
 
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0)
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList())
 
 object BiliPlaybackApi {
     private val order = intArrayOf(46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52)
@@ -92,7 +92,9 @@ object BiliPlaybackApi {
                         qualities = qualities,
                         isDash = audioUrl?.isNotBlank() == true,
                         videoUrl = videoUrl,
-                        audioUrl = audioUrl?.takeIf { it.isNotBlank() }
+                        audioUrl = audioUrl?.takeIf { it.isNotBlank() },
+                        videoBackupUrls = dash.backupUrl.filter { it.isNotBlank() && it != videoUrl },
+                        audioBackupUrls = audio?.backupUrl.orEmpty().filter { it.isNotBlank() && it != audioUrl }
                     )
                 }
                 is Stream.Content.SegmentVideo -> {
@@ -197,6 +199,8 @@ object BiliPlaybackApi {
                 isDash = audio != null,
                 videoUrl = bestUrl(video.base_url, video.backup_url),
                 audioUrl = audio?.let { bestUrl(it.base_url, it.backup_url) },
+                videoBackupUrls = video.backup_url.orEmpty().filter { it.isNotBlank() && it != video.base_url },
+                audioBackupUrls = audio?.backup_url.orEmpty().filter { it.isNotBlank() && it != audio.base_url },
                 parts = parts,
                 selectedPart = selectedIndex
             )
