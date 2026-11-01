@@ -324,6 +324,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             .put("id", taskId)
             .put("title", title)
             .put("quality", info?.name ?: "清晰度 $qn")
+            .put("episodeId", epId)
             .put("status", "downloading")
             .put("progress", "等待后台下载服务启动")
             .put("time", System.currentTimeMillis())
@@ -333,7 +334,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         prefs.edit().putString("tasks", old.toString()).apply()
 
         try {
-            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn)
+            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId)
             b.downloadStatus.text = "已加入后台下载 · 可离开播放页"
         } catch (error: Exception) {
             task.put("status", "failed").put("progress", error.message ?: "无法启动下载服务")
