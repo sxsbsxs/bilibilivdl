@@ -244,7 +244,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     p.category,
                     if (p.duration > 0) "${p.duration / 60}:${(p.duration % 60).toString().padStart(2, '0')}" else ""
                 ).filter { it.isNotBlank() }.joinToString("  ·  ")
-                val authorText = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { p.author }
+                val authorText = p.author.ifBlank { intent.getStringExtra(EXTRA_AUTHOR).orEmpty() }
                 if (authorText.isNotBlank()) b.playerAuthor.text = authorText
                 b.playerAuthorSign.text = p.ownerSign
                 b.playerAuthorSign.visibility = if (p.ownerSign.isBlank()) View.GONE else View.VISIBLE
