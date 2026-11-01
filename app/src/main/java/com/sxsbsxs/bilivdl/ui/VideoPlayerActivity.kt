@@ -129,6 +129,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.shareVideoButton.setOnClickListener { shareCurrentVideo() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.subtitleButton.setOnClickListener { showSubtitles() }
+        b.moreActionsButton.setOnClickListener { showMoreActions() }
         b.danmakuButton.setOnClickListener {
             danmakuEnabled = !danmakuEnabled
             b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
@@ -188,6 +189,20 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun showMoreActions() {
+        val labels = arrayOf("分享视频链接", "选择分P / 番剧选集", if (danmakuEnabled) "关闭弹幕" else "开启弹幕", "字幕设置", "发送弹幕")
+        MaterialAlertDialogBuilder(this).setTitle("更多功能")
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> shareCurrentVideo()
+                    1 -> showParts()
+                    2 -> b.danmakuButton.performClick()
+                    3 -> showSubtitles()
+                    4 -> showDanmakuComposer()
+                }
+            }.show()
+    }
+
     private fun formatCount(value: Long): String = when {
         value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
         value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1万", value / 10_000.0)
@@ -222,6 +237,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStats.text = listOf(
                     formatCount(p.viewCount) + " 播放",
                     formatCount(p.danmakuCount) + " 弹幕",
+                    formatCount(p.likeCount) + " 点赞",
+                    formatCount(p.coinCount) + " 投币",
+                    formatCount(p.favoriteCount) + " 收藏",
+                    formatCount(p.shareCount) + " 分享",
                     p.pubdate.takeIf { it > 0L }?.let {
                         java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(it * 1000))
                     }.orEmpty()
