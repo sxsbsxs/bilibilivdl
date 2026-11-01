@@ -50,6 +50,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var videoLiked = false
     private var playbackSpeedIndex = 0
     private var pendingSeekPosition = 0L
+    private var selectedPartIndex = 0
     private var resumePosition = 0L
     private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 0.75f)
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
@@ -65,6 +66,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.commentsList.layoutManager = LinearLayoutManager(this)
         b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
         b.qualityButton.setOnClickListener { showQuality() }
+        b.partButton.setOnClickListener { showParts() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.danmakuButton.setOnClickListener {
@@ -101,8 +103,10 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.playerStatus.text = "正在获取播放地址…"
         lifecycleScope.launch {
             try {
-                val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie) }
+                val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
+                selectedPartIndex = p.selectedPart
+                b.partButton.text = if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
                 exo?.release()
                 val headers = mutableMapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com", "Accept" to "*/*")
                 if (cookie.isNotBlank()) headers["Cookie"] = cookie
@@ -153,6 +157,30 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = "获取播放地址失败：${e.message ?: "接口异常"}"
             }
         }
+    }
+
+    private fun showParts() {
+        val p = info ?: return
+        if (p.parts.size <= 1) {
+            b.playerStatus.text = "当前视频只有一个分P"
+            return
+        }
+        val labels = p.parts.map { part ->
+            "P${part.page} · ${part.title}" + if (part.duration > 0) " · ${part.duration / 60}分${part.duration % 60}秒" else ""
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("选择视频分P")
+            .setSingleChoiceItems(labels, p.selectedPart) { dialog, which ->
+                dialog.dismiss()
+                if (which != selectedPartIndex) {
+                    selectedPartIndex = which
+                    pendingSeekPosition = 0L
+                    resumePosition = 0L
+                    load(p.quality)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun cyclePlaybackSpeed() {
@@ -425,7 +453,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             }.show()
     }
 
-    private fun positionKey(): String = bvid.ifBlank { "av$aid" }
+    private fun positionKey(): String = (bvid.ifBlank { "av$aid" }) + "_p" + selectedPartIndex
 
     override fun onStop() {
         exo?.let { player ->
