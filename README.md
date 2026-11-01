@@ -50,3 +50,15 @@ GitHub Actions 会在 push 到 main 或提交 Pull Request 时构建 Debug APK�
 
 ## 说明
 B站接口可能因地区、网络环境、风控策略或账号权限而返回限制结果。构建成功不等于已完成真实设备上的播放、互动和下载验证。
+
+
+## 上游模块源码
+
+已将以下上游源码按固定版本导入 `upstream/`，保留原始 GPL-3.0 许可证与构建元数据：
+
+- BVD / BiliDownload：`upstream/BiliDownload/`（下载任务、下载管理、Room 数据、后台服务及其资源）
+- bilimiao：`upstream/bilimiao2/`（`bilimiao-comm`、`bilimiao-download`、`bilimiao-compose`、`bilimiao-cover`、`bilimiao-grpc`、`danmaku-engine` 和播放服务）
+
+上游提交版本、模块清单和许可证说明见 [upstream/UPSTREAM_SOURCES.md](upstream/UPSTREAM_SOURCES.md)。
+
+注意：源码已完整保存到仓库；Gradle 模块接入、应用生命周期/账号 Cookie 桥接、播放器与下载入口接线仍需集成验证。源码导入成功不等于这些功能已在 APK 中启用。
