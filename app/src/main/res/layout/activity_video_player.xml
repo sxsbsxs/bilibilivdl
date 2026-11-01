@@ -12,6 +12,13 @@
     <com.google.android.material.button.MaterialButton android:id="@+id/danmaku_button" android:layout_width="wrap_content" android:layout_height="44dp" android:layout_marginStart="8dp" android:text="弹幕" android:textAllCaps="false" app:cornerRadius="12dp"/>
     <com.google.android.material.button.MaterialButton android:id="@+id/player_download" android:layout_width="wrap_content" android:layout_height="44dp" android:layout_marginStart="8dp" android:text="下载" android:textAllCaps="false" app:cornerRadius="12dp"/>
    </LinearLayout>
+   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+    <com.google.android.material.button.MaterialButton android:id="@+id/video_like" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:text="点赞" android:textAllCaps="false"/>
+    <com.google.android.material.button.MaterialButton android:id="@+id/video_coin" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:text="投币" android:textAllCaps="false"/>
+    <com.google.android.material.button.MaterialButton android:id="@+id/video_favorite" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:text="收藏" android:textAllCaps="false"/>
+    <com.google.android.material.button.MaterialButton android:id="@+id/video_triple" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:text="三连" android:textAllCaps="false"/>
+   </LinearLayout>
+   <com.google.android.material.button.MaterialButton android:id="@+id/danmaku_send" android:layout_width="wrap_content" android:layout_height="40dp" android:layout_marginTop="4dp" android:text="发送弹幕" android:textAllCaps="false"/>
    <TextView android:id="@+id/player_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="正在获取播放地址…" android:textColor="@color/text_secondary" android:textSize="12sp"/>
    <TextView android:id="@+id/download_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:textColor="@color/text_secondary" android:textSize="12sp"/>
    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="评论" android:textColor="@color/text_primary" android:textSize="18sp" android:textStyle="bold"/>

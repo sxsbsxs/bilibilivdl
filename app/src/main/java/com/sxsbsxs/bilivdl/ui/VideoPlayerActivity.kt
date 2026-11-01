@@ -45,6 +45,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentHasMore = true
     private var commentLoading = false
     private var commentSort = 3
+    private var videoLiked = false
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
     private val aid by lazy { intent.getLongExtra(EXTRA_AID, 0L) }
     private val cookie by lazy { BiliSession.cookie(this) }
@@ -69,6 +70,11 @@ class VideoPlayerActivity : AppCompatActivity() {
             resetComments()
         }
         b.commentSend.setOnClickListener { sendComment() }
+        b.videoLike.setOnClickListener { toggleVideoLike() }
+        b.videoCoin.setOnClickListener { showCoinDialog() }
+        b.videoFavorite.setOnClickListener { showFavoriteFolders() }
+        b.videoTriple.setOnClickListener { tripleAction() }
+        b.danmakuSend.setOnClickListener { showDanmakuComposer() }
         b.commentsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 val lm = rv.layoutManager as LinearLayoutManager
@@ -244,6 +250,133 @@ class VideoPlayerActivity : AppCompatActivity() {
                 resetComments()
             } catch (e: Exception) { b.commentsStatus.text = e.message ?: "发送失败" }
         }
+    }
+
+
+    private fun requireAid(): Long {
+        if (aid <= 0L) error("当前视频缺少 AV 号，无法执行互动")
+        return aid
+    }
+
+    private fun toggleVideoLike() {
+        lifecycleScope.launch {
+            try {
+                val target = !videoLiked
+                withContext(Dispatchers.IO) {
+                    BiliVideoActionApi.like(requireAid(), target, cookie)
+                }
+                videoLiked = target
+                b.videoLike.text = if (target) "已点赞" else "点赞"
+                b.playerStatus.text = if (target) "视频点赞成功" else "已取消点赞"
+            } catch (e: Exception) {
+                b.playerStatus.text = e.message ?: "视频点赞失败"
+            }
+        }
+    }
+
+    private fun showCoinDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("给视频投币")
+            .setItems(arrayOf("投 1 枚硬币", "投 2 枚硬币", "投币并点赞")) { _, which ->
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            BiliVideoActionApi.coin(requireAid(), if (which == 1) 2 else 1, which == 2, cookie)
+                        }
+                        b.playerStatus.text = if (which == 2) "投币并点赞成功" else "投币成功"
+                    } catch (e: Exception) {
+                        b.playerStatus.text = e.message ?: "投币失败"
+                    }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showFavoriteFolders() {
+        if (cookie.isBlank()) {
+            b.playerStatus.text = "收藏需要先登录 B站账号"
+            return
+        }
+        b.playerStatus.text = "正在读取收藏夹…"
+        lifecycleScope.launch {
+            try {
+                val folders = withContext(Dispatchers.IO) {
+                    BiliVideoActionApi.favoriteFolders(cookie)
+                }
+                if (folders.isEmpty()) {
+                    b.playerStatus.text = "没有可用的收藏夹"
+                    return@launch
+                }
+                MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                    .setTitle("选择收藏夹")
+                    .setItems(folders.map { it.second }.toTypedArray()) { _, index ->
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    BiliVideoActionApi.addFavorite(requireAid(), folders[index].first, cookie)
+                                }
+                                b.playerStatus.text = "已收藏到「${folders[index].second}」"
+                            } catch (e: Exception) {
+                                b.playerStatus.text = e.message ?: "收藏失败"
+                            }
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            } catch (e: Exception) {
+                b.playerStatus.text = e.message ?: "读取收藏夹失败"
+            }
+        }
+    }
+
+    private fun tripleAction() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("一键三连")
+            .setMessage("将尝试执行 B站一键三连操作。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("确认") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            BiliVideoActionApi.triple(requireAid(), cookie)
+                        }
+                        videoLiked = true
+                        b.videoLike.text = "已点赞"
+                        b.playerStatus.text = "一键三连成功"
+                    } catch (e: Exception) {
+                        b.playerStatus.text = e.message ?: "一键三连失败"
+                    }
+                }
+            }.show()
+    }
+
+    private fun showDanmakuComposer() {
+        val input = EditText(this).apply {
+            hint = "输入弹幕内容"
+            maxLines = 2
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("发送弹幕")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("发送") { _, _ ->
+                val message = input.text?.toString()?.trim().orEmpty()
+                lifecycleScope.launch {
+                    try {
+                        val current = exo?.currentPosition ?: 0L
+                        val currentCid = info?.cid ?: error("播放信息尚未准备好")
+                        withContext(Dispatchers.IO) {
+                            BiliVideoActionApi.sendDanmaku(
+                                requireAid(), currentCid, current, message, cookie
+                            )
+                        }
+                        b.playerStatus.text = "弹幕发送成功"
+                    } catch (e: Exception) {
+                        b.playerStatus.text = e.message ?: "弹幕发送失败"
+                    }
+                }
+            }.show()
     }
 
     override fun onStop() { exo?.pause(); super.onStop() }
