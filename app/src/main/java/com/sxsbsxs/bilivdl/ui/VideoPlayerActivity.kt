@@ -158,7 +158,15 @@ class VideoPlayerActivity : AppCompatActivity() {
                 videoLiked = if (cookie.isNotBlank() && aid > 0L) {
                     runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }.getOrDefault(false)
                 } else false
-                b.videoLike.text = if (videoLiked) "已点赞" else "点赞"
+                b.videoLike.text = (if (videoLiked) "已赞 " else "点赞 ") + formatCount(p.likeCount)
+                b.videoCoin.text = "投币 " + formatCount(p.coinCount)
+                b.videoFavorite.text = "收藏 " + formatCount(p.favoriteCount)
+                b.shareVideoButton.text = "分享 " + formatCount(p.shareCount)
+                b.commentsTitle.text = "评论区 · " + formatCount(p.replyCount)
+                b.playerExtraStats.text = listOf(
+                    p.category,
+                    if (p.duration > 0) "${p.duration / 60}:${(p.duration % 60).toString().padStart(2, '0')}" else ""
+                ).filter { it.isNotBlank() }.joinToString("  ·  ")
                 val authorText = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { p.author }
                 if (authorText.isNotBlank()) b.playerAuthor.text = "UP主 · $authorText"
                 b.playerStats.text = listOf(
@@ -626,6 +634,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 (b.commentsList.adapter as CommentAdapter).submit(result.comments, append = !reset)
                 commentPage = page + 1
                 commentHasMore = result.hasMore
+                b.commentsTitle.text = "评论区 · " + formatCount(result.total.toLong())
                 b.commentsStatus.text = "评论 · ${result.total} 条" + if (commentHasMore) " · 上滑加载更多" else " · 已加载完"
             } catch (e: Exception) {
                 b.commentsStatus.text = "评论加载失败：${e.message ?: "网络异常"}"
@@ -689,7 +698,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     BilimiaoApiBridge.likeVideo(requireAid(), target)
                 }
                 videoLiked = target
-                b.videoLike.text = if (target) "已点赞" else "点赞"
+                b.videoLike.text = (if (target) "已赞 " else "点赞 ") + formatCount(((info?.likeCount ?: 0L) + if (target) 1L else -1L).coerceAtLeast(0L))
                 b.playerStatus.text = if (target) "视频点赞成功" else "已取消点赞"
             } catch (e: Exception) {
                 b.playerStatus.text = e.message ?: "视频点赞失败"
@@ -709,7 +718,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                         }
                         if (which == 2) {
                             videoLiked = true
-                            b.videoLike.text = "已点赞"
+                            b.videoLike.text = "已赞 " + formatCount((info?.likeCount ?: 0L) + 1L)
                         }
                         b.playerStatus.text = if (which == 2) "投币并点赞成功" else "投币成功"
                     } catch (e: Exception) {
@@ -771,7 +780,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                             BilimiaoApiBridge.triple(requireAid())
                         }
                         videoLiked = true
-                        b.videoLike.text = "已点赞"
+                        b.videoLike.text = "已赞 " + formatCount((info?.likeCount ?: 0L) + 1L)
                         b.playerStatus.text = "一键三连成功"
                     } catch (e: Exception) {
                         b.playerStatus.text = e.message ?: "一键三连失败"

@@ -54,6 +54,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             (activity as? com.sxsbsxs.bilivdl.MainActivity)?.openAccountPage()
         }
         b.homeSearchButton.setOnClickListener { openSearch() }
+        b.homeSearchEntry.setOnClickListener { openSearch() }
+        b.homeSearchInput.setOnClickListener { b.homeSearchInput.requestFocus() }
         searchAdapter = VideoAdapter { video ->
             startActivity(Intent(requireContext(), VideoPlayerActivity::class.java).apply {
                 putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
