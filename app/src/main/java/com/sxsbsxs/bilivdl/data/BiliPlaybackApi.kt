@@ -82,7 +82,7 @@ object BiliPlaybackApi {
                     val audio = videoInfo.dashAudio.firstOrNull {
                         it.id == dash.audioId && it.baseUrl.isNotBlank()
                     } ?: videoInfo.dashAudio.firstOrNull { it.baseUrl.isNotBlank() }
-                    val audioUrl = audio?.baseUrl?.ifBlank { audio.backupUrl.firstOrNull().orEmpty() }
+                    val audioUrl = audio?.let { it.baseUrl.ifBlank { it.backupUrl.firstOrNull().orEmpty() } }
                     PlaybackInfo(
                         cid = cid,
                         url = videoUrl,
