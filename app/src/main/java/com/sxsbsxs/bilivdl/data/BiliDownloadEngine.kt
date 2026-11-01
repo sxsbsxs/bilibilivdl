@@ -55,17 +55,15 @@ object BiliDownloadEngine {
                 val segmentFiles = playback.segments.mapIndexed { index, _ ->
                     File(dir, "$safe.segment$index.tmp")
                 }
-                try {
-                    segmentFiles.forEachIndexed { index, segmentFile ->
-                        transfer(playback.segments[index], segmentFile, headers) { n, _ ->
-                            val completed = segmentFiles.take(index).sumOf { it.length() } + n
-                            onProgress(completed, -1, "下载视频分段 ${index + 1}/${segmentFiles.size}")
-                        }
+                segmentFiles.forEachIndexed { index, segmentFile ->
+                    transfer(playback.segments[index], segmentFile, headers) { n, _ ->
+                        val completed = segmentFiles.take(index).sumOf { it.length() } + n
+                        onProgress(completed, -1, "下载视频分段 ${index + 1}/${segmentFiles.size}")
                     }
-                    muxDurlSegments(segmentFiles, merged)
-                } finally {
-                    segmentFiles.forEach { it.delete() }
                 }
+                muxDurlSegments(segmentFiles, merged)
+                // Keep partial segments when cancelled; remove only after a successful mux.
+                segmentFiles.forEach { it.delete() }
             } else {
                 transfer(playback.url, merged, headers) { n, total -> onProgress(n, total, "下载视频") }
             }
