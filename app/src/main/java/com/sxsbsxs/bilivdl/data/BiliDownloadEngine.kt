@@ -126,10 +126,11 @@ object BiliDownloadEngine {
             val audioTrack = (0 until audioExtractor.trackCount).firstOrNull {
                 audioExtractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             } ?: error("下载的音频资源中没有音频轨道")
-            muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val outVideo = muxer.addTrack(videoExtractor.getTrackFormat(videoTrack))
-            val outAudio = muxer.addTrack(audioExtractor.getTrackFormat(audioTrack))
-            muxer.start()
+            val activeMuxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer = activeMuxer
+            val outVideo = activeMuxer.addTrack(videoExtractor.getTrackFormat(videoTrack))
+            val outAudio = activeMuxer.addTrack(audioExtractor.getTrackFormat(audioTrack))
+            activeMuxer.start()
             videoExtractor.selectTrack(videoTrack)
             audioExtractor.selectTrack(audioTrack)
             val videoBuffer = ByteBuffer.allocate(4 * 1024 * 1024)
@@ -149,11 +150,11 @@ object BiliDownloadEngine {
                     continue
                 }
                 info.set(0, size, extractor.sampleTime, extractor.sampleFlags)
-                muxer.writeSampleData(targetTrack, buffer, info)
+                activeMuxer.writeSampleData(targetTrack, buffer, info)
                 extractor.advance()
                 if (takeVideo) videoTime = extractor.sampleTime else audioTime = extractor.sampleTime
             }
-            muxer.stop()
+            activeMuxer.stop()
         } finally {
             runCatching { muxer?.release() }
             videoExtractor.release()
