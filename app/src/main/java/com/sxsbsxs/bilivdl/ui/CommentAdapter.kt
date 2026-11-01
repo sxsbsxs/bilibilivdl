@@ -64,7 +64,7 @@ class CommentAdapter(
         fun bind(comment: VideoComment) {
             binding.commentUser.text = comment.user + if (comment.isUp) "  UP主" else ""
             val face = comment.face.trim().let { if (it.startsWith("//")) "https:$it" else it }
-            Glide.with(binding.commentAvatar).load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
+            Glide.with(binding.commentAvatar).load(face.takeIf { it.isNotBlank() }?.let { GlideUrl(it, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()) })
                 .placeholder(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar)
                 .error(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar).circleCrop().into(binding.commentAvatar)
             binding.commentTime.text = if (comment.ctime > 0L) SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(comment.ctime * 1000)) else if (comment.level > 0) "LV${comment.level}" else ""
