@@ -56,18 +56,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeSearchButton.setOnClickListener { openSearch() }
         b.homeSearchEntry.setOnClickListener { openSearch() }
         b.homeSearchInput.setOnClickListener { b.homeSearchInput.requestFocus() }
-        searchAdapter = VideoAdapter { video ->
-            startActivity(Intent(requireContext(), VideoPlayerActivity::class.java).apply {
-                putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
-                putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
-                putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
-                putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
-                putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
-            })
-        }
-        b.homeSearchResults.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext())
-        b.homeSearchResults.adapter = searchAdapter
-        bangumiSearchAdapter = BangumiResultAdapter(::openBangumiFromHome)
         b.homeSearchVideoMode.setOnClickListener { setHomeSearchMode(false) }
         b.homeSearchBangumiMode.setOnClickListener { setHomeSearchMode(true) }
         setHomeSearchMode(false)
@@ -114,7 +102,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeSearchVideoMode.alpha = if (bangumi) 0.65f else 1f
         b.homeSearchBangumiMode.alpha = if (bangumi) 1f else 0.65f
         b.homeSearchInput.hint = if (bangumi) "搜索番剧名称" else "搜索视频、UP主、BV号或AV号"
-        b.homeSearchResults.adapter = if (bangumi) bangumiSearchAdapter else searchAdapter
     }
 
     private fun openBangumiFromHome(item: BangumiSearchResult) {
@@ -167,17 +154,23 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             try {
                 if (bangumiSearchMode) {
                     val result = withContext(Dispatchers.IO) { BangumiApiBridge.search(keyword) }
-                    bangumiSearchAdapter.submit(result)
-                    b.homeSearchResults.visibility = if (result.isEmpty()) View.GONE else View.VISIBLE
-                    b.homeSearchStatus.text = if (result.isEmpty()) "没有找到相关番剧" else "找到 ${result.size} 部番剧 · 首页推荐仍在下方"
+                    if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关番剧"
+                    else startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
+                        putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
+                        putExtra(SearchResultsActivity.EXTRA_BANGUMI, true)
+                        putExtra(SearchResultsActivity.EXTRA_BANGUMI_RESULTS, ArrayList(result))
+                    })
                 } else {
                     val result = withContext(Dispatchers.IO) {
                         if (BiliApi.resolveVideoId(keyword) != null) listOf(BiliVideoLookup.get(keyword))
                         else BiliApi.searchVideos(keyword)
                     }
-                    searchAdapter.submitList(result)
-                    b.homeSearchResults.visibility = if (result.isEmpty()) View.GONE else View.VISIBLE
-                    b.homeSearchStatus.text = if (result.isEmpty()) "没有找到相关视频" else "找到 ${result.size} 个视频 · 首页推荐仍在下方"
+                    if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关视频"
+                    else startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
+                        putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
+                        putExtra(SearchResultsActivity.EXTRA_BANGUMI, false)
+                        putExtra(SearchResultsActivity.EXTRA_VIDEO_RESULTS, ArrayList(result))
+                    })
                 }
             } catch (e: Exception) {
                 b.homeSearchStatus.text = "搜索失败：${e.message ?: "网络异常"}"

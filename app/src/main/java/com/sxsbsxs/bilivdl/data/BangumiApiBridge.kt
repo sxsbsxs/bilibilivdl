@@ -9,7 +9,7 @@ import org.json.JSONObject
 
 data class BangumiEpisode(val id: Long, val aid: Long, val cid: Long, val bvid: String, val title: String, val longTitle: String, val cover: String, val durationMs: Long)
 data class BangumiSeason(val seasonId: Long, val title: String, val cover: String, val description: String, val episodes: List<BangumiEpisode>)
-data class BangumiSearchResult(val seasonId: Long, val title: String, val cover: String, val description: String, val newestEpisode: String = "")
+data class BangumiSearchResult(val seasonId: Long, val title: String, val cover: String, val description: String, val newestEpisode: String = "") : java.io.Serializable
 
 object BangumiApiBridge {
     private val api = BangumiAPI()
