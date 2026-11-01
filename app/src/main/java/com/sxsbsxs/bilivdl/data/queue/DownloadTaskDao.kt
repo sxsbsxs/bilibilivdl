@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
  @Upsert suspend fun upsertAll(tasks: List<DownloadTaskEntity>)
  @Query("SELECT * FROM download_tasks_v2 ORDER BY createdAt DESC") fun observeAll(): Flow<List<DownloadTaskEntity>>
  @Query("SELECT * FROM download_tasks_v2 WHERE taskId = :id LIMIT 1") suspend fun find(id: String): DownloadTaskEntity?
+ @Query("SELECT * FROM download_tasks_v2 WHERE status = :status") suspend fun tasksByStatus(status: String): List<DownloadTaskEntity>
  @Query("UPDATE download_tasks_v2 SET status = :status, progress = :progress, updatedAt = :now WHERE taskId = :id") suspend fun setState(id: String, status: String, progress: String, now: Long = System.currentTimeMillis())
  @Query("DELETE FROM download_tasks_v2 WHERE status IN ('completed','failed','cancelled')") suspend fun clearHistory()
  @Query("DELETE FROM download_tasks_v2 WHERE status = 'completed'") suspend fun clearCompleted()
