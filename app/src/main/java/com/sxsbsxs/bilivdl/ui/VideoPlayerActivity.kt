@@ -108,6 +108,11 @@ class VideoPlayerActivity : AppCompatActivity() {
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentsList.layoutManager = LinearLayoutManager(this)
         b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
+        // Keep the video page compact: interaction controls live in the More menu.
+        b.videoLike.visibility = View.GONE
+        b.videoCoin.visibility = View.GONE
+        b.videoFavorite.visibility = View.GONE
+        b.danmakuSend.visibility = View.GONE
         relatedAdapter = VideoAdapter { video ->
             startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
                 putExtra(EXTRA_BVID, video.bvid)
@@ -190,23 +195,34 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun showMoreActions() {
-        val labels = arrayOf("分享视频链接", "选择分P / 番剧选集", if (danmakuEnabled) "关闭弹幕" else "开启弹幕", "字幕设置", "发送弹幕")
+        val labels = arrayOf(
+            "点赞 / 取消点赞", "投币", "收藏", "分享视频链接",
+            "选择分P / 番剧选集", if (danmakuEnabled) "关闭弹幕" else "开启弹幕",
+            "字幕设置", "发送弹幕"
+        )
         MaterialAlertDialogBuilder(this).setTitle("更多功能")
             .setItems(labels) { _, which ->
                 when (which) {
-                    0 -> shareCurrentVideo()
-                    1 -> showParts()
-                    2 -> b.danmakuButton.performClick()
-                    3 -> showSubtitles()
-                    4 -> showDanmakuComposer()
+                    0 -> toggleVideoLike()
+                    1 -> showCoinDialog()
+                    2 -> showFavoriteFolders()
+                    3 -> shareCurrentVideo()
+                    4 -> showParts()
+                    5 -> b.danmakuButton.performClick()
+                    6 -> showSubtitles()
+                    7 -> showDanmakuComposer()
                 }
             }.show()
     }
 
-    private fun formatCount(value: Long): String = when {
-        value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
-        value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1万", value / 10_000.0)
-        else -> value.toString()
+    private fun formatCount(value: Long): String {
+        if (value < 10_000L) return value.toString()
+        val divisor = if (value >= 100_000_000L) 100_000_000L else 10_000L
+        val suffix = if (divisor == 100_000_000L) "亿" else "万"
+        val tenths = value / (divisor / 10L)
+        val whole = tenths / 10L
+        val fraction = tenths % 10L
+        return if (fraction == 0L) "$whole$suffix" else "$whole.$fraction$suffix"
     }
 
     private fun load(qn: Int) {
@@ -215,6 +231,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             try {
                 val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
+                if (p.title.isNotBlank()) b.playerTitle.text = p.title
                 videoLiked = if (cookie.isNotBlank() && aid > 0L) {
                     runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }.getOrDefault(false)
                 } else false
