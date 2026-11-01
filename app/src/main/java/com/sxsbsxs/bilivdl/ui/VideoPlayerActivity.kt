@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
+import com.sxsbsxs.bilivdl.data.BangumiApiBridge
 import com.sxsbsxs.bilivdl.data.BiliInteractionApi
 import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
@@ -38,6 +39,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         const val EXTRA_BVID = "bvid"
         const val EXTRA_AID = "aid"
         const val EXTRA_TITLE = "title"
+        const val EXTRA_EP_ID = "ep_id"
+        const val EXTRA_SEASON_ID = "season_id"
     }
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
@@ -55,6 +58,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 0.75f)
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
     private val aid by lazy { intent.getLongExtra(EXTRA_AID, 0L) }
+    private val epId by lazy { intent.getLongExtra(EXTRA_EP_ID, 0L) }
+    private val seasonId by lazy { intent.getLongExtra(EXTRA_SEASON_ID, 0L) }
     private val cookie by lazy { BiliSession.cookie(this) }
 
     override fun onCreate(saved: Bundle?) {
@@ -103,10 +108,10 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.playerStatus.text = "正在获取播放地址…"
         lifecycleScope.launch {
             try {
-                val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
+                val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
                 selectedPartIndex = p.selectedPart
-                b.partButton.text = if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
+                b.partButton.text = if (epId > 0L) "番剧选集" else if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
                 exo?.release()
                 val headers = mutableMapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com", "Accept" to "*/*")
                 if (cookie.isNotBlank()) headers["Cookie"] = cookie
@@ -161,6 +166,36 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun showParts() {
         val p = info ?: return
+        if (epId > 0L) {
+            b.playerStatus.text = "正在获取番剧剧集…"
+            lifecycleScope.launch {
+                try {
+                    val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(seasonId, epId) }
+                    if (season.episodes.isEmpty()) error("没有获取到本季剧集")
+                    val labels = season.episodes.map { ep ->
+                        listOf(ep.title, ep.longTitle).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+                    }.toTypedArray()
+                    val selected = season.episodes.indexOfFirst { it.id == epId }.coerceAtLeast(0)
+                    MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                        .setTitle(season.title.ifBlank { "选择番剧剧集" })
+                        .setSingleChoiceItems(labels, selected) { dialog, which ->
+                            dialog.dismiss()
+                            val ep = season.episodes[which]
+                            if (ep.id != epId) {
+                                startActivity(android.content.Intent(this@VideoPlayerActivity, VideoPlayerActivity::class.java).apply {
+                                    putExtra(EXTRA_EP_ID, ep.id)
+                                    putExtra(EXTRA_SEASON_ID, season.seasonId)
+                                    putExtra(EXTRA_TITLE, listOf(season.title, ep.title, ep.longTitle).filter { it.isNotBlank() }.joinToString(" · "))
+                                })
+                            }
+                        }.setNegativeButton("取消", null).show()
+                    b.playerStatus.text = "番剧剧集已加载"
+                } catch (e: Exception) {
+                    b.playerStatus.text = "番剧剧集加载失败：${e.message}"
+                }
+            }
+            return
+        }
         if (p.parts.size <= 1) {
             b.playerStatus.text = "当前视频只有一个分P"
             return
@@ -453,7 +488,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             }.show()
     }
 
-    private fun positionKey(): String = (bvid.ifBlank { "av$aid" }) + "_p" + selectedPartIndex
+    private fun positionKey(): String = if (epId > 0L) "ep$epId" else (bvid.ifBlank { "av$aid" }) + "_p" + selectedPartIndex
 
     override fun onStop() {
         exo?.let { player ->
