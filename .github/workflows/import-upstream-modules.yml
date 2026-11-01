@@ -31,7 +31,7 @@ jobs:
           git -C /tmp/bilimiao2 checkout eff134d715c3fd13202ebd029261d1fbc33d2171
       - name: Vendor BVD downloader source and its resources
         run: |
-          mkdir -p upstream/BiliDownload
+          mkdir -p upstream/BiliDownload/app/src/main/java/cc/kafuu/bilidownload upstream/BiliDownload/app/src/main/res upstream/BiliDownload/app/src/main/cpp upstream/BiliDownload/app/src/main/assets upstream/BiliDownload/app/libs upstream/BiliDownload/app/schemas
           rsync -a --delete /tmp/BiliDownload/app/src/main/java/cc/kafuu/bilidownload/ upstream/BiliDownload/app/src/main/java/cc/kafuu/bilidownload/
           rsync -a --delete /tmp/BiliDownload/app/src/main/res/ upstream/BiliDownload/app/src/main/res/
           rsync -a --delete /tmp/BiliDownload/app/src/main/cpp/ upstream/BiliDownload/app/src/main/cpp/ || true
