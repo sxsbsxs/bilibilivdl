@@ -307,8 +307,6 @@ object BiliPlaybackApi {
                 ownerFace = owner?.optString("face").orEmpty(),
                 ownerMid = owner?.optLong("mid") ?: 0L,
                 ownerSign = runCatching { authorSign(owner?.optLong("mid") ?: 0L, cookie) }.getOrDefault(""),
-                ownerMid = owner?.optLong("mid") ?: 0L,
-                ownerSign = runCatching { authorSign(owner?.optLong("mid") ?: 0L, cookie) }.getOrDefault(""),
                 category = d.optString("tname"), duration = d.optInt("duration")
             )
         }
