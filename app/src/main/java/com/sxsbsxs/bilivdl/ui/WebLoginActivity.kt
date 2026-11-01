@@ -68,12 +68,12 @@ class WebLoginActivity : AppCompatActivity() {
             }
         }
         status.text = "正在打开 B 站官方登录页面…"
-        webView.loadUrl("https://passport.bilibili.com/login")
+        webView.loadUrl("https://passport.bilibili.com/h5-app/passport/login")
     }
 
     private fun validateMobileLogin() {
         if (validating || finished) return
-        val cookies = CookieManager.getInstance().getCookie("https://www.bilibili.com").orEmpty()
+        val cookies = CookieManager.getInstance().getCookie("https://bilibili.com").orEmpty()
         if (!cookies.contains("SESSDATA=") || !cookies.contains("DedeUserID=")) {
             status.text = "请在 B 站页面完成登录"
             return
