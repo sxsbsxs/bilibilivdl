@@ -8,7 +8,8 @@
     <TextView android:id="@+id/account_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="正在检查账号状态…" android:textColor="@color/text_secondary" android:textSize="13sp"/>
    </LinearLayout>
   </com.google.android.material.card.MaterialCardView>
-  <com.google.android.material.button.MaterialButton android:id="@+id/account_login" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="18dp" android:text="B 站扫码登录" android:textAllCaps="false"/>
+  <com.google.android.material.button.MaterialButton android:id="@+id/account_login" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="18dp" android:text="BVD 同款网页登录" android:textAllCaps="false"/>
+  <com.google.android.material.button.MaterialButton android:id="@+id/account_qr_login" android:layout_width="match_parent" android:layout_height="48dp" android:text="使用 B 站 APP 扫码登录" android:textAllCaps="false" style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
   <com.google.android.material.button.MaterialButton android:id="@+id/account_refresh" android:layout_width="match_parent" android:layout_height="50dp" android:text="检查登录状态" android:textAllCaps="false" style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
   <com.google.android.material.button.MaterialButton android:id="@+id/account_logout" android:layout_width="match_parent" android:layout_height="50dp" android:text="退出登录并清除凭据" android:textAllCaps="false" style="@style/Widget.MaterialComponents.Button.TextButton"/>
   <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="登录说明：使用 B 站 APP 扫描二维码并确认登录。应用会验证登录状态后保存会话信息，请勿向任何人分享登录凭据。" android:textColor="@color/text_secondary" android:textSize="12sp"/>
