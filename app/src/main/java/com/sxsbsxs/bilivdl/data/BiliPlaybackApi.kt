@@ -239,7 +239,7 @@ object BiliPlaybackApi {
                 videoUrl = bestUrl(video.base_url, video.backup_url),
                 audioUrl = audio?.let { bestUrl(it.base_url, it.backup_url) },
                 videoBackupUrls = video.backup_url.orEmpty().filter { it.isNotBlank() && it != video.base_url },
-                audioBackupUrls = audio?.backup_url.orEmpty().filter { it.isNotBlank() && it != audio.base_url },
+                audioBackupUrls = audio?.let { selectedAudio -> selectedAudio.backup_url.orEmpty().filter { it.isNotBlank() && it != selectedAudio.base_url } }.orEmpty(),
                 parts = parts,
                 selectedPart = selectedIndex
             )
