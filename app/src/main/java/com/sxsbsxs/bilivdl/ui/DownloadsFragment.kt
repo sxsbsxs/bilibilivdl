@@ -142,7 +142,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         for (i in 0 until old.length()) {
             val item = old.optJSONObject(i) ?: continue
             val status = item.optString("status")
-            val remove = if (completedOnly) status == "completed" else status != "downloading"
+            val remove = if (completedOnly) status == "completed" else status in setOf("completed", "failed", "cancelled")
             if (!remove) kept.put(item)
         }
         prefs.edit().putString("tasks", kept.toString()).apply()
