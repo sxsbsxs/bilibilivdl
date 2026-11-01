@@ -155,22 +155,28 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 if (bangumiSearchMode) {
                     val result = withContext(Dispatchers.IO) { BangumiApiBridge.search(keyword) }
                     if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关番剧"
-                    else startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
-                        putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
-                        putExtra(SearchResultsActivity.EXTRA_BANGUMI, true)
-                        putExtra(SearchResultsActivity.EXTRA_BANGUMI_RESULTS, ArrayList(result))
-                    })
+                    else {
+                        b.homeSearchStatus.visibility = View.GONE
+                        startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
+                            putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
+                            putExtra(SearchResultsActivity.EXTRA_BANGUMI, true)
+                            putExtra(SearchResultsActivity.EXTRA_BANGUMI_RESULTS, ArrayList(result))
+                        })
+                    }
                 } else {
                     val result = withContext(Dispatchers.IO) {
                         if (BiliApi.resolveVideoId(keyword) != null) listOf(BiliVideoLookup.get(keyword))
                         else BiliApi.searchVideos(keyword)
                     }
                     if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关视频"
-                    else startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
-                        putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
-                        putExtra(SearchResultsActivity.EXTRA_BANGUMI, false)
-                        putExtra(SearchResultsActivity.EXTRA_VIDEO_RESULTS, ArrayList(result))
-                    })
+                    else {
+                        b.homeSearchStatus.visibility = View.GONE
+                        startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
+                            putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
+                            putExtra(SearchResultsActivity.EXTRA_BANGUMI, false)
+                            putExtra(SearchResultsActivity.EXTRA_VIDEO_RESULTS, ArrayList(result))
+                        })
+                    }
                 }
             } catch (e: Exception) {
                 b.homeSearchStatus.text = "搜索失败：${e.message ?: "网络异常"}"
