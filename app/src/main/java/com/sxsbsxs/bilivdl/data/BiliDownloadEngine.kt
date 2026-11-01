@@ -62,11 +62,7 @@ object BiliDownloadEngine {
                             onProgress(completed, -1, "下载视频分段 ${index + 1}/${segmentFiles.size}")
                         }
                     }
-                    java.io.FileOutputStream(merged).use { output ->
-                        segmentFiles.forEach { segmentFile ->
-                            segmentFile.inputStream().use { input -> input.copyTo(output, BUFFER_SIZE) }
-                        }
-                    }
+                    muxDurlSegments(segmentFiles, merged)
                 } finally {
                     segmentFiles.forEach { it.delete() }
                 }
@@ -131,6 +127,68 @@ object BiliDownloadEngine {
         } finally { c.disconnect() }
     }
 
+
+
+    /**
+     * 合并 B站 DURL 的多个 MP4 分段。不能直接拼接 MP4 文件字节；
+     * 这里按媒体轨道读取样本，并为每段增加前一段的时间偏移。
+     */
+    private fun muxDurlSegments(segments: List<File>, output: File) {
+        require(segments.isNotEmpty()) { "没有可合并的视频分段" }
+        val muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        val outputTracks = linkedMapOf<String, Int>()
+        val buffer = ByteBuffer.allocate(16 * 1024 * 1024)
+        val info = MediaCodec.BufferInfo()
+        var started = false
+        var timeOffsetUs = 0L
+        try {
+            segments.forEachIndexed { segmentIndex, file ->
+                val extractor = MediaExtractor()
+                try {
+                    extractor.setDataSource(file.absolutePath)
+                    val trackMap = linkedMapOf<Int, Int>()
+                    var segmentDurationUs = 0L
+                    for (track in 0 until extractor.trackCount) {
+                        val format = extractor.getTrackFormat(track)
+                        val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                        val outTrack = outputTracks[mime] ?: run {
+                            if (started) error("DURL 分段媒体轨道发生变化：" + mime)
+                            muxer.addTrack(format).also { outputTracks[mime] = it }
+                        }
+                        trackMap[track] = outTrack
+                        if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                            segmentDurationUs = maxOf(segmentDurationUs, format.getLong(MediaFormat.KEY_DURATION))
+                        }
+                        extractor.selectTrack(track)
+                    }
+                    if (trackMap.isEmpty()) error("第 " + (segmentIndex + 1) + " 段没有可识别的媒体轨道")
+                    if (!started) {
+                        muxer.start()
+                        started = true
+                    }
+                    while (true) {
+                        val track = extractor.sampleTrackIndex
+                        if (track < 0) break
+                        val outTrack = trackMap[track] ?: run { extractor.advance(); continue }
+                        buffer.clear()
+                        val size = extractor.readSampleData(buffer, 0)
+                        if (size < 0) break
+                        val pts = extractor.sampleTime.coerceAtLeast(0L) + timeOffsetUs
+                        info.set(0, size, pts, extractor.sampleFlags)
+                        muxer.writeSampleData(outTrack, buffer, info)
+                        extractor.advance()
+                    }
+                    timeOffsetUs += segmentDurationUs
+                } finally {
+                    extractor.release()
+                }
+            }
+            if (!started) error("所有 DURL 分段均无法解析")
+            muxer.stop()
+        } finally {
+            runCatching { muxer.release() }
+        }
+    }
 
     /** 使用 Android MediaExtractor/MediaMuxer 直接复制 DASH 轨道，不重新编码。 */
     private fun muxDashTracks(video: File, audio: File, output: File) {
