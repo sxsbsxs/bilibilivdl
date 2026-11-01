@@ -86,7 +86,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentPage = 1
     private var commentHasMore = true
     private var commentLoading = false
-    private var commentSort = 3
+    private var commentSort = 0
     private var videoLiked = false
     private var playbackSpeedIndex = 0
     private var pendingSeekPosition = 0L
@@ -106,13 +106,9 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         b.playerAuthor.text = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { "哔哩哔哩视频" }
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
+        b.commentSort.text = "按热度"
         b.commentsList.layoutManager = LinearLayoutManager(this)
-        b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
-        // Keep the video page compact: interaction controls live in the More menu.
-        b.videoLike.visibility = View.GONE
-        b.videoCoin.visibility = View.GONE
-        b.videoFavorite.visibility = View.GONE
-        b.danmakuSend.visibility = View.GONE
+        b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment, ::openUserSpace)
         relatedAdapter = VideoAdapter { video ->
             startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
                 putExtra(EXTRA_BVID, video.bvid)
@@ -145,8 +141,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             true
         }
         b.commentSort.setOnClickListener {
-            commentSort = if (commentSort == 3) 2 else 3
-            b.commentSort.text = if (commentSort == 3) "按热度" else "按时间"
+            commentSort = if (commentSort == 0) 1 else 0
+            b.commentSort.text = if (commentSort == 0) "按热度" else "按时间"
             resetComments()
         }
         b.commentSend.setOnClickListener { sendComment() }
@@ -725,13 +721,28 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.commentsPage(aid, page, commentSort) }
                 (b.commentsList.adapter as CommentAdapter).submit(result.comments, append = !reset)
                 commentPage = page + 1
-                commentHasMore = result.hasMore
+                commentHasMore = result.hasMore && result.comments.isNotEmpty()
                 b.commentsTitle.text = "评论区 · " + formatCount(result.total.toLong())
                 b.commentsStatus.text = "评论 · ${result.total} 条" + if (commentHasMore) " · 上滑加载更多" else " · 已加载完"
+                // RecyclerView 位于关闭嵌套滚动的 NestedScrollView 中，追加内容后主动检查是否仍接近底部。
+                if (commentHasMore) b.playerScroll.post {
+                    val content = b.playerScroll.getChildAt(0)
+                    if (b.playerCommentsPanel.visibility == View.VISIBLE && content != null &&
+                        b.playerScroll.scrollY + b.playerScroll.height >= content.measuredHeight - 500) {
+                        loadComments(false)
+                    }
+                }
             } catch (e: Exception) {
                 b.commentsStatus.text = "评论加载失败：${e.message ?: "网络异常"}"
             } finally { commentLoading = false }
         }
+    }
+
+    private fun openUserSpace(mid: Long) {
+        if (mid <= 0L) return
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://space.bilibili.com/$mid")))
+        }.onFailure { b.commentsStatus.text = "无法打开用户主页：${it.message}" }
     }
 
     private fun showReplies(comment: VideoComment) {
