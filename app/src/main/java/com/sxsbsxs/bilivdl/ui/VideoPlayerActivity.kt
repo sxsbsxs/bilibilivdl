@@ -449,16 +449,30 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun showDownloadQuality() {
         val p = info
         if (p == null) { b.downloadStatus.text = "请先等待播放地址加载完成"; return }
-        val choices = (if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities)
-            .distinctBy { it.first }.sortedByDescending { it.first }
-        var selected = 0
-        MaterialAlertDialogBuilder(this).setTitle("选择下载清晰度")
-            .setSingleChoiceItems(choices.map { it.second + if (it.first == choices.first().first) " · 推荐" else "" }.toTypedArray(), 0) { _, which ->
-                selected = which
+        b.downloadStatus.text = "正在读取账号可用的下载清晰度…"
+        lifecycleScope.launch {
+            try {
+                val choices = withContext(Dispatchers.IO) {
+                    if (epId <= 0L && aid > 0L && cookie.isNotBlank()) {
+                        runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie) }.getOrDefault(emptyList())
+                    } else emptyList()
+                }.ifEmpty {
+                    (if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities)
+                }.distinctBy { it.first }.sortedByDescending { it.first }
+                if (choices.isEmpty()) error("B站没有返回可用清晰度")
+                var selected = 0
+                MaterialAlertDialogBuilder(this@VideoPlayerActivity).setTitle("选择下载清晰度")
+                    .setSingleChoiceItems(choices.map { it.second + if (it.first == choices.first().first) " · 推荐" else "" }.toTypedArray(), 0) { _, which ->
+                        selected = which
+                    }
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(choices[selected].first) }
+                    .show()
+                b.downloadStatus.text = "已读取 ${choices.size} 档清晰度"
+            } catch (error: Exception) {
+                b.downloadStatus.text = "读取清晰度失败：${error.message ?: "网络异常"}"
             }
-            .setNegativeButton("取消", null)
-            .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(choices[selected].first) }
-            .show()
+        }
     }
 
     private fun loadDownloadStreamOptions(qn: Int) {
@@ -471,7 +485,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val options = withContext(Dispatchers.IO) {
-                    if (epId > 0L) BangumiApiBridge.downloadStreamChoices(epId, p.cid, qn) else BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn)
+                    if (epId > 0L) BangumiApiBridge.downloadStreamChoices(epId, p.cid, qn) else BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn, cookie)
                 }
                 if (options.video.isEmpty()) {
                     startDownload(qn)

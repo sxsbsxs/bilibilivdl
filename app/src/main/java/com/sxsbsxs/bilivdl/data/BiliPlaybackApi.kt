@@ -99,26 +99,63 @@ object BiliPlaybackApi {
         }
     }
 
-    suspend fun downloadStreamChoices(aid: Long, cid: Long, qn: Int): DownloadStreamChoices {
+    suspend fun downloadQualities(aid: Long, cid: Long, cookie: String): List<Pair<Int, String>> {
+        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=127&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json"
+        val root = get(url, cookie)
+        if (root.optInt("code", -1) != 0) {
+            val code = root.optInt("code")
+            error(root.optString("message", "获取可下载清晰度失败") + "（$code）")
+        }
+        val data = root.optJSONObject("data") ?: error("清晰度响应缺少 data")
+        val qualities = data.optJSONArray("accept_quality") ?: return emptyList()
+        val labels = data.optJSONArray("accept_description")
+        return (0 until qualities.length()).mapNotNull { index ->
+            val qn = qualities.optInt(index)
+            if (qn <= 0) null else qn to (labels?.optString(index).orEmpty().ifBlank { "清晰度 $qn" })
+        }.distinctBy { it.first }.sortedByDescending { it.first }
+    }
+
+    suspend fun downloadStreamChoices(aid: Long, cid: Long, qn: Int, cookie: String = ""): DownloadStreamChoices {
+        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json"
+        val root = get(url, cookie)
+        if (root.optInt("code", -1) == 0) {
+            val dash = root.optJSONObject("data")?.optJSONObject("dash")
+            if (dash != null) {
+                val videoArray = dash.optJSONArray("video")
+                val audioArray = dash.optJSONArray("audio")
+                val videos = (0 until (videoArray?.length() ?: 0)).mapNotNull { index ->
+                    val item = videoArray?.optJSONObject(index) ?: return@mapNotNull null
+                    val id = item.optInt("id")
+                    val codec = item.optString("codecs")
+                    val height = item.optInt("height")
+                    val bandwidth = item.optLong("bandwidth")
+                    if (id <= 0 || codec.isBlank()) null else DownloadStreamOption(
+                        id, codec, "${height}P · $codec · ${bandwidth / 1000} kbps", bandwidth
+                    )
+                }.sortedWith(compareByDescending<DownloadStreamOption> { it.id }.thenByDescending { it.bandwidth })
+                val audios = (0 until (audioArray?.length() ?: 0)).mapNotNull { index ->
+                    val item = audioArray?.optJSONObject(index) ?: return@mapNotNull null
+                    val id = item.optInt("id")
+                    val codec = item.optString("codecs")
+                    val bandwidth = item.optLong("bandwidth")
+                    if (id <= 0 || codec.isBlank()) null else DownloadStreamOption(
+                        id, codec, "$codec · ${bandwidth / 1000} kbps", bandwidth
+                    )
+                }.sortedByDescending { it.bandwidth }
+                return DownloadStreamChoices(videos, audios)
+            }
+        }
+        // 兼容 gRPC / 官方接口暂时不可用的情况，仍保留 BiliMiao 的备用实现。
         val data = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
             .getVideoPalyUrl(aid.toString(), cid.toString(), qn, 4048)
         val dash = data.dash ?: return DownloadStreamChoices(emptyList(), emptyList())
         val videos = dash.video.map { item ->
-            DownloadStreamOption(
-                id = item.id,
-                codec = item.codecs,
-                label = item.height.toString() + "P · " + item.codecs + " · " +
-                    (item.bandwidth / 1000).toString() + " kbps",
-                bandwidth = item.bandwidth.toLong()
-            )
+            DownloadStreamOption(item.id, item.codecs,
+                item.height.toString() + "P · " + item.codecs + " · " + (item.bandwidth / 1000).toString() + " kbps",
+                item.bandwidth.toLong())
         }
         val audios = dash.audio.orEmpty().map { item ->
-            DownloadStreamOption(
-                id = item.id,
-                codec = item.codecs,
-                label = item.codecs + " · " + (item.bandwidth / 1000).toString() + " kbps",
-                bandwidth = item.bandwidth.toLong()
-            )
+            DownloadStreamOption(item.id, item.codecs, item.codecs + " · " + (item.bandwidth / 1000).toString() + " kbps", item.bandwidth.toLong())
         }
         return DownloadStreamChoices(videos, audios)
     }

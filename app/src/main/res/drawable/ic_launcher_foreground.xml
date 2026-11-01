@@ -1,61 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- soft floating shadow -->
-    <path android:fillColor="#260F1830"
-        android:pathData="M54,13 C77,13 95,31 95,54 C95,77 77,95 54,95 C31,95 13,77 13,54 C13,31 31,13 54,13 Z"/>
-
-    <!-- glossy gradient badge -->
-    <path android:pathData="M54,8 C79.4,8 100,28.6 100,54 C100,79.4 79.4,100 54,100 C28.6,100 8,79.4 8,54 C8,28.6 28.6,8 54,8 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient android:type="linear" android:startX="18" android:startY="14" android:endX="91" android:endY="94">
-                <item android:color="#FF9FBD" android:offset="0"/>
-                <item android:color="#FB7299" android:offset="0.48"/>
-                <item android:color="#D94783" android:offset="1"/>
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- subtle inner rim -->
-    <path android:fillColor="#30FFFFFF"
-        android:pathData="M54,13 C76.6,13 95,31.4 95,54 C95,76.6 76.6,95 54,95 C31.4,95 13,76.6 13,54 C13,31.4 31.4,13 54,13 Z"/>
-    <path android:fillColor="#22A92861"
-        android:pathData="M54,17 C74.4,17 91,33.6 91,54 C91,74.4 74.4,91 54,91 C33.6,91 17,74.4 17,54 C17,33.6 33.6,17 54,17 Z"/>
-
-    <!-- Bilibili-inspired antennae -->
-    <path android:fillColor="#FFF9FB"
-        android:pathData="M39,28 L29,17 C27.5,15.4 27.7,12.9 29.3,11.5 C30.9,10.1 33.4,10.3 34.8,11.9 L46,25 Z"/>
-    <path android:fillColor="#FFF9FB"
-        android:pathData="M69,28 L79,17 C80.5,15.4 80.3,12.9 78.7,11.5 C77.1,10.1 74.6,10.3 73.2,11.9 L62,25 Z"/>
-
-    <!-- glass screen -->
-    <path android:fillColor="#FFF9FB"
-        android:pathData="M29,34 C29,29.6 32.6,26 37,26 L71,26 C75.4,26 79,29.6 79,34 L79,68 C79,72.4 75.4,76 71,76 L37,76 C32.6,76 29,72.4 29,68 Z"/>
-    <path android:fillColor="#241B35"
-        android:pathData="M34,37 C34,33.7 36.7,31 40,31 L68,31 C71.3,31 74,33.7 74,37 L74,65 C74,68.3 71.3,71 68,71 L40,71 C36.7,71 34,68.3 34,65 Z"/>
-
-    <!-- luminous play mark -->
-    <path android:pathData="M45,40 C45,38.2 47,37.1 48.6,38 L64,47.2 C65.5,48.1 65.5,50 64,50.9 L48.6,60.1 C47,61 45,59.9 45,58.1 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient android:type="linear" android:startX="45" android:startY="38" android:endX="66" android:endY="60">
-                <item android:color="#FFFFFF" android:offset="0"/>
-                <item android:color="#FFE2EC" android:offset="1"/>
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- download stem and tray, the app's second purpose -->
-    <path android:fillColor="#FFF9FB"
-        android:pathData="M51,79 L57,79 L57,86 L63,86 L54,95 L45,86 L51,86 Z"/>
-    <path android:fillColor="#FFF9FB"
-        android:pathData="M40,96 L68,96 L68,100 L40,100 Z"/>
-
-    <!-- tiny sparkle -->
-    <path android:fillColor="#FFFFF5"
-        android:pathData="M86,31 L88,37 L94,39 L88,41 L86,47 L84,41 L78,39 L84,37 Z"/>
+    <path android:fillColor="#FFF7FA"
+        android:pathData="M0,0h108v108h-108z"/>
+    <path android:fillColor="#FF5C8A"
+        android:pathData="M22,24h64c5.5,0 10,4.5 10,10v40c0,5.5 -4.5,10 -10,10h-64c-5.5,0 -10,-4.5 -10,-10v-40c0,-5.5 4.5,-10 10,-10z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M35,18l-8,-9c-1.4,-1.5 -1.3,-3.8 0.2,-5.2 1.5,-1.4 3.8,-1.3 5.2,0.2l12,14z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M73,18l8,-9c1.4,-1.5 1.3,-3.8 -0.2,-5.2 -1.5,-1.4 -3.8,-1.3 -5.2,0.2l-12,14z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M47,37c0,-2.3 2.5,-3.7 4.5,-2.5l20,12c2,1.2 2,4 0,5.2l-20,12c-2,1.2 -4.5,-0.2 -4.5,-2.5z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M51,69h6v11h8l-11,11 -11,-11h8z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M39,92h30v5h-30z"/>
 </vector>
