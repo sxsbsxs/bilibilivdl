@@ -116,7 +116,7 @@ object BiliPlaybackApi {
         }
     }
 
-    suspend fun load(bvid:String, aid:Long, qn:Int=80, cookie:String="", pageIndex:Int=0):PlaybackInfo {
+    suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
