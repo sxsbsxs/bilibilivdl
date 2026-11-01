@@ -19,12 +19,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineContext
 import org.json.JSONArray
 import org.json.JSONObject
 import com.sxsbsxs.bilivdl.data.queue.DownloadTaskEntity
 import com.sxsbsxs.bilivdl.data.queue.DownloadQueueStore
 import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Persistent foreground download runner. It keeps downloads alive after the player
@@ -105,7 +107,8 @@ class BiliDownloadService : Service() {
         val aid = intent.getLongExtra(EXTRA_AID, 0L)
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val qn = intent.getIntExtra(EXTRA_QN, 80)
-        active.incrementAndGet()
+        // Prevent duplicate workers when a task is resumed repeatedly or an intent is redelivered.
+        if (running.containsKey(taskId)) return START_REDELIVER_INTENT
 
         val taskJob = scope.launch(start = CoroutineStart.LAZY) {
             val task = JSONObject()
@@ -125,11 +128,17 @@ class BiliDownloadService : Service() {
                 task.put("quality", playback.name)
                 task.put("progress", "准备下载")
                 updateTask(task)
+                val lastProgressWrite = AtomicLong(0L)
                 val result = BiliDownloadEngine.download(this@BiliDownloadService, playback, title, cookie) { done, total, stage ->
                     val progress = if (total > 0L) "$stage · ${(done * 100 / total).coerceIn(0, 100)}%" else "$stage · ${done / 1024} KB"
                     task.put("progress", progress)
-                    // The engine callback is synchronous; persist asynchronously in the service scope.
-                    scope.launch { updateTask(task) }
+                    // Network callbacks can fire for every chunk; persist detached snapshots at most once per second.
+                    val now = System.currentTimeMillis()
+                    val previous = lastProgressWrite.get()
+                    if (now - previous >= 1000L && lastProgressWrite.compareAndSet(previous, now)) {
+                        val snapshot = JSONObject(task.toString())
+                        scope.launch { runCatching { updateTask(snapshot) } }
+                    }
                     notificationManager.notify(NOTIFICATION_ID, notification(title, done, total.takeIf { it > 0L }))
                 }
                 task.put("path", result)
@@ -153,13 +162,15 @@ class BiliDownloadService : Service() {
                 updateTask(task)
                 notificationManager.notify(NOTIFICATION_ID, notification("下载失败：$title", null, null))
             } finally {
-                running.remove(taskId)
+                running.remove(taskId, coroutineContext.job)
                 if (active.decrementAndGet() == 0) {
                     stopSelf()
                 }
             }
         }
-        running[taskId] = taskJob
+        val existing = running.putIfAbsent(taskId, taskJob)
+        if (existing != null) return START_REDELIVER_INTENT
+        active.incrementAndGet()
         taskJob.start()
         return START_REDELIVER_INTENT
     }
