@@ -88,8 +88,13 @@ class BiliDownloadService : Service() {
         if (action == ACTION_PAUSE || action == ACTION_CANCEL) {
             requestedActions[taskId] = action
             val job = running[taskId]
-            job?.cancel(CancellationException(action))
-            if (job == null && running.isEmpty()) stopSelfResult(startId)
+            if (job != null) {
+                job.cancel(CancellationException(action))
+            } else {
+                updateStoredTaskState(taskId, if (action == ACTION_CANCEL) "cancelled" else "paused",
+                    if (action == ACTION_CANCEL) "已取消" else "已暂停 · 可继续")
+                if (running.isEmpty()) stopSelfResult(startId)
+            }
             return START_NOT_STICKY
         }
         val bvid = intent.getStringExtra(EXTRA_BVID).orEmpty()
@@ -151,6 +156,25 @@ class BiliDownloadService : Service() {
         }
         running[taskId] = taskJob
         return START_REDELIVER_INTENT
+    }
+
+    private fun updateStoredTaskState(id: String, status: String, progress: String) {
+        val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
+        synchronized(BiliDownloadService::class.java) {
+            val tasks = JSONArray(prefs.getString("tasks", "[]"))
+            for (i in 0 until tasks.length()) {
+                val item = tasks.optJSONObject(i) ?: continue
+                if (item.optString("id") != id) continue
+                item.put("status", status).put("progress", progress)
+                if (status == "cancelled") {
+                    val safe = item.optString("title").replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70)
+                    val dir = java.io.File(cacheDir, "bili-download")
+                    dir.listFiles()?.filter { it.name.startsWith(safe) }?.forEach { it.delete() }
+                }
+                break
+            }
+            prefs.edit().putString("tasks", tasks.toString()).apply()
+        }
     }
 
     private fun qnLabel(qn: Int): String = when (qn) {
