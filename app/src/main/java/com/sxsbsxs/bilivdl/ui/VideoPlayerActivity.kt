@@ -22,6 +22,7 @@ import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideoActionApi
 import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
+import com.sxsbsxs.bilivdl.data.BiliDownloadService
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
 import com.sxsbsxs.bilivdl.data.VideoComment
 import com.sxsbsxs.bilivdl.databinding.ActivityVideoPlayerBinding
@@ -160,44 +161,36 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun startDownload(qn: Int) {
-        b.downloadStatus.text = "正在获取下载地址…"
-        lifecycleScope.launch {
-            val taskId = java.util.UUID.randomUUID().toString()
-            val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
-            var task: JSONObject = JSONObject()
-            fun saveTask() {
-                val old = JSONArray(prefs.getString("tasks", "[]"))
-                val updated = JSONArray()
-                for (i in 0 until old.length()) {
-                    val item = old.optJSONObject(i) ?: continue
-                    if (item.optString("id") != taskId) updated.put(item)
-                }
-                updated.put(task)
-                prefs.edit().putString("tasks", updated.toString()).apply()
+        val taskId = java.util.UUID.randomUUID().toString()
+        val title = b.playerTitle.text.toString()
+            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .take(70)
+            .ifBlank { "bilibili_video" }
+        val task = JSONObject()
+            .put("id", taskId)
+            .put("title", title)
+            .put("quality", info?.name ?: "清晰度 $qn")
+            .put("status", "downloading")
+            .put("progress", "等待后台下载服务启动")
+            .put("time", System.currentTimeMillis())
+        val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
+        val old = JSONArray(prefs.getString("tasks", "[]"))
+        old.put(task)
+        prefs.edit().putString("tasks", old.toString()).apply()
+
+        try {
+            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn)
+            b.downloadStatus.text = "已加入后台下载 · 可离开播放页"
+        } catch (error: Exception) {
+            task.put("status", "failed").put("progress", error.message ?: "无法启动下载服务")
+            val current = JSONArray(prefs.getString("tasks", "[]"))
+            val updated = JSONArray()
+            for (i in 0 until current.length()) {
+                val item = current.optJSONObject(i) ?: continue
+                updated.put(if (item.optString("id") == taskId) task else item)
             }
-            try {
-                val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie) }
-                val title = b.playerTitle.text.toString().replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
-                task = JSONObject().put("id", taskId).put("title", title).put("quality", p.name)
-                    .put("status", "downloading").put("progress", "准备下载").put("time", System.currentTimeMillis())
-                saveTask()
-                b.downloadStatus.text = "正在下载并校验资源…"
-                val result = withContext(Dispatchers.IO) {
-                    BiliDownloadEngine.download(this@VideoPlayerActivity, p, title, cookie) { done: Long, total: Long, stage: String ->
-                        val label = if (total > 0L) "$stage · ${done * 100 / total}%" else "$stage · ${done / 1024} KB"
-                        task.put("progress", label)
-                        saveTask()
-                        runOnUiThread { b.downloadStatus.text = label }
-                    }
-                }
-                task.put("path", result).put("status", "completed").put("progress", "下载完成")
-                saveTask()
-                b.downloadStatus.text = "下载完成 · Movies/BiliVdl/$title.mp4"
-            } catch (e: Exception) {
-                task.put("status", "failed").put("progress", e.message ?: "下载失败")
-                saveTask()
-                b.downloadStatus.text = "下载失败：${e.message ?: "接口异常"}"
-            }
+            prefs.edit().putString("tasks", updated.toString()).apply()
+            b.downloadStatus.text = "下载任务启动失败：${error.message}"
         }
     }
 
