@@ -298,7 +298,7 @@ object BiliPlaybackApi {
         runCatching { httpPlayUrl(resolvedAid, cid, qn, cookie) }.getOrNull()?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
         // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
-        if (cookie.isBlank() && videoCodec.isBlank() && audioCodec.isBlank()) {
+        if (videoCodec.isBlank() && audioCodec.isBlank()) {
             tryGrpcPlayback(resolvedAid, cid, qn)?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
         }
 
