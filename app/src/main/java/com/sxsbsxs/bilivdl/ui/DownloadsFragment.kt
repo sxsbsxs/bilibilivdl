@@ -87,7 +87,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
    val tasks = dao.tasksByStatus("failed")
    tasks.forEach { task ->
     if (task.bvid.isNotBlank() || task.aid > 0L) {
-     BiliDownloadService.enqueue(requireContext(), task.taskId, task.bvid, task.aid, task.title, task.qn)
+     BiliDownloadService.enqueue(requireContext(), task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId)
     }
    }
    b.downloadSummary.text = if (tasks.isEmpty()) "没有可重试的失败任务" else "已重新加入 ${tasks.size} 个失败任务"
