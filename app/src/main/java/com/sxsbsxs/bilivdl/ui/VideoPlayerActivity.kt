@@ -118,10 +118,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                 selectedPartIndex = p.selectedPart
                 b.partButton.text = if (epId > 0L) "番剧选集" else if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
                 exo?.release()
-                val headers = mutableMapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com", "Accept" to "*/*")
-                if (cookie.isNotBlank()) headers["Cookie"] = cookie
+                // B站 gRPC 下发的 CDN 地址按官方客户端 UA 校验；不要把账号 Cookie 泄漏给 CDN 域名。
+                val headers = mapOf("Referer" to "https://www.bilibili.com/")
                 val http = DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
+                    .setUserAgent("Mozilla/5.0 BiliDroid/1.41.0 (bbcallen@gmail.com)")
                     .setConnectTimeoutMs(20000).setReadTimeoutMs(25000)
                     .setAllowCrossProtocolRedirects(true).setDefaultRequestProperties(headers)
                 val source = DefaultMediaSourceFactory(this@VideoPlayerActivity).setDataSourceFactory(http)
