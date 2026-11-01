@@ -105,7 +105,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 }
             }
         )
-        load(80)
+        load(127)
         loadComments(true)
     }
 
@@ -307,11 +307,18 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun showDownloadQuality() {
         val p = info
         if (p == null) { b.downloadStatus.text = "请先等待播放地址加载完成"; return }
-        val choices = if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities
-        MaterialAlertDialogBuilder(this).setTitle("选择下载清晰度")
-            .setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, choices.map { it.second }.toTypedArray())) { _, i ->
-                startDownload(choices[i].first)
-            }.show()
+        // Default to the highest quality actually returned by Bilibili for this account/video.
+        val choices = (if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities)
+            .distinctBy { it.first }
+            .sortedByDescending { it.first }
+        var selected = 0
+        MaterialAlertDialogBuilder(this).setTitle("选择下载清晰度（默认最高）")
+            .setSingleChoiceItems(choices.map { it.second }.toTypedArray(), 0) { _, which ->
+                selected = which
+            }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("开始下载") { _, _ -> startDownload(choices[selected].first) }
+            .show()
     }
 
     private fun startDownload(qn: Int) {
