@@ -9,7 +9,7 @@
 - 源码位置：`upstream/bilimiao2/`
 - 已接入 Gradle 的模块：`bilimiao-comm`、`bilimiao-download`、`danmaku-engine`，以及其所需 gRPC/proto 依赖。
 - 应用桥接：`BiliVdlApplication.kt` 初始化平台 Provider；`BilimiaoApiBridge.kt` 复用上游 `CommentApi` 与 `VideoAPI`，提供免登录评论读取、评论分页、评论回复、评论点赞/发送及视频互动接口。
-- 播放地址适配：`BiliPlaybackApi.kt` 参考并适配上游 `PlayerAPI.getVideoPalyUrl` 的免登录公开播放流程，优先请求 `/x/player/playurl`（avid/cid/qn/fnval=4048/force_host=2），获取 DASH 或 durl 流；公开接口受限时再回退 WBI playurl。播放器仍使用本项目的 Media3 ExoPlayer、DASH 解析和独立 UI，并非完整移植 bilimiao 原版播放服务、GRPC 协议栈或手势 UI。
+- 播放地址适配：`BiliPlaybackApi.kt` 接入上游 `VideoPlayerSource` 的 gRPC `PlayURLGRPC.playView` 优先策略，并保留匿名公开 HTTP `/x/player/playurl` 备用线路及 WBI 最后回退；解析 DASH 视频/音频轨和 SegmentVideo 多段流。播放器使用本项目 Media3 ExoPlayer 合并 DASH 音视频轨，保留独立 UI；尚未移植 bilimiao 原版完整播放列表、手势控制、字幕/历史上报和区域代理 UI。
 
 ## BiliDownload（BVD）
 
