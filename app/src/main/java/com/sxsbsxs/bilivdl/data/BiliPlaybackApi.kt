@@ -122,16 +122,18 @@ object BiliPlaybackApi {
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
         val detailUrl = "https://api.bilibili.com/x/web-interface/view?" +
             id.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
-        var detail = get(detailUrl, cookie)
-        if (detail.optInt("code") != 0) {
-            // 兼容 B 站对公开详情接口的风控：最后再尝试 WBI 详情接口。
-            detail = get(signed("/x/web-interface/wbi/view", id, cookie), cookie)
+        // 先复用 BiliMiao 的 VideoAPI（app.bilibili.com/x/v2/view），它是游客详情链路；
+        // 仅在上游接口失败时回退公开 web-interface/view，绝不因游客未登录强制调用 WBI。
+        val d = runCatching {
+            BilimiaoApiBridge.videoInfo(if (bvid.isNotBlank()) bvid else aid.toString(), if (bvid.isNotBlank()) "BV" else "AV")
+        }.getOrElse {
+            val detail = get(detailUrl, cookie)
+            if (detail.optInt("code") != 0) {
+                val code = detail.optInt("code")
+                error(if (code == -352) "B站暂时限制了游客视频详情请求（-352），请稍后重试" else detail.optString("message", "视频信息获取失败"))
+            }
+            detail.optJSONObject("data") ?: error("视频信息为空")
         }
-        if(detail.optInt("code")!=0) {
-            val code=detail.optInt("code")
-            error(if(code == -352) "B站暂时风控了视频详情请求（-352），可稍后重试；普通播放不要求登录" else detail.optString("message","视频信息获取失败"))
-        }
-        val d=detail.optJSONObject("data")?:error("视频信息为空")
         val pageArray = d.optJSONArray("pages")
         val parts = if (pageArray != null) (0 until pageArray.length()).mapNotNull { index ->
             val item = pageArray.optJSONObject(index) ?: return@mapNotNull null
@@ -146,71 +148,72 @@ object BiliPlaybackApi {
         val selectedIndex = pageIndex.coerceIn(0, (parts.size - 1).coerceAtLeast(0))
         val cid = parts.getOrNull(selectedIndex)?.cid ?: d.optLong("cid")
         if(cid<=0) error("没有获取到视频分P信息")
-        val params=mutableMapOf("cid" to cid.toString(),"qn" to qn.toString(),"fnver" to "0","fnval" to "4048","fourk" to "1")
-        params.putAll(id)
-        // 采用 bilimiao 的免登录播放接口：/x/player/playurl + avid/cid/qn/fnval。
-        // 不把 Cookie 或 WBI 签名作为必需条件；登录 Cookie 仅作为可选请求头。
         val resolvedAid = d.optLong("aid", aid)
-        // bilimiao2 同款：先尝试 gRPC PlayURL；不可用时自动回退公开 HTTP playurl。
+        // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
+        // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
         tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex) }
-        val publicParams = mutableMapOf(
-            "avid" to resolvedAid.toString(),
-            "cid" to cid.toString(),
-            "qn" to qn.toString(),
-            "fnval" to "4048",
-            "fnver" to "0",
-            "force_host" to "2",
-            "type" to "",
-            "otype" to "json",
-            "fourk" to "1"
-        )
-        val publicQuery = publicParams.entries.joinToString("&") { "${enc(it.key)}=${enc(it.value)}" }
-        var play = get("https://api.bilibili.com/x/player/playurl?$publicQuery", cookie)
-        if (play.optInt("code") != 0) {
-            // 公开旧接口被临时限制时，回退到 WBI playurl；匿名状态仍然先尝试免登录线路。
-            play = get(signed("/x/player/wbi/playurl", params, cookie), cookie)
-        }
-        if(play.optInt("code")!=0) {
-            val code=play.optInt("code")
-            error(if(code == -352) "B站暂时风控了免登录播放地址请求（-352），请稍后重试；如需更高画质再扫码登录" else play.optString("message","B站拒绝提供播放地址"))
-        }
-        val data=play.optJSONObject("data")?:error("播放接口没有返回 data")
-        val ids=data.optJSONArray("accept_quality"); val names=data.optJSONArray("accept_description")
-        val qualities=mutableListOf<Pair<Int,String>>()
-        if(ids!=null&&names!=null) for(i in 0 until minOf(ids.length(),names.length())) qualities.add(ids.optInt(i) to names.optString(i))
-        qualities.sortByDescending { it.first }
-        val actual=data.optInt("quality",qn)
-        val dash=data.optJSONObject("dash")
-        if(dash!=null) {
-            val videos=dash.optJSONArray("video") ?: error("DASH 视频轨道为空")
-            val video=(0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull { it.optInt("id")==actual }
-                ?: (0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的视频轨道")
-            val audios=dash.optJSONArray("audio") ?: error("DASH 音频轨道为空")
-            val audio=(0 until audios.length()).mapNotNull { audios.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的音频轨道")
-            fun streamUrl(item: JSONObject): String {
-                val primary=item.optString("baseUrl").ifBlank { item.optString("base_url") }
-                val backups=item.optJSONArray("backupUrl") ?: item.optJSONArray("backup_url")
-                return primary.ifBlank { backups?.optString(0).orEmpty() }.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-                    ?: error("B站返回了无效的 DASH 资源地址")
+
+        val upstream = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
+            .getVideoPalyUrl(resolvedAid.toString(), cid.toString(), qn, 4048)
+        val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
+            quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
+        }.distinctBy { it.first }.sortedByDescending { it.first }
+        val actual = upstream.quality.takeIf { it > 0 } ?: qn
+        val dash = upstream.dash
+        if (dash != null) {
+            fun itemJson(item: com.a10miaomiao.bilimiao.comm.apis.PlayerAPI.DashItem): JSONObject {
+                val segment = JSONObject()
+                    .put("initialization", item.segment_base.initialization)
+                    .put("index_range", item.segment_base.index_range)
+                return JSONObject()
+                    .put("id", item.id)
+                    .put("bandwidth", item.bandwidth)
+                    .put("base_url", item.base_url)
+                    .put("backup_url", org.json.JSONArray(item.backup_url ?: emptyList<String>()))
+                    .put("mime_type", item.mime_type)
+                    .put("codecs", item.codecs)
+                    .put("width", item.width)
+                    .put("height", item.height)
+                    .put("frame_rate", item.frame_rate)
+                    .put("segment_base", segment)
             }
-            return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true,streamUrl(video),streamUrl(audio), parts = parts, selectedPart = selectedIndex)
+            val dashJson = JSONObject()
+                .put("duration", dash.duration)
+                .put("video", org.json.JSONArray().apply { dash.video.forEach { put(itemJson(it)) } })
+                .put("audio", org.json.JSONArray().apply { dash.audio.orEmpty().forEach { put(itemJson(it)) } })
+            val video = dash.video.firstOrNull { it.id == actual } ?: dash.video.lastOrNull()
+                ?: error("BiliMiao 没有返回 DASH 视频轨道")
+            val audio = dash.audio?.firstOrNull()
+            fun bestUrl(primary: String, backups: List<String>?): String =
+                primary.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: backups.orEmpty().firstOrNull { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: error("BiliMiao 返回了无效的 CDN 地址")
+            return PlaybackInfo(
+                cid = cid,
+                url = DashManifestBuilder.toDataUri(dashJson, actual),
+                quality = actual,
+                name = qualities.firstOrNull { it.first == actual }?.second ?: "当前清晰度",
+                qualities = qualities,
+                isDash = audio != null,
+                videoUrl = bestUrl(video.base_url, video.backup_url),
+                audioUrl = audio?.let { bestUrl(it.base_url, it.backup_url) },
+                parts = parts,
+                selectedPart = selectedIndex
+            )
         }
-        val durls = data.optJSONArray("durl")
-        val streams = durls?.let { array ->
-            (0 until array.length()).mapNotNull { index ->
-                val item = array.optJSONObject(index) ?: return@mapNotNull null
-                val primary = item.optString("url")
-                val backups = item.optJSONArray("backup_url") ?: item.optJSONArray("backupUrl")
-                val selected = primary.ifBlank { backups?.optString(0).orEmpty() }
-                selected.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-            }
-        }.orEmpty()
-        if(streams.isEmpty()) error("B站未返回可播放的 DASH 或 MP4 音视频流")
-        // DURL 可能由多个连续分段组成；不能只取第一个分段，否则播放/下载会被截断。
+        val streams = upstream.durl.orEmpty().mapNotNull { segment ->
+            segment.url.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        }
+        if (streams.isEmpty()) error("BiliMiao 没有返回可播放的视频流")
         return PlaybackInfo(
-            cid, streams.first(), actual,
-            qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",
-            qualities, false, segments = streams
+            cid = cid,
+            url = streams.first(),
+            quality = actual,
+            name = qualities.firstOrNull { it.first == actual }?.second ?: "当前清晰度",
+            qualities = qualities,
+            segments = streams,
+            parts = parts,
+            selectedPart = selectedIndex
         )
     }
 }
