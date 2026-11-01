@@ -113,6 +113,10 @@ class SearchController(
                         val episode = season.episodes[index]
                         fragment.startActivity(Intent(fragment.requireContext(), VideoPlayerActivity::class.java).apply {
                             putExtra(VideoPlayerActivity.EXTRA_EP_ID, episode.id)
+                            putExtra(VideoPlayerActivity.EXTRA_AID, episode.aid)
+                            putExtra(VideoPlayerActivity.EXTRA_BVID, episode.bvid)
+                            putExtra(VideoPlayerActivity.EXTRA_COVER, episode.cover.ifBlank { season.cover })
+                            putExtra(VideoPlayerActivity.EXTRA_AUTHOR, "番剧 · ${season.title}")
                             putExtra(VideoPlayerActivity.EXTRA_TITLE, listOf(season.title, episode.title, episode.longTitle)
                                 .filter { it.isNotBlank() }.joinToString(" · "))
                         })
