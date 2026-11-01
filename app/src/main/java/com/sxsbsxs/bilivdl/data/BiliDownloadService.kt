@@ -23,6 +23,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.sxsbsxs.bilivdl.data.queue.DownloadTaskEntity
 import com.sxsbsxs.bilivdl.data.queue.DownloadQueueStore
+import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -179,6 +180,7 @@ class BiliDownloadService : Service() {
             }
             prefs.edit().putString("tasks", tasks.toString()).apply()
         }
+        scope.launch { runCatching { DownloadQueueDatabase.get(this@BiliDownloadService).tasks().setState(id, status, progress) } }
     }
 
     private fun qnLabel(qn: Int): String = when (qn) {
