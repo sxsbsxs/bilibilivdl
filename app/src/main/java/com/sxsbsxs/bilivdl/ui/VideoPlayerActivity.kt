@@ -307,7 +307,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = "正在连接视频…"
                 loadDanmaku(p.cid)
             } catch (e: Exception) {
-                b.playerStatus.text = "获取播放地址失败：${e.message ?: "接口异常"}"
+                val reason = e.message.orEmpty()
+                b.playerStatus.text = if (reason.contains("Conversion") && reason.contains("万")) {
+                    "获取播放地址失败：B站返回了异常格式数据，已尝试备用线路，请稍后重试"
+                } else "获取播放地址失败：${reason.ifBlank { "接口异常" }}"
             }
         }
     }
