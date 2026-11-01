@@ -20,6 +20,7 @@ import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
 import com.sxsbsxs.bilivdl.data.BiliInteractionApi
 import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.data.BiliVideoActionApi
+import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
 import com.sxsbsxs.bilivdl.data.VideoComment
 import com.sxsbsxs.bilivdl.databinding.ActivityVideoPlayerBinding
@@ -151,7 +152,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val taskId = java.util.UUID.randomUUID().toString()
             val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
-            var task = JSONObject()
+            var task: JSONObject = JSONObject()
             fun saveTask() {
                 val old = JSONArray(prefs.getString("tasks", "[]"))
                 val updated = JSONArray()
@@ -170,7 +171,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 saveTask()
                 b.downloadStatus.text = "正在下载并校验资源…"
                 val result = withContext(Dispatchers.IO) {
-                    BiliDownloadEngine.download(this@VideoPlayerActivity, p, title, cookie) { done, total, stage ->
+                    BiliDownloadEngine.download(this@VideoPlayerActivity, p, title, cookie) { done: Long, total: Long, stage: String ->
                         val label = if (total > 0L) "$stage · ${done * 100 / total}%" else "$stage · ${done / 1024} KB"
                         task.put("progress", label)
                         saveTask()

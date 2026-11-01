@@ -168,7 +168,7 @@ object BiliDownloadEngine {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$title.mp4")
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
             if (Build.VERSION.SDK_INT >= 29) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "\${Environment.DIRECTORY_MOVIES}/BiliVdl")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/BiliVdl")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
         }
