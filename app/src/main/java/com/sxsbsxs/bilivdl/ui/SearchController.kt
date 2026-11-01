@@ -93,6 +93,8 @@ class SearchController(
             putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
             putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
             putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
+            putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
+            putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
         })
     }
 

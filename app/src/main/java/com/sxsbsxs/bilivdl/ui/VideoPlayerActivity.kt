@@ -605,6 +605,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun likeComment(comment: VideoComment) {
         lifecycleScope.launch {
             try {
+                if (cookie.isBlank()) error("评论点赞需要先使用 B站 APP 扫码登录")
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.likeComment(aid, comment.id, !comment.liked) }
                 (b.commentsList.adapter as CommentAdapter).updateLike(comment.id, !comment.liked)
                 b.commentsStatus.text = result
@@ -617,6 +618,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         if (text.isBlank()) { b.commentsStatus.text = "先输入评论内容"; return }
         lifecycleScope.launch {
             try {
+                if (cookie.isBlank()) error("发表评论需要先使用 B站 APP 扫码登录")
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.sendComment(aid, text) }
                 b.commentInput.text?.clear()
                 b.commentsStatus.text = result
@@ -634,6 +636,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun toggleVideoLike() {
         lifecycleScope.launch {
             try {
+                if (cookie.isBlank()) error("点赞需要先使用 B站 APP 扫码登录")
                 val target = !videoLiked
                 withContext(Dispatchers.IO) {
                     BilimiaoApiBridge.likeVideo(requireAid(), target)
@@ -648,6 +651,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun showCoinDialog() {
+        if (cookie.isBlank()) { b.playerStatus.text = "投币需要先使用 B站 APP 扫码登录"; return }
         MaterialAlertDialogBuilder(this)
             .setTitle("给视频投币")
             .setItems(arrayOf("投 1 枚硬币", "投 2 枚硬币", "投币并点赞")) { _, which ->
@@ -704,6 +708,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun tripleAction() {
+        if (cookie.isBlank()) { b.playerStatus.text = "一键三连需要先使用 B站 APP 扫码登录"; return }
         MaterialAlertDialogBuilder(this)
             .setTitle("一键三连")
             .setMessage("将尝试执行 B站一键三连操作。")

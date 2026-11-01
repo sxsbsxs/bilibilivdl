@@ -49,6 +49,8 @@ class BiliDownloadService : Service() {
         private const val EXTRA_PAGE_INDEX = "page_index"
         private const val EXTRA_VIDEO_CODEC = "video_codec"
         private const val EXTRA_AUDIO_CODEC = "audio_codec"
+        private const val EXTRA_COVER = "cover"
+        private const val EXTRA_AUTHOR = "author"
         private const val EXTRA_ACTION = "queue_action"
         private const val ACTION_PAUSE = "pause"
         private const val ACTION_CANCEL = "cancel"
@@ -58,8 +60,8 @@ class BiliDownloadService : Service() {
 
         fun pause(context: Context, id: String) = sendControl(context, id, ACTION_PAUSE)
         fun cancel(context: Context, id: String) = sendControl(context, id, ACTION_CANCEL)
-        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "", pageIndex: Int = 0) =
-            enqueue(context, id, bvid, aid, title, qn, episodeId, videoCodec, audioCodec, pageIndex)
+        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "", pageIndex: Int = 0, cover: String = "", author: String = "") =
+            enqueue(context, id, bvid, aid, title, qn, episodeId, videoCodec, audioCodec, pageIndex, cover, author)
 
         private fun sendControl(context: Context, id: String, action: String) {
             val intent = Intent(context, BiliDownloadService::class.java)
@@ -67,7 +69,7 @@ class BiliDownloadService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "", pageIndex: Int = 0) {
+        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "", pageIndex: Int = 0, cover: String = "", author: String = "") {
             val intent = Intent(context, BiliDownloadService::class.java).apply {
                 putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_BVID, bvid)
@@ -78,6 +80,8 @@ class BiliDownloadService : Service() {
                 putExtra(EXTRA_VIDEO_CODEC, videoCodec)
                 putExtra(EXTRA_AUDIO_CODEC, audioCodec)
                 putExtra(EXTRA_PAGE_INDEX, pageIndex)
+                putExtra(EXTRA_COVER, cover)
+                putExtra(EXTRA_AUTHOR, author)
             }
             ContextCompat.startForegroundService(context, intent)
         }
@@ -117,6 +121,8 @@ class BiliDownloadService : Service() {
                         putExtra(EXTRA_VIDEO_CODEC, task.videoCodec)
                         putExtra(EXTRA_AUDIO_CODEC, task.audioCodec)
                         putExtra(EXTRA_PAGE_INDEX, task.pageIndex)
+                        putExtra(EXTRA_COVER, task.cover)
+                        putExtra(EXTRA_AUTHOR, task.author)
                     }
                     startService(restore)
                 }
@@ -146,6 +152,11 @@ class BiliDownloadService : Service() {
         val qn = intent.getIntExtra(EXTRA_QN, 127)
         val episodeId = intent.getLongExtra(EXTRA_EP_ID, 0L)
         val pageIndex = intent.getIntExtra(EXTRA_PAGE_INDEX, 0).coerceAtLeast(0)
+        val previousTasks = JSONArray(getSharedPreferences("download_queue", MODE_PRIVATE).getString("tasks", "[]"))
+        val previousTask = (0 until previousTasks.length()).mapNotNull { previousTasks.optJSONObject(it) }
+            .firstOrNull { it.optString("id") == taskId }
+        val cover = intent.getStringExtra(EXTRA_COVER).orEmpty().ifBlank { previousTask?.optString("cover").orEmpty() }
+        val author = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { previousTask?.optString("author").orEmpty() }
         val savedOptions = getSharedPreferences("download_options", MODE_PRIVATE)
         val videoCodec = intent.getStringExtra(EXTRA_VIDEO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_video", "").orEmpty() }
         val audioCodec = intent.getStringExtra(EXTRA_AUDIO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_audio", "").orEmpty() }
@@ -163,6 +174,8 @@ class BiliDownloadService : Service() {
                 .put("qn", qn)
                 .put("episodeId", episodeId)
                 .put("pageIndex", pageIndex)
+                .put("cover", cover)
+                .put("author", author)
                 .put("videoCodec", videoCodec)
                 .put("audioCodec", audioCodec)
                 .put("status", "queued")
@@ -301,6 +314,8 @@ class BiliDownloadService : Service() {
             qn = task.optInt("qn", 80),
             episodeId = task.optLong("episodeId"),
             pageIndex = task.optInt("pageIndex", 0),
+            cover = task.optString("cover"),
+            author = task.optString("author"),
             quality = task.optString("quality"),
             status = task.optString("status", "queued"),
             progress = task.optString("progress"),

@@ -5,12 +5,16 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.LazyHeaders
 import com.google.android.material.button.MaterialButton
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliDownloadService
@@ -121,17 +125,51 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = dp(10) }
         }
-        card.addView(TextView(context).apply {
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val cover = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = context.getDrawable(R.drawable.bg_empty_card)
+            contentDescription = "下载视频封面"
+        }
+        header.addView(cover, LinearLayout.LayoutParams(dp(116), dp(76)))
+        if (task.cover.isNotBlank()) {
+            val imageUrl = task.cover.let { if (it.startsWith("//")) "https:$it" else it }
+            val headers = LazyHeaders.Builder()
+                .addHeader("Referer", "https://www.bilibili.com/")
+                .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
+                .build()
+            Glide.with(cover).load(GlideUrl(imageUrl, headers))
+                .placeholder(R.drawable.bg_empty_card).error(R.drawable.bg_empty_card)
+                .centerCrop().into(cover)
+        }
+        val details = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), 0, 0, 0)
+        }
+        details.addView(TextView(context).apply {
             text = task.title
-            textSize = 15f
-            maxLines = 2
+            textSize = 14f
+            maxLines = 3
+            ellipsize = android.text.TextUtils.TruncateAt.END
             setTextColor(context.getColor(R.color.text_primary))
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
+        details.addView(TextView(context).apply {
+            text = listOf(task.author.ifBlank { "哔哩哔哩视频" }, task.quality.ifBlank { "视频" }).joinToString(" · ")
+            textSize = 11f
+            maxLines = 1
+            setPadding(0, dp(5), 0, 0)
+            setTextColor(context.getColor(R.color.text_secondary))
+        })
+        header.addView(details, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        card.addView(header)
         card.addView(TextView(context).apply {
-            text = (task.quality.ifBlank { "视频" }) + "  ·  " + statusText(task)
+            text = statusText(task)
             textSize = 12f
-            setPadding(0, dp(5), 0, dp(7))
+            setPadding(0, dp(8), 0, dp(7))
             setTextColor(context.getColor(R.color.text_secondary))
         })
         if (task.status == "downloading" || task.status == "queued") {
