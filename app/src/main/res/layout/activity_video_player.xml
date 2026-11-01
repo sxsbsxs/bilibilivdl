@@ -51,6 +51,16 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/player_author"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <TextView
                 android:id="@+id/player_status"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

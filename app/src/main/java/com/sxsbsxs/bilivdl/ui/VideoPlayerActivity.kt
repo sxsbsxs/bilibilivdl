@@ -46,6 +46,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_EP_ID = "ep_id"
         const val EXTRA_SEASON_ID = "season_id"
+        const val EXTRA_COVER = "cover"
+        const val EXTRA_AUTHOR = "author"
     }
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
@@ -97,6 +99,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(b.root)
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        b.playerAuthor.text = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { "哔哩哔哩视频" }
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentsList.layoutManager = LinearLayoutManager(this)
         b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
@@ -492,6 +495,11 @@ class VideoPlayerActivity : AppCompatActivity() {
             .put("quality", info?.name ?: "清晰度 " + qn)
             .put("episodeId", epId)
             .put("pageIndex", selectedPartIndex)
+            .put("cover", intent.getStringExtra(EXTRA_COVER).orEmpty())
+            .put("author", intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
+            .put("bvid", bvid)
+            .put("aid", aid)
+            .put("qn", qn)
             .put("status", "downloading")
             .put("progress", "等待后台下载服务启动")
             .put("time", System.currentTimeMillis())
@@ -504,7 +512,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             .putString(taskId + "_audio", audioCodec)
             .apply()
         try {
-            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec, selectedPartIndex)
+            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec, selectedPartIndex, intent.getStringExtra(EXTRA_COVER).orEmpty(), intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
             b.downloadStatus.text = "已加入后台下载 · " + (info?.name ?: "清晰度 " + qn) +
                 if (videoCodec.isNotBlank()) " · " + videoCodec else ""
         } catch (error: Exception) {
