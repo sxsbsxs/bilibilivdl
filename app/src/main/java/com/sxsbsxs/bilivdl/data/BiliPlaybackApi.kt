@@ -12,7 +12,7 @@ import java.net.URLEncoder
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
 data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
 data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "")
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0)
 
 object BiliPlaybackApi {
     private fun get(url: String, cookie: String): JSONObject {
@@ -207,7 +207,13 @@ object BiliPlaybackApi {
                 pubdate = d.optLong("pubdate"),
                 description = d.optString("desc"),
                 cover = d.optString("pic"),
-                author = owner?.optString("name").orEmpty()
+                author = owner?.optString("name").orEmpty(),
+                likeCount = stat?.optLong("like") ?: 0L,
+                favoriteCount = stat?.optLong("favorite") ?: 0L,
+                coinCount = stat?.optLong("coin") ?: 0L,
+                shareCount = stat?.optLong("share") ?: 0L,
+                replyCount = stat?.optLong("reply") ?: 0L,
+                category = d.optString("tname"), duration = d.optInt("duration")
             )
         }
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
@@ -277,7 +283,13 @@ object BiliPlaybackApi {
                 viewCount = d.optJSONObject("stat")?.optLong("view") ?: 0L,
                 danmakuCount = d.optJSONObject("stat")?.optLong("danmaku") ?: 0L,
                 pubdate = d.optLong("pubdate"), description = d.optString("desc"),
-                cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty()
+                cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty(),
+            likeCount = d.optJSONObject("stat")?.optLong("like") ?: 0L,
+            favoriteCount = d.optJSONObject("stat")?.optLong("favorite") ?: 0L,
+            coinCount = d.optJSONObject("stat")?.optLong("coin") ?: 0L,
+            shareCount = d.optJSONObject("stat")?.optLong("share") ?: 0L,
+            replyCount = d.optJSONObject("stat")?.optLong("reply") ?: 0L,
+            category = d.optString("tname"), duration = d.optInt("duration")
             )
         }
         val streams = upstream.durl.orEmpty().mapNotNull { segment ->

@@ -3,6 +3,12 @@ package com.sxsbsxs.bilivdl.ui
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.LazyHeaders
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.sxsbsxs.bilivdl.data.VideoComment
 import com.sxsbsxs.bilivdl.databinding.ItemCommentBinding
 
@@ -56,10 +62,15 @@ class CommentAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(comment: VideoComment) {
-            binding.commentUser.text = comment.user
+            binding.commentUser.text = comment.user + if (comment.isUp) "  UP主" else ""
+            val face = comment.face.trim().let { if (it.startsWith("//")) "https:$it" else it }
+            Glide.with(binding.commentAvatar).load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
+                .placeholder(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar)
+                .error(com.sxsbsxs.bilivdl.R.drawable.bg_comment_avatar).circleCrop().into(binding.commentAvatar)
+            binding.commentTime.text = if (comment.ctime > 0L) SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(comment.ctime * 1000)) else if (comment.level > 0) "LV${comment.level}" else ""
             binding.commentText.text = comment.text
             binding.commentLikes.text =
-                (if (comment.liked) "👍 已赞 " else "👍 ") + comment.likes
+                (if (comment.liked) "♥ " else "♡ ") + comment.likes
             binding.commentReplies.text =
                 if (comment.replyCount > 0) "查看 ${comment.replyCount} 条回复" else "回复"
 

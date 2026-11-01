@@ -14,7 +14,11 @@ data class VideoComment(
     val likes: Int,
     val replyCount: Int,
     val mid: Long,
-    val liked: Boolean = false
+    val liked: Boolean = false,
+    val face: String = "",
+    val ctime: Long = 0L,
+    val isUp: Boolean = false,
+    val level: Int = 0
 )
 
 data class DanmakuItem(
