@@ -7,7 +7,7 @@ BiliVdl 是一款独立设计界面的 Android 哔哩哔哩视频播放与下载
 - 热门推荐列表每次刷新重新混排，减少首页总是先看到相同视频的情况。
 - 修复首页 NestedScrollView + RecyclerView 组合在首屏内容不足时不触发翻页的问题，并在首屏未填满时自动补充下一页。
 - 修复播放器评论列表位于外层 NestedScrollView、内部 RecyclerView 无法收到滚动事件导致的“滑到底不加载”问题。
-- 账号页改为参考 BVD 的 WebView 登录交接方式：完成 B 站站点登录后提取 Cookie，并通过 B 站账号接口确认登录状态；不把网页加载完成误判为登录成功。
+- 账号页迁移 BVD 风格的扫码登录流程：申请二维码、轮询扫码/确认状态、接收登录 Cookie，并通过 B 站账号接口确认登录状态。
 - 评论读取继续使用 bilimiao2 的 CommentApi，读取评论不主动要求登录；评论分页使用返回的 cursor/page 信息判断是否还有下一页。
 
 ## 视频
@@ -31,7 +31,7 @@ BiliVdl 是一款独立设计界面的 Android 哔哩哔哩视频播放与下载
 
 ## 账号
 
-- 使用 B 站官方登录页面完成登录，并验证会话有效性
+- 使用 B 站 APP 扫码登录，并验证会话有效性
 - 未登录时可尝试搜索、查看评论、播放和下载公开可用的视频
 - 点赞、投币、收藏、发表评论等需要账号权限的操作会提示登录或接口限制
 
@@ -40,7 +40,7 @@ BiliVdl 是一款独立设计界面的 Android 哔哩哔哩视频播放与下载
 - Kotlin + Android XML + Material Components
 - AndroidX Media3 ExoPlayer
 - [bilimiao2](https://github.com/10miaomiao/bilimiao2)：接入网络核心、评论 API 客户端及相关上游模块
-- [BiliDownload](https://github.com/KafuuNeko/BiliDownload)：参考其 WebView 登录交接流程；上游完整源码保存在 `upstream/BiliDownload/`
+- [BiliDownload](https://github.com/KafuuNeko/BiliDownload)：参考并适配其二维码生成、轮询确认和 Cookie 交接流程；上游完整源码保存在 `upstream/BiliDownload/`
 
 两个上游项目均为 GPL-3.0，原始许可证和移植说明保留在仓库。详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [upstream/UPSTREAM_SOURCES.md](upstream/UPSTREAM_SOURCES.md)。
 
