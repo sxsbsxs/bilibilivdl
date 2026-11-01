@@ -31,9 +31,12 @@ object BiliDownloadEngine {
         onProgress: (Long, Long, String) -> Unit): String = withContext(Dispatchers.IO) {
         val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
         val dir = File(context.cacheDir, "bili-download").apply { mkdirs() }
-        val headers = mutableMapOf("User-Agent" to BiliHeaders.UA, "Referer" to "https://www.bilibili.com/",
-            "Origin" to "https://www.bilibili.com", "Accept" to "*/*")
-        if (cookie.isNotBlank()) headers["Cookie"] = cookie
+        // CDN media requests use BiliDroid's UA. Never forward the Bilibili account Cookie to CDN hosts.
+        val headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 BiliDroid/1.41.0 (bbcallen@gmail.com)",
+            "Referer" to "https://www.bilibili.com/",
+            "Accept" to "*/*"
+        )
         val merged = File(dir, "$safe.final.mp4")
         try {
             if (playback.isDash) {
