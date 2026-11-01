@@ -127,7 +127,6 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.videoLike.setOnClickListener { toggleVideoLike() }
         b.videoCoin.setOnClickListener { showCoinDialog() }
         b.videoFavorite.setOnClickListener { showFavoriteFolders() }
-        b.videoTriple.setOnClickListener { tripleAction() }
         b.danmakuSend.setOnClickListener { showDanmakuComposer() }
         // comments_list is inside a NestedScrollView with nested scrolling disabled;
         // listen to the parent scroll view or the RecyclerView never receives scroll events.
@@ -765,28 +764,6 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = e.message ?: "读取收藏夹失败"
             }
         }
-    }
-
-    private fun tripleAction() {
-        if (cookie.isBlank()) { b.playerStatus.text = "一键三连需要先使用 B站 APP 扫码登录"; return }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("一键三连")
-            .setMessage("将尝试执行 B站一键三连操作。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("确认") { _, _ ->
-                lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            BilimiaoApiBridge.triple(requireAid())
-                        }
-                        videoLiked = true
-                        b.videoLike.text = "已赞 " + formatCount((info?.likeCount ?: 0L) + 1L)
-                        b.playerStatus.text = "一键三连成功"
-                    } catch (e: Exception) {
-                        b.playerStatus.text = e.message ?: "一键三连失败"
-                    }
-                }
-            }.show()
     }
 
     private fun showDanmakuComposer() {
