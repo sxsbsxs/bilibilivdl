@@ -100,6 +100,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.qualityButton.setOnClickListener { showQuality() }
         b.partButton.setOnClickListener { showParts() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
+        b.shareVideoButton.setOnClickListener { shareCurrentVideo() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.subtitleButton.setOnClickListener { showSubtitles() }
         b.danmakuButton.setOnClickListener {
@@ -285,6 +286,29 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = "字幕列表获取失败：${e.message}"
             }
         }
+    }
+
+
+    private fun shareCurrentVideo() {
+        val url = when {
+            epId > 0L -> "https://www.bilibili.com/bangumi/play/ep$epId"
+            bvid.isNotBlank() -> "https://www.bilibili.com/video/$bvid"
+            aid > 0L -> "https://www.bilibili.com/video/av$aid"
+            else -> ""
+        }
+        if (url.isBlank()) {
+            b.playerStatus.text = "当前视频没有可分享的链接"
+            return
+        }
+        val shareText = buildString {
+            val title = b.playerTitle.text?.toString().orEmpty()
+            if (title.isNotBlank()) append(title).append("\\n")
+            append(url)
+        }
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, shareText)
+        }, "分享视频"))
     }
 
     private fun showParts() {
