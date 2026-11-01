@@ -365,7 +365,7 @@ object BiliPlaybackApi {
             val selectedVideoId = videoCodec.substringBefore('|').toIntOrNull()
             val selectedVideoCodec = videoCodec.substringAfter('|', videoCodec)
             val video = if (videoCodec.isNotBlank()) {
-                dash.video.firstOrNull { it.id == actual && (selectedVideoId == null || it.id == selectedVideoId) && it.codecs == selectedVideoCodec }
+                dash.video.firstOrNull { (reportedQuality == null || it.id == reportedQuality) && (selectedVideoId == null || it.id == selectedVideoId) && it.codecs == selectedVideoCodec }
                     ?: error("B站没有返回所选视频编码：" + videoCodec)
             } else dash.video.firstOrNull { it.id == reportedQuality }
                 ?: dash.video.maxByOrNull { it.bandwidth }
