@@ -105,7 +105,11 @@ object BilimiaoApiBridge {
                 likes = item.optInt("like"),
                 replyCount = item.optInt("rcount"),
                 mid = member?.optLong("mid") ?: 0L,
-                liked = item.optJSONObject("reply_control")?.optInt("action") == 1
+                liked = item.optJSONObject("reply_control")?.optInt("action") == 1,
+                face = member?.optString("avatar").orEmpty().ifBlank { member?.optString("face").orEmpty() },
+                ctime = item.optLong("ctime"),
+                isUp = item.optJSONObject("reply_control")?.optInt("up_action") == 1,
+                level = member?.optJSONObject("level_info")?.optInt("current_level") ?: 0
             )
         }
     }
