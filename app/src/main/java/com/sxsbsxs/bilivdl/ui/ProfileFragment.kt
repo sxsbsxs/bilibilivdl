@@ -91,8 +91,9 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                         var expired = false
                         var elapsed = 0
                         while (isActive && dialog.isShowing && elapsed < 180) {
-                            delay(2000)
-                            elapsed += 2
+                            // Match BVD's one-second QR status polling cadence.
+                            delay(1000)
+                            elapsed += 1
                             val result = withContext(Dispatchers.IO) { BiliQrLoginApi.poll(qr.key) }
                             when (result.code) {
                                 0 -> {
@@ -105,22 +106,23 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                                         break
                                     }
                                     message.text = "登录成功，正在验证账号…"
-                                    BiliSession.saveCookie(context, result.cookie)
+                                    // Validate the temporary credentials before persisting them.
                                     val profile = withContext(Dispatchers.IO) {
-                                        BiliSession.profile(context)
+                                        BiliSession.profile(context, result.cookie)
                                     }
                                     if (!profile.optBoolean("isLogin")) {
-                                        message.text = "B 站未确认登录状态，请刷新二维码重试"
+                                        message.text = "B站未确认登录状态，请刷新二维码重试"
                                         expired = true
                                         break
                                     }
+                                    BiliSession.saveCookie(context, result.cookie)
                                     accountName?.text = profile.optString("uname", "已登录")
                                     status?.text = "账号已连接 · UID ${profile.optLong("mid")}"
                                     dialog.dismiss()
                                     return@launch
                                 }
                                 86101 -> message.text = "等待使用 B 站 APP 扫码…"
-                                86090 -> message.text = "已扫码，请在 B 站 APP 中确认登录"
+                                86090 -> message.text = "已扫码，请在哔哩哔哩 APP 中确认登录"
                                 86038 -> {
                                     message.text = "二维码已过期，正在刷新…"
                                     expired = true
