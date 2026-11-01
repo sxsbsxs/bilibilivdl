@@ -50,6 +50,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
     private var info: PlaybackInfo? = null
+    private var videoBackupIndex = 0
+    private var audioBackupIndex = 0
     private var selectedSubtitleUri: android.net.Uri? = null
     private var selectedSubtitleLabel: String = ""
     private var pendingSubtitleSrt = ""
@@ -144,6 +146,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             try {
                 val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
+                videoBackupIndex = 0
+                audioBackupIndex = 0
                 selectedPartIndex = p.selectedPart
                 b.partButton.text = if (epId > 0L) "番剧选集" else if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
                 exo?.release()
@@ -170,7 +174,9 @@ class VideoPlayerActivity : AppCompatActivity() {
                     }
                     player.addListener(object : Player.Listener {
                         override fun onPlayerError(error: PlaybackException) {
-                            b.playerStatus.text = "播放失败：${error.errorCodeName}。请检查网络或账号权限"
+                            if (!tryNextCdn(player, p, source)) {
+                                b.playerStatus.text = "播放失败：${error.errorCodeName}。备用线路也已尝试完，请检查网络或清晰度"
+                            }
                         }
                         override fun onPlaybackStateChanged(state: Int) {
                             if (state == Player.STATE_READY) {
@@ -198,6 +204,32 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** 自动切换 B 站返回的备用 CDN，保留播放进度且不向 CDN 发送账号 Cookie。 */
+    private fun tryNextCdn(player: ExoPlayer, playback: PlaybackInfo, source: DefaultMediaSourceFactory): Boolean {
+        val nextVideo = playback.videoBackupUrls.getOrNull(videoBackupIndex)
+        val nextAudio = playback.audioBackupUrls.getOrNull(audioBackupIndex)
+        if (nextVideo == null && nextAudio == null) return false
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val wasPlaying = player.playWhenReady
+        val videoUrl = nextVideo ?: playback.videoUrl
+        val audioUrl = nextAudio ?: playback.audioUrl
+        if (nextVideo != null) videoBackupIndex++
+        if (nextAudio != null) audioBackupIndex++
+        return try {
+            if (playback.isDash && videoUrl != null && audioUrl != null) {
+                val videoSource = source.createMediaSource(buildMediaItem(videoUrl))
+                val audioSource = source.createMediaSource(buildMediaItem(audioUrl))
+                player.setMediaSource(MergingMediaSource(videoSource, audioSource))
+            } else if (videoUrl != null) {
+                player.setMediaItem(buildMediaItem(videoUrl))
+            } else return false
+            player.prepare()
+            player.seekTo(position)
+            player.playWhenReady = wasPlaying
+            b.playerStatus.text = "主线路失败，正在切换备用 CDN…"
+            true
+        } catch (_: Exception) { false }
+    }
     private fun buildMediaItem(url: String): MediaItem {
         val builder = MediaItem.Builder().setUri(url)
         val subtitle = selectedSubtitleUri
