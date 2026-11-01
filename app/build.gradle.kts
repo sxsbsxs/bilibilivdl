@@ -25,4 +25,5 @@ dependencies {
  implementation(project(":bilimiao-comm"))
  implementation(project(":bilimiao-download"))
  implementation(project(":danmaku-engine"))
+ implementation("com.squareup.okhttp3:okhttp:4.10.0")
 }
