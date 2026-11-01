@@ -1,4 +1,5 @@
 name: Import upstream playback and download source modules
+# Source import is pinned to immutable upstream commit SHAs for reproducibility.
 
 on:
   push:
