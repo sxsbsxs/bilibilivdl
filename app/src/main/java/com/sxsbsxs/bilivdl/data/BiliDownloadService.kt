@@ -270,7 +270,7 @@ class BiliDownloadService : Service() {
                 val current = JSONArray(prefs.getString("tasks", "[]"))
                 (0 until current.length()).any { index ->
                     val item = current.optJSONObject(index)
-                    item?.optString("id") == id && item.optString("status") == "downloading"
+                    item != null && item.optString("id") == id && item.optString("status") == "downloading"
                 }
             }
             if (stillDownloading) persistTask(task)
