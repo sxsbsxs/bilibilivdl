@@ -10,6 +10,7 @@ import java.nio.ByteBuffer
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -66,6 +67,7 @@ object BiliDownloadEngine {
         var last: Exception? = null
         for (attempt in 0..MAX_RETRIES) {
             try { transferOnce(url, file, headers, progress); return }
+            catch (e: CancellationException) { throw e }
             catch (e: Exception) { last = e; if (attempt == MAX_RETRIES) break; delay((1000L shl attempt).coerceAtMost(8000L)) }
         }
         throw last ?: IllegalStateException("下载失败")

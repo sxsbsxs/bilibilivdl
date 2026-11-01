@@ -14,7 +14,7 @@
 - 上游仓库：https://github.com/KafuuNeko/BiliDownload
 - 许可证：GNU General Public License v3.0
 - 参考范围：下载任务管理、DASH 音视频分轨、断点续传、并发下载、媒体合并与资源管理。
-- 当前实际适配：`BiliDownloadEngine.kt`（DASH 音视频分轨并行下载、HTTP Range 续传、有限重试、FFmpeg stream-copy 合并、MediaStore 发布）；下载任务页显示任务状态。此为按 BVD 架构适配的实现，不是整套 BVD 源码原样迁入。
+- 当前实际适配：`BiliDownloadEngine.kt`（DASH 音视频分轨并行下载、HTTP Range 续传、有限重试、Android MediaExtractor/MediaMuxer 无损封装合并、MediaStore 发布）；下载任务页显示任务状态。此为按 BVD 架构适配的实现，不是整套 BVD 源码原样迁入。
 
 ## 本项目修改说明
 
