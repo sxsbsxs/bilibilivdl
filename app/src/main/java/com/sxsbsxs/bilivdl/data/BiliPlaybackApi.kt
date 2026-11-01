@@ -66,7 +66,7 @@ object BiliPlaybackApi {
             )
             val response = BiliGRPCHttp.request { PlayURLGRPC.playView(request) }.awaitCall()
             val videoInfo = response.videoInfo ?: return null
-            val streams = videoInfo.streamList.filter { it.content != null }
+            val streams = videoInfo.streamList.filter { it.content != null }.sortedByDescending { it.streamInfo?.quality ?: 0 }
             if (streams.isEmpty()) return null
             val selected = streams.firstOrNull { it.streamInfo?.quality == requestedQuality }
                 ?: streams.firstOrNull()
@@ -74,7 +74,7 @@ object BiliPlaybackApi {
             val actualQuality = selected.streamInfo?.quality ?: videoInfo.quality
             val qualities = streams.mapNotNull { stream ->
                 stream.streamInfo?.let { it.quality to it.newDescription }
-            }.distinctBy { it.first }
+            }.distinctBy { it.first }.sortedByDescending { it.first }
             when (val content = selected.content ?: return null) {
                 is Stream.Content.DashVideo -> {
                     val dash = content.value
@@ -178,6 +178,7 @@ object BiliPlaybackApi {
         val ids=data.optJSONArray("accept_quality"); val names=data.optJSONArray("accept_description")
         val qualities=mutableListOf<Pair<Int,String>>()
         if(ids!=null&&names!=null) for(i in 0 until minOf(ids.length(),names.length())) qualities.add(ids.optInt(i) to names.optString(i))
+        qualities.sortByDescending { it.first }
         val actual=data.optInt("quality",qn)
         val dash=data.optJSONObject("dash")
         if(dash!=null) {
