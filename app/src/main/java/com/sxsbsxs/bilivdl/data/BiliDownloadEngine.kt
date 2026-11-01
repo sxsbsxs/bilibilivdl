@@ -143,6 +143,14 @@ object BiliDownloadEngine {
             }
         try {
             val code = c.responseCode
+            if (code == 416 && offset > 0L) {
+                val total = Regex("bytes \\*/(\\d+)").matchEntire(c.getHeaderField("Content-Range").orEmpty())
+                    ?.groupValues?.get(1)?.toLongOrNull()
+                if (total != null && total == offset) {
+                    progress(offset, total)
+                    return
+                }
+            }
             if (code != 200 && code != 206) throw CdnHttpException(code)
             val append = offset > 0 && code == 206
             if (append) {

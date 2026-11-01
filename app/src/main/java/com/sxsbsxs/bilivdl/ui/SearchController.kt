@@ -102,7 +102,7 @@ class SearchController(
             try {
                 val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(item.seasonId) }
                 if (season.episodes.isEmpty()) error("该番剧暂时没有可用剧集")
-                val labels = season.episodes.map { episode ->
+                val labels: Array<CharSequence> = season.episodes.map { episode ->
                     listOf(episode.title, episode.longTitle).filter { it.isNotBlank() }.joinToString(" · ")
                 }.toTypedArray()
                 AlertDialog.Builder(fragment.requireContext())

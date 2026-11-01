@@ -11,6 +11,8 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import java.util.concurrent.ConcurrentHashMap
@@ -192,7 +194,7 @@ class BiliDownloadService : Service() {
                 if (requested == ACTION_CANCEL) {
                     BiliDownloadEngine.cleanupTask(this@BiliDownloadService, taskId, title)
                 }
-                updateTask(task)
+                withContext(NonCancellable) { updateTask(task) }
             } catch (error: Exception) {
                 task.put("status", "failed")
                     .put("progress", error.message ?: "下载失败")
