@@ -39,6 +39,9 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 .addToBackStack("search")
                 .commit()
         }
+        b.homeLoginButton.setOnClickListener {
+            (activity as? com.sxsbsxs.bilivdl.MainActivity)?.openAccountPage()
+        }
         b.homeSearchButton.setOnClickListener { openSearch() }
         b.homeSearchEntry.setOnClickListener { openSearch() }
 
