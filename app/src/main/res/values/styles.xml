@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="BiliVdlChip" parent="Widget.Material3.Chip.Assist">
+        <item name="chipBackgroundColor">@color/surface_elevated</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="chipStrokeColor">@color/stroke_dark</item>
+        <item name="chipStrokeWidth">1dp</item>
+    </style>
+</resources>
