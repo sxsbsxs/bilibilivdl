@@ -32,6 +32,11 @@ object BilimiaoApiBridge {
         return root
     }
 
+    suspend fun videoInfo(id: String, type: String): JSONObject {
+        val root = execute(videoApi.info(id, type))
+        return root.optJSONObject("data") ?: error("B站没有返回视频详情")
+    }
+
     suspend fun likeVideo(aid: Long, liked: Boolean) {
         execute(videoApi.like(aid.toString(), dislike = 0, like = if (liked) 1 else 2))
     }
