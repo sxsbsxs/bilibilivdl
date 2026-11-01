@@ -491,6 +491,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             .put("title", title)
             .put("quality", info?.name ?: "清晰度 " + qn)
             .put("episodeId", epId)
+            .put("pageIndex", selectedPartIndex)
             .put("status", "downloading")
             .put("progress", "等待后台下载服务启动")
             .put("time", System.currentTimeMillis())
@@ -503,7 +504,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             .putString(taskId + "_audio", audioCodec)
             .apply()
         try {
-            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec)
+            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec, selectedPartIndex)
             b.downloadStatus.text = "已加入后台下载 · " + (info?.name ?: "清晰度 " + qn) +
                 if (videoCodec.isNotBlank()) " · " + videoCodec else ""
         } catch (error: Exception) {

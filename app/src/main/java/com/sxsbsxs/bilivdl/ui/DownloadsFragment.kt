@@ -95,7 +95,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         button("继续全部", resumable.isNotEmpty()) {
             resumable.forEach {
                 BiliDownloadService.resume(context, it.taskId, it.bvid, it.aid,
-                    it.title, it.qn, it.episodeId, it.videoCodec, it.audioCodec)
+                    it.title, it.qn, it.episodeId, it.videoCodec, it.audioCodec, it.pageIndex)
             }
         }
         button("取消全部", active.isNotEmpty()) {
@@ -161,7 +161,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         when (task.status) {
             "downloading" -> action("暂停") { BiliDownloadService.pause(context, task.taskId) }
             "paused", "failed", "queued" -> action(if (task.status == "failed") "重试" else "继续") {
-                BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec)
+                BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec, task.pageIndex)
             }
         }
         if (task.status == "downloading" || task.status == "paused" || task.status == "failed" || task.status == "queued") {

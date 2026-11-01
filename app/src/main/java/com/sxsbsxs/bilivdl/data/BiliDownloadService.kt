@@ -46,6 +46,7 @@ class BiliDownloadService : Service() {
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_QN = "qn"
         private const val EXTRA_EP_ID = "episode_id"
+        private const val EXTRA_PAGE_INDEX = "page_index"
         private const val EXTRA_VIDEO_CODEC = "video_codec"
         private const val EXTRA_AUDIO_CODEC = "audio_codec"
         private const val EXTRA_ACTION = "queue_action"
@@ -57,8 +58,8 @@ class BiliDownloadService : Service() {
 
         fun pause(context: Context, id: String) = sendControl(context, id, ACTION_PAUSE)
         fun cancel(context: Context, id: String) = sendControl(context, id, ACTION_CANCEL)
-        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "") =
-            enqueue(context, id, bvid, aid, title, qn, episodeId, videoCodec, audioCodec)
+        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "", pageIndex: Int = 0) =
+            enqueue(context, id, bvid, aid, title, qn, episodeId, videoCodec, audioCodec, pageIndex)
 
         private fun sendControl(context: Context, id: String, action: String) {
             val intent = Intent(context, BiliDownloadService::class.java)
@@ -66,7 +67,7 @@ class BiliDownloadService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "") {
+        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L, videoCodec: String = "", audioCodec: String = "", pageIndex: Int = 0) {
             val intent = Intent(context, BiliDownloadService::class.java).apply {
                 putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_BVID, bvid)
@@ -76,6 +77,7 @@ class BiliDownloadService : Service() {
                 putExtra(EXTRA_EP_ID, episodeId)
                 putExtra(EXTRA_VIDEO_CODEC, videoCodec)
                 putExtra(EXTRA_AUDIO_CODEC, audioCodec)
+                putExtra(EXTRA_PAGE_INDEX, pageIndex)
             }
             ContextCompat.startForegroundService(context, intent)
         }
@@ -113,6 +115,7 @@ class BiliDownloadService : Service() {
                         putExtra(EXTRA_EP_ID, task.episodeId)
                         putExtra(EXTRA_VIDEO_CODEC, task.videoCodec)
                         putExtra(EXTRA_AUDIO_CODEC, task.audioCodec)
+                        putExtra(EXTRA_PAGE_INDEX, task.pageIndex)
                     }
                     startService(restore)
                 }
@@ -140,6 +143,7 @@ class BiliDownloadService : Service() {
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val qn = intent.getIntExtra(EXTRA_QN, 127)
         val episodeId = intent.getLongExtra(EXTRA_EP_ID, 0L)
+        val pageIndex = intent.getIntExtra(EXTRA_PAGE_INDEX, 0).coerceAtLeast(0)
         val savedOptions = getSharedPreferences("download_options", MODE_PRIVATE)
         val videoCodec = intent.getStringExtra(EXTRA_VIDEO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_video", "").orEmpty() }
         val audioCodec = intent.getStringExtra(EXTRA_AUDIO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_audio", "").orEmpty() }
@@ -156,6 +160,7 @@ class BiliDownloadService : Service() {
                 .put("aid", aid)
                 .put("qn", qn)
                 .put("episodeId", episodeId)
+                .put("pageIndex", pageIndex)
                 .put("videoCodec", videoCodec)
                 .put("audioCodec", audioCodec)
                 .put("status", "queued")
@@ -168,7 +173,7 @@ class BiliDownloadService : Service() {
                 task.put("status", "downloading").put("progress", "正在获取视频信息")
                 updateTask(task)
                 val cookie = BiliSession.cookie(this@BiliDownloadService)
-                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn, videoCodec, audioCodec) else BiliPlaybackApi.load(bvid, aid, qn, cookie, 0, videoCodec, audioCodec)
+                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn, videoCodec, audioCodec) else BiliPlaybackApi.load(bvid, aid, qn, cookie, pageIndex, videoCodec, audioCodec)
                 task.put("cid", playback.cid).put("quality", playback.name)
                 task.put("progress", "准备下载")
                 updateTask(task)
@@ -293,6 +298,7 @@ class BiliDownloadService : Service() {
             aid = task.optLong("aid"),
             qn = task.optInt("qn", 80),
             episodeId = task.optLong("episodeId"),
+            pageIndex = task.optInt("pageIndex", 0),
             quality = task.optString("quality"),
             status = task.optString("status", "queued"),
             progress = task.optString("progress"),

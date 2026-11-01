@@ -17,7 +17,7 @@ object DownloadQueueStore {
     if (id.isBlank()) continue
     add(DownloadTaskEntity(
      taskId=id, title=o.optString("title","视频"), bvid=o.optString("bvid"), aid=o.optLong("aid"),
-     cid=o.optLong("cid"), episodeId=o.optLong("episodeId"), qn=o.optInt("qn",80),
+     cid=o.optLong("cid"), episodeId=o.optLong("episodeId"), pageIndex=o.optInt("pageIndex",0), qn=o.optInt("qn",80),
      quality=o.optString("quality"), status=o.optString("status","queued").let { if(it=="downloading") "queued" else it },
      progress=o.optString("progress"), outputPath=o.optString("path"), videoCodec=o.optString("videoCodec"),
      audioCodec=o.optString("audioCodec"), completedBytes=o.optLong("completedBytes"),
