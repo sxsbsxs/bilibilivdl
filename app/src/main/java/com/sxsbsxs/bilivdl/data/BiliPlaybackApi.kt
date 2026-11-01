@@ -107,11 +107,15 @@ object BiliPlaybackApi {
             error(root.optString("message", "获取可下载清晰度失败") + "（$code）")
         }
         val data = root.optJSONObject("data") ?: error("清晰度响应缺少 data")
-        val qualities = data.optJSONArray("accept_quality") ?: return emptyList()
+        val accepted = data.optJSONArray("accept_quality") ?: return emptyList()
         val labels = data.optJSONArray("accept_description")
-        return (0 until qualities.length()).mapNotNull { index ->
-            val qn = qualities.optInt(index)
-            if (qn <= 0) null else qn to (labels?.optString(index).orEmpty().ifBlank { "清晰度 $qn" })
+        val dashVideo = data.optJSONObject("dash")?.optJSONArray("video")
+        val returnedIds = if (dashVideo != null) {
+            (0 until dashVideo.length()).mapNotNull { dashVideo.optJSONObject(it)?.optInt("id")?.takeIf { id -> id > 0 } }.toSet()
+        } else setOf(data.optInt("quality").takeIf { it > 0 } ?: return emptyList())
+        return (0 until accepted.length()).mapNotNull { index ->
+            val qn = accepted.optInt(index)
+            if (qn <= 0 || qn !in returnedIds) null else qn to (labels?.optString(index).orEmpty().ifBlank { "清晰度 $qn" })
         }.distinctBy { it.first }.sortedByDescending { it.first }
     }
 
@@ -210,15 +214,17 @@ object BiliPlaybackApi {
             val id = qa?.optInt(i) ?: 0
             if (id <= 0) null else id to (la?.optString(i).orEmpty().ifBlank { "清晰度 " + id })
         }.distinctBy { it.first }.sortedByDescending { it.first }
-        val actual = data.optInt("quality", qn)
+        val reportedQuality = data.optInt("quality", 0)
         val dash = data.optJSONObject("dash")
         if (dash != null) {
             val va = dash.optJSONArray("video")
             val aa = dash.optJSONArray("audio")
             val videos = (0 until (va?.length() ?: 0)).mapNotNull { va?.optJSONObject(it) }
             val audios = (0 until (aa?.length() ?: 0)).mapNotNull { aa?.optJSONObject(it) }
-            val video = videos.firstOrNull { it.optInt("id") == actual }
+            val video = videos.firstOrNull { it.optInt("id") == reportedQuality }
+                ?: videos.firstOrNull { it.optInt("id") == qn }
                 ?: videos.maxByOrNull { it.optLong("bandwidth") } ?: return null
+            val actual = video.optInt("id").takeIf { it > 0 } ?: reportedQuality.takeIf { it > 0 } ?: return null
             val audio = audios.maxByOrNull { it.optLong("bandwidth") }
             fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
             val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
@@ -232,6 +238,7 @@ object BiliPlaybackApi {
         val durl = data.optJSONArray("durl") ?: return null
         val urls = (0 until durl.length()).mapNotNull { durl.optJSONObject(it)?.optString("url")?.takeIf { u -> u.startsWith("http") } }
         if (urls.isEmpty()) return null
+        val actual = reportedQuality.takeIf { it > 0 } ?: return null
         return PlaybackInfo(cid, urls.first(), actual,
             choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual,
             choices.ifEmpty { listOf(actual to ("清晰度 " + actual)) }, segments = urls)
@@ -307,7 +314,9 @@ object BiliPlaybackApi {
         val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
             quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
         }.distinctBy { it.first }.sortedByDescending { it.first }
-        val actual = upstream.quality.takeIf { it > 0 } ?: qn
+        val actual = upstream.quality.takeIf { it > 0 }
+            ?: upstream.dash?.video?.maxByOrNull { it.bandwidth }?.id
+            ?: error("B站没有返回实际清晰度，已停止显示预设画质")
         val dash = upstream.dash
         if (dash != null) {
             fun itemJson(item: com.a10miaomiao.bilimiao.comm.apis.PlayerAPI.DashItem): JSONObject {
