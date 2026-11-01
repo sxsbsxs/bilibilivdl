@@ -184,9 +184,7 @@ object BiliPlaybackApi {
                 cover = item.optString("pic").let { if (it.startsWith("//")) "https:$it" else it },
                 author = owner?.optString("name").orEmpty().ifBlank { "未知 UP 主" },
                 play = stat?.optLong("view")?.toString() ?: "0",
-                duration = item.optInt("duration").let { seconds ->
-                    if (seconds <= 0) "" else "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
-                },
+                duration = item.optString("duration"),
                 bvid = bvidValue,
                 aid = aidValue,
                 description = item.optString("desc"),
