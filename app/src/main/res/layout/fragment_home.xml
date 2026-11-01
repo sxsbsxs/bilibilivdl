@@ -19,41 +19,80 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
-            <TextView
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="BiliVdl"
-                android:textColor="@color/text_primary"
-                android:textSize="27sp"
-                android:textStyle="bold" />
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="BiliVdl"
+                    android:textColor="@color/text_primary"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="视频 · 弹幕 · 下载"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
             <ImageButton
                 android:id="@+id/home_search_button"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:background="@drawable/bg_search_button"
                 android:contentDescription="搜索"
-                android:src="@android:drawable/ic_menu_search"
+                android:padding="11dp"
+                android:src="@drawable/ic_search"
                 android:tint="@color/text_primary" />
         </LinearLayout>
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="发现值得收藏的视频"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
+            android:layout_marginTop="22dp"
+            android:background="@drawable/bg_home_hero"
+            android:orientation="vertical"
+            android:padding="18dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="想看什么？"
+                android:textColor="@color/white"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:text="搜索视频标题，或直接输入 BV / AV 号快速定位"
+                android:textColor="#EDE7EC"
+                android:textSize="13sp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/home_search_cta"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginTop="14dp"
+                android:text="开始搜索"
+                android:textAllCaps="false"
+                android:textColor="@color/brand"
+                app:backgroundTint="@color/white"
+                app:cornerRadius="12dp" />
+        </LinearLayout>
 
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="18dp"
             android:scrollbars="none">
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/home_categories"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                app:singleLine="true">
                 <com.google.android.material.chip.Chip
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -78,20 +117,33 @@
             </com.google.android.material.chip.ChipGroup>
         </HorizontalScrollView>
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="为你推荐"
-            android:textColor="@color/text_primary"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="22dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="为你推荐"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="更多内容即将呈现"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/home_empty_state"
             android:layout_width="match_parent"
-            android:layout_height="190dp"
-            android:layout_marginTop="14dp"
+            android:layout_height="174dp"
+            android:layout_marginTop="13dp"
             android:background="@drawable/bg_empty_card"
             android:gravity="center"
             android:orientation="vertical"
@@ -99,16 +151,16 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="准备好探索了吗？"
+                android:text="这里留给好视频"
                 android:textColor="@color/text_primary"
                 android:textSize="17sp"
                 android:textStyle="bold" />
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:gravity="center"
-                android:text="接入视频推荐接口后，这里将展示视频封面、标题和播放数据。"
+                android:text="视频推荐流将在后续接入。现在可以进入「发现」搜索真实视频。"
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
         </LinearLayout>
