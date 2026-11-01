@@ -88,7 +88,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             })
         }
         button("全部暂停", active.isNotEmpty()) {
-            active.filter { it.status == "downloading" }.forEach {
+            active.forEach {
                 BiliDownloadService.pause(context, it.taskId)
             }
         }
