@@ -14,7 +14,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
 import com.sxsbsxs.bilivdl.data.BiliInteractionApi
@@ -80,12 +80,16 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.videoFavorite.setOnClickListener { showFavoriteFolders() }
         b.videoTriple.setOnClickListener { tripleAction() }
         b.danmakuSend.setOnClickListener { showDanmakuComposer() }
-        b.commentsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
-                val lm = rv.layoutManager as LinearLayoutManager
-                if (lm.findLastVisibleItemPosition() >= (rv.adapter?.itemCount ?: 0) - 4) loadComments(false)
+        // comments_list is inside a NestedScrollView with nested scrolling disabled;
+        // listen to the parent scroll view or the RecyclerView never receives scroll events.
+        b.playerScroll.setOnScrollChangeListener(
+            NestedScrollView.OnScrollChangeListener { scroll, _, y, _, _ ->
+                val content = scroll.getChildAt(0) ?: return@OnScrollChangeListener
+                if (y + scroll.height >= content.measuredHeight - 650) {
+                    loadComments(false)
+                }
             }
-        })
+        )
         load(80)
         loadComments(true)
     }
