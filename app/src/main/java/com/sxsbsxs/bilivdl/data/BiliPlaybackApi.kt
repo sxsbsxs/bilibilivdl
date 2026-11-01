@@ -8,8 +8,6 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.security.MessageDigest
-import java.util.TreeMap
 
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
 data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
@@ -17,7 +15,6 @@ data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audi
 data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList())
 
 object BiliPlaybackApi {
-    private val order = intArrayOf(46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52)
     private fun get(url: String, cookie: String): JSONObject {
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout=20000; readTimeout=25000; instanceFollowRedirects=true
@@ -33,24 +30,6 @@ object BiliPlaybackApi {
         } finally { c.disconnect() }
     }
     private fun enc(s:String)=URLEncoder.encode(s,"UTF-8")
-    private fun md5(s:String)=MessageDigest.getInstance("MD5").digest(s.toByteArray()).joinToString(""){"%02x".format(it)}
-    private fun mixin(cookie:String):String {
-        val nav=get("https://api.bilibili.com/x/web-interface/nav",cookie)
-        if(nav.optInt("code")!=0) error("无法获取 B站签名密钥：${nav.optString("message")}")
-        val img=nav.optJSONObject("data")?.optJSONObject("wbi_img")?:error("B站未返回 WBI 密钥")
-        val a=img.optString("img_url").substringAfterLast('/').substringBefore('.')
-        val b=img.optString("sub_url").substringAfterLast('/').substringBefore('.')
-        val raw=a+b
-        if(raw.length<64) error("B站 WBI 密钥格式异常")
-        return order.joinToString(""){raw[it].toString()}.take(32)
-    }
-    private fun signed(path:String, values:Map<String,String>, cookie:String):String {
-        val p=TreeMap(values); p["wts"]=(System.currentTimeMillis()/1000).toString()
-        val query=p.entries.joinToString("&"){"${enc(it.key)}=${enc(it.value).replace(Regex("[!'()*]"),"")}"}
-        return "https://api.bilibili.com$path?$query&w_rid=${md5(query+mixin(cookie))}"
-    }
-
-
     /**
      * gRPC 优先的匿名播放线路。gRPC 不可用时返回 null，由调用方继续 HTTP 备用线路。
      */
