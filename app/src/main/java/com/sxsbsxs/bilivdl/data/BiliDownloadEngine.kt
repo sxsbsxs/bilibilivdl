@@ -133,7 +133,7 @@ object BiliDownloadEngine {
             activeMuxer.start()
             videoExtractor.selectTrack(videoTrack)
             audioExtractor.selectTrack(audioTrack)
-            val videoBuffer = ByteBuffer.allocate(4 * 1024 * 1024)
+            val videoBuffer = ByteBuffer.allocate(16 * 1024 * 1024)
             val audioBuffer = ByteBuffer.allocate(1024 * 1024)
             val info = MediaCodec.BufferInfo()
             var videoTime = videoExtractor.sampleTime
