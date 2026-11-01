@@ -21,7 +21,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private var _binding: FragmentHomeBinding? = null
     private val b get() = checkNotNull(_binding) { "HomeFragment view is not available" }
 
-    private var page = 1
+    private var page = 0
     private var loading = false
     private var hasMore = true
     private var loadJob: Job? = null
@@ -32,14 +32,14 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         super.onViewCreated(view, savedInstanceState)
         _binding = FragmentHomeBinding.bind(view)
 
-        val search = {
+        val openSearch = {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragment_container, DiscoverFragment())
                 .addToBackStack("search")
                 .commit()
         }
-        b.homeSearchButton.setOnClickListener { search() }
-        b.homeSearchEntry.setOnClickListener { search() }
+        b.homeSearchButton.setOnClickListener { openSearch() }
+        b.homeSearchEntry.setOnClickListener { openSearch() }
 
         adapter = VideoAdapter { video ->
             startActivity(Intent(requireContext(), VideoPlayerActivity::class.java).apply {
@@ -53,9 +53,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeSwipe.setOnRefreshListener { refresh() }
         b.homeScroll.setOnScrollChangeListener(
             NestedScrollView.OnScrollChangeListener { scroll, _, y, _, _ ->
-                if (!loading && hasMore &&
-                    y + scroll.height >= scroll.getChildAt(0).measuredHeight - 450
-                ) {
+                val child = scroll.getChildAt(0) ?: return@OnScrollChangeListener
+                if (!loading && hasMore && y + scroll.height >= child.measuredHeight - 700) {
                     loadPage(page + 1)
                 }
             }
@@ -66,7 +65,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private fun refresh() {
         val binding = _binding ?: return
         loadJob?.cancel()
-        page = 1
+        page = 0
         hasMore = true
         loading = false
         videos.clear()
@@ -77,43 +76,53 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
 
     private fun loadPage(target: Int) {
         val binding = _binding ?: return
-        if (loading || (!hasMore && target != 1)) return
+        if (loading || (!hasMore && target > 1)) return
 
         loading = true
         if (target == 1 && !binding.homeSwipe.isRefreshing) {
             binding.homeProgress.visibility = View.VISIBLE
         }
-
         val appContext = requireContext().applicationContext
         loadJob = viewLifecycleOwner.lifecycleScope.launch {
+            var added = 0
             try {
-                val cookie = withContext(Dispatchers.IO) {
-                    BiliSession.cookie(appContext)
-                }
+                val cookie = withContext(Dispatchers.IO) { BiliSession.cookie(appContext) }
                 val result = withContext(Dispatchers.IO) {
                     BiliPopularApi.loadPopular(target, cookie)
                 }
-
-                // A cancelled/obsolete page must never update a destroyed view.
-                val currentBinding = _binding ?: return@launch
-                val seen = videos.map { it.bvid }.toHashSet()
-                videos.addAll(result.filter { it.bvid.isNotBlank() && seen.add(it.bvid) })
+                val current = _binding ?: return@launch
+                val known = videos.mapTo(hashSetOf()) { it.bvid }
+                val fresh = result.filter { it.bvid.isNotBlank() && known.add(it.bvid) }
+                added = fresh.size
+                videos.addAll(fresh)
                 page = target
                 hasMore = result.size >= 20
                 adapter.submitList(videos.toList())
-                currentBinding.homeFeedStatus.text =
-                    if (videos.isEmpty()) "暂时没有推荐视频"
-                    else "已加载 ${videos.size} 条 · 下滑继续加载"
+                current.homeFeedStatus.text = when {
+                    videos.isEmpty() -> "暂时没有推荐视频 · 下拉重试"
+                    hasMore -> "已加载 ${videos.size} 条 · 下滑继续加载"
+                    else -> "已加载全部推荐 · 下拉刷新换一批"
+                }
+
+                // NestedScrollView does not emit a scroll callback when the first
+                // page is shorter than the viewport. Fill the screen by requesting
+                // the next page once the adapter has been measured.
+                current.homeRecommendations.post {
+                    val live = _binding ?: return@post
+                    val scroll = live.homeScroll
+                    if (!loading && hasMore && added > 0 && !scroll.canScrollVertically(1)) {
+                        loadPage(page + 1)
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _binding?.homeFeedStatus?.text =
                     "加载失败：${e.message ?: "网络异常"} · 下拉重试"
             } finally {
-                // Fragment may have switched tabs and destroyed this view.
-                _binding?.let { current ->
-                    current.homeProgress.visibility = View.GONE
-                    current.homeSwipe.isRefreshing = false
+                _binding?.let {
+                    it.homeProgress.visibility = View.GONE
+                    it.homeSwipe.isRefreshing = false
                 }
                 loading = false
             }
