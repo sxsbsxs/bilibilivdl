@@ -2,11 +2,14 @@ package com.sxsbsxs.bilivdl.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaMuxer
+import android.media.MediaCodec
+import android.media.MediaFormat
+import java.nio.ByteBuffer
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -106,6 +109,56 @@ object BiliDownloadEngine {
                 if (done == 0L || (total >= 0 && done != total)) error("资源长度校验失败：$done/$total")
             }
         } finally { c.disconnect() }
+    }
+
+
+    /** 使用 Android MediaExtractor/MediaMuxer 直接复制 DASH 轨道，不重新编码。 */
+    private fun muxDashTracks(video: File, audio: File, output: File) {
+        val videoExtractor = MediaExtractor()
+        val audioExtractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        try {
+            videoExtractor.setDataSource(video.absolutePath)
+            audioExtractor.setDataSource(audio.absolutePath)
+            val videoTrack = (0 until videoExtractor.trackCount).firstOrNull {
+                videoExtractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            } ?: error("下载的视频资源中没有视频轨道")
+            val audioTrack = (0 until audioExtractor.trackCount).firstOrNull {
+                audioExtractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: error("下载的音频资源中没有音频轨道")
+            muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            val outVideo = muxer.addTrack(videoExtractor.getTrackFormat(videoTrack))
+            val outAudio = muxer.addTrack(audioExtractor.getTrackFormat(audioTrack))
+            muxer.start()
+            videoExtractor.selectTrack(videoTrack)
+            audioExtractor.selectTrack(audioTrack)
+            val videoBuffer = ByteBuffer.allocate(4 * 1024 * 1024)
+            val audioBuffer = ByteBuffer.allocate(1024 * 1024)
+            val info = MediaCodec.BufferInfo()
+            var videoTime = videoExtractor.sampleTime
+            var audioTime = audioExtractor.sampleTime
+            while (videoTime >= 0 || audioTime >= 0) {
+                val takeVideo = audioTime < 0 || (videoTime >= 0 && videoTime <= audioTime)
+                val extractor = if (takeVideo) videoExtractor else audioExtractor
+                val buffer = if (takeVideo) videoBuffer else audioBuffer
+                val targetTrack = if (takeVideo) outVideo else outAudio
+                buffer.clear()
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) {
+                    if (takeVideo) videoTime = -1 else audioTime = -1
+                    continue
+                }
+                info.set(0, size, extractor.sampleTime, extractor.sampleFlags)
+                muxer.writeSampleData(targetTrack, buffer, info)
+                extractor.advance()
+                if (takeVideo) videoTime = extractor.sampleTime else audioTime = extractor.sampleTime
+            }
+            muxer.stop()
+        } finally {
+            runCatching { muxer?.release() }
+            videoExtractor.release()
+            audioExtractor.release()
+        }
     }
 
     private fun publish(context: Context, file: File, title: String): String {
