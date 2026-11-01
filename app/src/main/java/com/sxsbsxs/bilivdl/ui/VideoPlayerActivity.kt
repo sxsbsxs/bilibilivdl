@@ -48,6 +48,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentSort = 3
     private var videoLiked = false
     private var playbackSpeedIndex = 0
+    private var pendingSeekPosition = 0L
     private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 0.75f)
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
     private val aid by lazy { intent.getLongExtra(EXTRA_AID, 0L) }
@@ -111,7 +112,14 @@ class VideoPlayerActivity : AppCompatActivity() {
                             b.playerStatus.text = "播放失败：${error.errorCodeName}。请检查网络或账号权限"
                         }
                         override fun onPlaybackStateChanged(state: Int) {
-                            if (state == Player.STATE_READY) b.playerStatus.text = "正在播放 · ${p.name}"
+                            if (state == Player.STATE_READY) {
+                                if (pendingSeekPosition > 0L) {
+                                    player.seekTo(pendingSeekPosition)
+                                    pendingSeekPosition = 0L
+                                }
+                                player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                                b.playerStatus.text = "正在播放 · ${p.name}"
+                            }
                         }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             b.danmakuOverlay.setPlaying(isPlaying)
@@ -143,9 +151,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this).setTitle("选择播放清晰度")
             .setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, p.qualities.map { it.second }.toTypedArray())) { _, i ->
                 if (p.qualities[i].first != p.quality) {
-                    val position = exo?.currentPosition ?: 0L
+                    pendingSeekPosition = exo?.currentPosition ?: 0L
                     load(p.qualities[i].first)
-                    exo?.seekTo(position)
                 }
             }.show()
     }
