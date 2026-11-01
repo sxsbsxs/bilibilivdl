@@ -64,6 +64,8 @@ class MiaoHttp(var url: String? = null) {
         return url?.let { PlatformProviders.cookieProvider.getCookie(it) } ?: ""
     }
 
+    suspend fun awaitString(): String = awaitCall().use { response -> response.body?.string().orEmpty() }
+
     suspend fun awaitCall(): Response{
         miaoLogger().d(
             "method" to method,
