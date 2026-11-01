@@ -1,35 +1,39 @@
 package com.sxsbsxs.bilivdl.ui
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
-import android.webkit.CookieManager
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.R
+import com.sxsbsxs.bilivdl.data.BiliQrLoginApi
 import com.sxsbsxs.bilivdl.data.BiliSession
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private var status: TextView? = null
     private var accountName: TextView? = null
+    private var qrJob: Job? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         status = view.findViewById(R.id.account_status)
         accountName = view.findViewById(R.id.account_name)
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.account_login)
-            .setOnClickListener { openBiliLogin() }
+            .setOnClickListener { openQrLogin() }
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.account_refresh)
             .setOnClickListener { refresh() }
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.account_logout)
@@ -41,115 +45,123 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         refresh()
     }
 
-    /**
-     * BVD-style WebView login handoff: wait for the mobile Bilibili site to
-     * redirect after authentication, then validate the captured cookie with /nav.
-     * A page load alone is never treated as a successful login.
-     */
-    private fun openBiliLogin() {
+    /** BVD-style QR flow: generate a QR key, poll its state, then verify the received session. */
+    private fun openQrLogin() {
         val context = requireContext()
         val density = resources.displayMetrics.density
-        val container = LinearLayout(context).apply {
+        fun dp(value: Int) = (value * density).toInt()
+
+        val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(12), dp(8), dp(12), dp(4))
         }
-        val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = false
-            max = 100
+        val qrImage = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
+            contentDescription = "哔哩哔哩登录二维码"
         }
-        val webView = WebView(context)
-        container.addView(progress, LinearLayout.LayoutParams(-1, (4 * density).toInt()))
-        container.addView(webView, LinearLayout.LayoutParams(-1, (560 * density).toInt()))
+        val message = TextView(context).apply {
+            text = "正在获取登录二维码…"
+            gravity = Gravity.CENTER
+            textSize = 14f
+            setPadding(0, dp(12), 0, dp(8))
+        }
+        content.addView(qrImage, LinearLayout.LayoutParams(dp(248), dp(248)))
+        content.addView(message, LinearLayout.LayoutParams(-1, -2))
 
         val dialog = MaterialAlertDialogBuilder(context)
-            .setTitle("登录哔哩哔哩")
-            .setView(container)
-            .setNegativeButton("关闭", null)
+            .setTitle("扫码登录")
+            .setView(content)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("刷新二维码", null)
             .create()
 
-        var handingOff = false
-        val cookies = CookieManager.getInstance()
-        cookies.setAcceptCookie(true)
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.settings.javaScriptCanOpenWindowsAutomatically = true
-        webView.settings.loadsImagesAutomatically = true
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
-
-        fun captureAndValidate() {
-            if (handingOff || !dialog.isShowing) return
-            val cookie = listOf(
-                "https://bilibili.com",
-                "https://www.bilibili.com",
-                "https://m.bilibili.com"
-            ).asSequence().mapNotNull { cookies.getCookie(it) }
-                .firstOrNull { it.contains("SESSDATA=") && it.contains("DedeUserID=") }
-                .orEmpty()
-            if (cookie.isBlank()) return
-
-            handingOff = true
-            progress.visibility = View.VISIBLE
-            progress.isIndeterminate = true
-            BiliSession.saveCookie(context, cookie)
-            viewLifecycleOwner.lifecycleScope.launch {
+        fun startQrFlow() {
+            qrJob?.cancel()
+            qrImage.setImageDrawable(null)
+            message.text = "正在获取登录二维码…"
+            qrJob = viewLifecycleOwner.lifecycleScope.launch {
                 try {
-                    val profile = withContext(Dispatchers.IO) { BiliSession.profile(context) }
-                    if (!profile.optBoolean("isLogin")) {
-                        handingOff = false
-                        status?.text = "检测到登录凭据，但 B 站尚未确认登录成功"
-                        return@launch
+                    while (isActive && dialog.isShowing) {
+                        val qr = withContext(Dispatchers.IO) { BiliQrLoginApi.generate() }
+                        qrImage.setImageBitmap(createQrBitmap(qr.url, 640))
+                        message.text = "请使用哔哩哔哩 APP 扫描二维码"
+
+                        var expired = false
+                        var elapsed = 0
+                        while (isActive && dialog.isShowing && elapsed < 180) {
+                            delay(2000)
+                            elapsed += 2
+                            val result = withContext(Dispatchers.IO) { BiliQrLoginApi.poll(qr.key) }
+                            when (result.code) {
+                                0 -> {
+                                    if (result.cookie.isBlank() ||
+                                        !result.cookie.contains("SESSDATA=") ||
+                                        !result.cookie.contains("DedeUserID=")
+                                    ) {
+                                        message.text = "扫码成功，但登录凭据不完整，请刷新二维码重试"
+                                        expired = true
+                                        break
+                                    }
+                                    message.text = "登录成功，正在验证账号…"
+                                    BiliSession.saveCookie(context, result.cookie)
+                                    val profile = withContext(Dispatchers.IO) {
+                                        BiliSession.profile(context)
+                                    }
+                                    if (!profile.optBoolean("isLogin")) {
+                                        message.text = "B 站未确认登录状态，请刷新二维码重试"
+                                        expired = true
+                                        break
+                                    }
+                                    accountName?.text = profile.optString("uname", "已登录")
+                                    status?.text = "账号已连接 · UID ${profile.optLong("mid")}"
+                                    dialog.dismiss()
+                                    return@launch
+                                }
+                                86101 -> message.text = "等待使用 B 站 APP 扫码…"
+                                86090 -> message.text = "已扫码，请在 B 站 APP 中确认登录"
+                                86038 -> {
+                                    message.text = "二维码已过期，正在刷新…"
+                                    expired = true
+                                    break
+                                }
+                                else -> message.text = result.message.ifBlank { "登录状态获取失败" }
+                            }
+                        }
+                        if (!dialog.isShowing || !isActive) break
+                        if (expired || elapsed >= 180) {
+                            message.text = "正在刷新二维码…"
+                            continue
+                        }
+                        break
                     }
-                    accountName?.text = profile.optString("uname", "已登录")
-                    status?.text = "账号已连接 · UID ${profile.optLong("mid")}"
-                    webView.stopLoading()
-                    dialog.dismiss()
                 } catch (e: Exception) {
-                    handingOff = false
-                    status?.text = "登录验证失败：${e.message ?: "网络异常"}"
+                    if (dialog.isShowing) {
+                        message.text = "登录失败：${e.message ?: "网络异常"}"
+                    }
                 }
             }
         }
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val host = request.url.host.orEmpty().lowercase()
-                if (host == "m.bilibili.com" || host == "www.bilibili.com" || host == "bilibili.com") {
-                    captureAndValidate()
-                    return true
-                }
-                return false
-            }
-
-            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-                progress.visibility = View.VISIBLE
-            }
-
-            override fun onPageFinished(view: WebView, url: String?) {
-                if (!progress.isIndeterminate) progress.visibility = View.GONE
-                val host = runCatching { android.net.Uri.parse(url).host.orEmpty() }.getOrDefault("")
-                if (host == "m.bilibili.com" || host == "www.bilibili.com" || host == "bilibili.com") {
-                    captureAndValidate()
-                }
-            }
-        }
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onProgressChanged(view: WebView, newProgress: Int) {
-                if (!progress.isIndeterminate) {
-                    progress.progress = newProgress
-                    progress.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
-                }
-            }
-        }
-        dialog.setOnDismissListener {
-            webView.stopLoading()
-            webView.loadUrl("about:blank")
-            webView.clearHistory()
-            webView.removeAllViews()
-            webView.destroy()
-        }
+        dialog.setOnDismissListener { qrJob?.cancel() }
         dialog.show()
-        status?.text = "请在打开的 B 站页面完成登录"
-        webView.loadUrl("https://passport.bilibili.com/h5-app/passport/login")
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+            .setOnClickListener { startQrFlow() }
+        startQrFlow()
+    }
+
+    private fun createQrBitmap(content: String, size: Int): Bitmap {
+        val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size)
+        val pixels = IntArray(size * size)
+        for (y in 0 until size) {
+            for (x in 0 until size) {
+                pixels[y * size + x] = if (matrix[x, y]) Color.BLACK else Color.WHITE
+            }
+        }
+        return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).apply {
+            setPixels(pixels, 0, size, 0, 0, size, size)
+        }
     }
 
     private fun refresh() {
@@ -163,7 +175,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 status?.text = if (logged) {
                     "账号已连接 · UID ${data.optLong("mid")}"
                 } else {
-                    "未检测到有效登录。点击下方按钮使用 B 站登录页面登录。"
+                    "未检测到有效登录。点击下方按钮扫码登录。"
                 }
             } catch (e: Exception) {
                 accountName?.text = if (BiliSession.cookie(requireContext()).isBlank()) "未登录" else "待验证"
@@ -173,6 +185,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     }
 
     override fun onDestroyView() {
+        qrJob?.cancel()
+        qrJob = null
         status = null
         accountName = null
         super.onDestroyView()
