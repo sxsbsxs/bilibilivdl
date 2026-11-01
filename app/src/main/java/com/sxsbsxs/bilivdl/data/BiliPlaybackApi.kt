@@ -7,7 +7,7 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.TreeMap
 
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>)
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false)
 
 object BiliPlaybackApi {
     private val order = intArrayOf(46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52)
@@ -53,7 +53,7 @@ object BiliPlaybackApi {
         val d=detail.optJSONObject("data")?:error("视频信息为空")
         val cid=d.optJSONArray("pages")?.optJSONObject(0)?.optLong("cid")?:d.optLong("cid")
         if(cid<=0) error("没有获取到视频分P信息")
-        val params=mutableMapOf("cid" to cid.toString(),"qn" to qn.toString(),"fnver" to "0","fnval" to "0","fourk" to "1")
+        val params=mutableMapOf("cid" to cid.toString(),"qn" to qn.toString(),"fnver" to "0","fnval" to "4048","fourk" to "1")
         params.putAll(id)
         val play=get(signed("/x/player/wbi/playurl",params,cookie),cookie)
         if(play.optInt("code")!=0) {
@@ -61,12 +61,14 @@ object BiliPlaybackApi {
             error(if(code == -352) "B站风控拦截播放地址请求（-352）。请登录账号或稍后重试" else play.optString("message","B站拒绝提供播放地址"))
         }
         val data=play.optJSONObject("data")?:error("播放接口没有返回 data")
-        val stream=data.optJSONArray("durl")?.optJSONObject(0)?.optString("url").orEmpty()
-        if(stream.isBlank()) error("接口未返回 MP4 直链；该视频可能仅提供 DASH 分轨或需要更高权限")
         val ids=data.optJSONArray("accept_quality"); val names=data.optJSONArray("accept_description")
         val qualities=mutableListOf<Pair<Int,String>>()
         if(ids!=null&&names!=null) for(i in 0 until minOf(ids.length(),names.length())) qualities.add(ids.optInt(i) to names.optString(i))
         val actual=data.optInt("quality",qn)
-        return PlaybackInfo(cid,stream,actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities)
+        val dash=data.optJSONObject("dash")
+        if(dash!=null) return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true)
+        val stream=data.optJSONArray("durl")?.optJSONObject(0)?.optString("url").orEmpty()
+        if(stream.isBlank()) error("B站未返回可播放的 DASH 或 MP4 音视频流")
+        return PlaybackInfo(cid,stream,actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,false)
     }
 }

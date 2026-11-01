@@ -10,6 +10,7 @@ import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -94,7 +95,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val source = DefaultMediaSourceFactory(this@VideoPlayerActivity).setDataSourceFactory(http)
                 exo = ExoPlayer.Builder(this@VideoPlayerActivity).setMediaSourceFactory(source).build().also { player ->
                     b.playerView.player = player
-                    player.setMediaItem(MediaItem.fromUri(p.url))
+                    player.setMediaItem(if (p.isDash) MediaItem.Builder().setUri(p.url).setMimeType(MimeTypes.APPLICATION_MPD).build() else MediaItem.fromUri(p.url))
                     player.addListener(object : Player.Listener {
                         override fun onPlayerError(error: PlaybackException) {
                             b.playerStatus.text = "播放失败：${error.errorCodeName}。请检查网络或账号权限"
@@ -146,6 +147,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie) }
+                if (p.isDash) error("当前为 DASH 独立音视频轨道，下载合并器接入前不会生成不完整 MP4")
                 if (!p.url.startsWith("https://")) error("下载地址无效")
                 val title = b.playerTitle.text.toString().replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
                 val request = DownloadManager.Request(Uri.parse(p.url)).setTitle(title).setDescription("BiliVdl · ${p.name}")
