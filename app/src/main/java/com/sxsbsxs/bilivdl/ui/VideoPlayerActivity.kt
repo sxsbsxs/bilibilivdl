@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
+import com.bumptech.glide.Glide
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
@@ -68,6 +69,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.qualityButton.setOnClickListener { showQuality() }
         b.partButton.setOnClickListener { showParts() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
+        b.moreActions.setOnClickListener { showMoreActions() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.danmakuButton.setOnClickListener {
             danmakuEnabled = !danmakuEnabled
@@ -106,6 +108,18 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
                 selectedPartIndex = p.selectedPart
+                if (p.title.isNotBlank()) b.playerTitle.text = p.title
+                b.ownerName.text = if (p.ownerName.isNotBlank()) p.ownerName else "UP 主信息暂不可用"
+                if (p.ownerFace.isNotBlank()) Glide.with(this@VideoPlayerActivity).load(p.ownerFace).circleCrop().into(b.ownerAvatar)
+                b.videoStats.text = "播放 " + formatCount(p.viewCount) + "   弹幕 " + formatCount(p.danmakuCount) + "   点赞 " + formatCount(p.likeCount) + "\n投币 " + formatCount(p.coinCount) + "   收藏 " + formatCount(p.favoriteCount) + "   分享 " + formatCount(p.shareCount)
+                b.videoDescription.text = p.description.ifBlank { "暂无视频简介" }
+                b.partButton.visibility = View.GONE
+                b.danmakuButton.visibility = View.GONE
+                b.videoLike.visibility = View.GONE
+                b.videoCoin.visibility = View.GONE
+                b.videoFavorite.visibility = View.GONE
+                b.videoTriple.visibility = View.GONE
+                b.danmakuSend.visibility = View.GONE
                 b.partButton.text = if (p.parts.size > 1) "分P ${p.selectedPart + 1}/${p.parts.size} · ${p.parts[p.selectedPart].title}" else "单P视频"
                 exo?.release()
                 val headers = mutableMapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com", "Accept" to "*/*")
@@ -157,6 +171,27 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = "获取播放地址失败：${e.message ?: "接口异常"}"
             }
         }
+    }
+
+    private fun formatCount(value: Long): String = when {
+        value >= 100_000_000L -> String.format(java.util.Locale.US, "%.1f亿", value / 100_000_000.0)
+        value >= 10_000L -> String.format(java.util.Locale.US, "%.1f万", value / 10_000.0)
+        else -> value.toString()
+    }
+
+    private fun showMoreActions() {
+        val items = arrayOf("选择分P", "弹幕开关", "点赞", "投币", "收藏", "一键三连", "发送弹幕")
+        MaterialAlertDialogBuilder(this).setTitle("更多操作").setItems(items) { _, which ->
+            when (which) {
+                0 -> showParts()
+                1 -> { danmakuEnabled = !danmakuEnabled; b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled); b.playerStatus.text = if (danmakuEnabled) "弹幕已开启" else "弹幕已关闭" }
+                2 -> toggleVideoLike()
+                3 -> showCoinDialog()
+                4 -> showFavoriteFolders()
+                5 -> tripleAction()
+                6 -> showDanmakuComposer()
+            }
+        }.show()
     }
 
     private fun showParts() {
