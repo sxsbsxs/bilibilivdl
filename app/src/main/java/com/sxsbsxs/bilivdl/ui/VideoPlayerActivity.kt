@@ -143,12 +143,37 @@ class VideoPlayerActivity : AppCompatActivity() {
         loadComments(true)
     }
 
+    private fun formatCount(value: Long): String = when {
+        value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
+        value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1万", value / 10_000.0)
+        else -> value.toString()
+    }
+
     private fun load(qn: Int) {
         b.playerStatus.text = "正在获取播放地址…"
         lifecycleScope.launch {
             try {
                 val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
+                videoLiked = if (cookie.isNotBlank() && aid > 0L) {
+                    runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }.getOrDefault(false)
+                } else false
+                b.videoLike.text = if (videoLiked) "已点赞" else "点赞"
+                val authorText = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { p.author }
+                if (authorText.isNotBlank()) b.playerAuthor.text = "UP主 · $authorText"
+                b.playerStats.text = listOf(
+                    formatCount(p.viewCount) + " 播放",
+                    formatCount(p.danmakuCount) + " 弹幕",
+                    p.pubdate.takeIf { it > 0L }?.let {
+                        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date(it * 1000))
+                    }.orEmpty()
+                ).filter { it.isNotBlank() }.joinToString("  ·  ")
+                b.playerDescription.text = p.description
+                b.playerDescription.visibility = if (p.description.isBlank()) View.GONE else View.VISIBLE
+                b.playerDescription.maxLines = 2
+                b.playerDescription.setOnClickListener {
+                    b.playerDescription.maxLines = if (b.playerDescription.maxLines == 2) 20 else 2
+                }
                 videoBackupIndex = 0
                 audioBackupIndex = 0
                 selectedPartIndex = p.selectedPart

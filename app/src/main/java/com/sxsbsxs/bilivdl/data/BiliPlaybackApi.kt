@@ -12,7 +12,7 @@ import java.net.URLEncoder
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
 data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
 data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList())
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "")
 
 object BiliPlaybackApi {
     private fun get(url: String, cookie: String): JSONObject {
@@ -161,10 +161,22 @@ object BiliPlaybackApi {
         val cid = parts.getOrNull(selectedIndex)?.cid ?: d.optLong("cid")
         if(cid<=0) error("没有获取到视频分P信息")
         val resolvedAid = d.optLong("aid", aid)
+        fun enrich(value: PlaybackInfo): PlaybackInfo {
+            val stat = d.optJSONObject("stat")
+            val owner = d.optJSONObject("owner")
+            return value.copy(
+                viewCount = stat?.optLong("view") ?: 0L,
+                danmakuCount = stat?.optLong("danmaku") ?: 0L,
+                pubdate = d.optLong("pubdate"),
+                description = d.optString("desc"),
+                cover = d.optString("pic"),
+                author = owner?.optString("name").orEmpty()
+            )
+        }
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
         // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
         if (cookie.isBlank() && videoCodec.isBlank() && audioCodec.isBlank()) {
-            tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex) }
+            tryGrpcPlayback(resolvedAid, cid, qn)?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
         }
 
         val upstream = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
@@ -224,7 +236,11 @@ object BiliPlaybackApi {
                 videoBackupUrls = video.backup_url.orEmpty().filter { it.isNotBlank() && it != video.base_url },
                 audioBackupUrls = audio?.let { selectedAudio -> selectedAudio.backup_url.orEmpty().filter { it.isNotBlank() && it != selectedAudio.base_url } }.orEmpty(),
                 parts = parts,
-                selectedPart = selectedIndex
+                selectedPart = selectedIndex,
+                viewCount = d.optJSONObject("stat")?.optLong("view") ?: 0L,
+                danmakuCount = d.optJSONObject("stat")?.optLong("danmaku") ?: 0L,
+                pubdate = d.optLong("pubdate"), description = d.optString("desc"),
+                cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty()
             )
         }
         val streams = upstream.durl.orEmpty().mapNotNull { segment ->
@@ -239,7 +255,11 @@ object BiliPlaybackApi {
             qualities = qualities,
             segments = streams,
             parts = parts,
-            selectedPart = selectedIndex
+            selectedPart = selectedIndex,
+            viewCount = d.optJSONObject("stat")?.optLong("view") ?: 0L,
+            danmakuCount = d.optJSONObject("stat")?.optLong("danmaku") ?: 0L,
+            pubdate = d.optLong("pubdate"), description = d.optString("desc"),
+            cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty()
         )
     }
 }
