@@ -12,7 +12,7 @@ import java.net.URLEncoder
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
 data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
 data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "")
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "")
 
 object BiliPlaybackApi {
     private fun get(url: String, cookie: String): JSONObject {
@@ -30,6 +30,13 @@ object BiliPlaybackApi {
         } finally { c.disconnect() }
     }
     private fun enc(s:String)=URLEncoder.encode(s,"UTF-8")
+
+    private fun authorSign(mid: Long, cookie: String): String {
+        if (mid <= 0L) return ""
+        val root = get("https://api.bilibili.com/x/space/acc/info?mid=$mid", cookie)
+        if (root.optInt("code", -1) != 0) return ""
+        return root.optJSONObject("data")?.optString("sign").orEmpty().trim()
+    }
     /**
      * gRPC 优先的匿名播放线路。gRPC 不可用时返回 null，由调用方继续 HTTP 备用线路。
      */
@@ -232,7 +239,7 @@ object BiliPlaybackApi {
             if (videoUrl.isBlank()) return null
             return PlaybackInfo(cid, videoUrl, video.optInt("id", actual),
                 choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual,
-                choices.ifEmpty { listOf(actual to ("清晰度 " + actual)) },
+                (choices.filter { choice -> videos.any { it.optInt("id") == choice.first } } + (actual to (choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual))).distinctBy { it.first }.sortedByDescending { it.first },
                 isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl)
         }
         val durl = data.optJSONArray("durl") ?: return null
@@ -298,11 +305,21 @@ object BiliPlaybackApi {
                 shareCount = stat?.optLong("share") ?: 0L,
                 replyCount = stat?.optLong("reply") ?: 0L,
                 ownerFace = owner?.optString("face").orEmpty(),
+                ownerMid = owner?.optLong("mid") ?: 0L,
+                ownerSign = runCatching { authorSign(owner?.optLong("mid") ?: 0L, cookie) }.getOrDefault(""),
+                ownerMid = owner?.optLong("mid") ?: 0L,
+                ownerSign = runCatching { authorSign(owner?.optLong("mid") ?: 0L, cookie) }.getOrDefault(""),
                 category = d.optString("tname"), duration = d.optInt("duration")
             )
         }
         // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
-        runCatching { httpPlayUrl(resolvedAid, cid, qn, cookie) }.getOrNull()?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
+        // 先请求用户选定档位；若匿名接口对最高档返回空结果，依次尝试常见档位，
+        // 但只显示响应中真实存在的视频轨 ID，绝不把请求值当成实际画质。
+        val httpCandidates = listOf(qn, 80, 64, 32, 16).distinct()
+        for (candidate in httpCandidates) {
+            val resolved = runCatching { httpPlayUrl(resolvedAid, cid, candidate, cookie) }.getOrNull()
+            if (resolved != null) return enrich(resolved.copy(parts = parts, selectedPart = selectedIndex))
+        }
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
         // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
         if (videoCodec.isBlank() && audioCodec.isBlank()) {
