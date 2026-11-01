@@ -14,6 +14,8 @@ object BilimiaoApiBridge {
     private val commentApi = CommentApi()
 
     private suspend fun execute(request: MiaoHttp): JSONObject {
+        // Keep okhttp's Response type inside bilimiao's own module to avoid exposing
+        // a duplicate okhttp ABI across the imported KMP module boundary.
         val body = request.awaitString()
         if (body.isBlank()) error("B站接口没有返回内容")
         val root = JSONObject(body)
