@@ -1,9 +1,6 @@
 package com.sxsbsxs.bilivdl.ui
 
-import android.app.DownloadManager
-import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
@@ -154,22 +151,20 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie) }
-                if (p.isDash) error("当前为 DASH 独立音视频轨道，下载合并器接入前不会生成不完整 MP4")
-                if (!p.url.startsWith("https://")) error("下载地址无效")
                 val title = b.playerTitle.text.toString().replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
-                val request = DownloadManager.Request(Uri.parse(p.url)).setTitle(title).setDescription("BiliVdl · ${p.name}")
-                    .setMimeType("video/mp4").setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    .setAllowedOverMetered(true).setAllowedOverRoaming(false)
-                    .addRequestHeader("Referer", "https://www.bilibili.com/")
-                    .addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
-                if (cookie.isNotBlank()) request.addRequestHeader("Cookie", cookie)
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "BiliVdl/$title.mp4")
-                val id = (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+                b.downloadStatus.text = "正在下载并校验资源…"
+                val result = withContext(Dispatchers.IO) {
+                    BiliDownloadEngine.download(this@VideoPlayerActivity, p, title, cookie) { done, total, stage ->
+                        runOnUiThread {
+                            b.downloadStatus.text = if (total > 0L) "$stage · ${done * 100 / total}%" else "$stage · ${done / 1024} KB"
+                        }
+                    }
+                }
                 val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
                 val tasks = JSONArray(prefs.getString("tasks", "[]"))
-                tasks.put(JSONObject().put("id", id).put("title", title).put("quality", p.name))
+                tasks.put(JSONObject().put("title", title).put("quality", p.name).put("path", result).put("status", "completed").put("time", System.currentTimeMillis()))
                 prefs.edit().putString("tasks", tasks.toString()).apply()
-                b.downloadStatus.text = "已加入下载队列 · ${p.name}。可在底部“下载”查看进度"
+                b.downloadStatus.text = "下载完成 · Movies/BiliVdl/$title.mp4"
             } catch (e: Exception) { b.downloadStatus.text = "下载失败：${e.message ?: "接口异常"}" }
         }
     }

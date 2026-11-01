@@ -7,7 +7,7 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.TreeMap
 
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false)
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null)
 
 object BiliPlaybackApi {
     private val order = intArrayOf(46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52)
@@ -66,7 +66,20 @@ object BiliPlaybackApi {
         if(ids!=null&&names!=null) for(i in 0 until minOf(ids.length(),names.length())) qualities.add(ids.optInt(i) to names.optString(i))
         val actual=data.optInt("quality",qn)
         val dash=data.optJSONObject("dash")
-        if(dash!=null) return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true)
+        if(dash!=null) {
+            val videos=dash.optJSONArray("video") ?: error("DASH 视频轨道为空")
+            val video=(0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull { it.optInt("id")==actual }
+                ?: (0 until videos.length()).mapNotNull { videos.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的视频轨道")
+            val audios=dash.optJSONArray("audio") ?: error("DASH 音频轨道为空")
+            val audio=(0 until audios.length()).mapNotNull { audios.optJSONObject(it) }.firstOrNull() ?: error("没有可下载的音频轨道")
+            fun streamUrl(item: JSONObject): String {
+                val primary=item.optString("baseUrl").ifBlank { item.optString("base_url") }
+                val backups=item.optJSONArray("backupUrl") ?: item.optJSONArray("backup_url")
+                return primary.ifBlank { backups?.optString(0).orEmpty() }.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    ?: error("B站返回了无效的 DASH 资源地址")
+            }
+            return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true,streamUrl(video),streamUrl(audio))
+        }
         val stream=data.optJSONArray("durl")?.optJSONObject(0)?.optString("url").orEmpty()
         if(stream.isBlank()) error("B站未返回可播放的 DASH 或 MP4 音视频流")
         return PlaybackInfo(cid,stream,actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,false)
