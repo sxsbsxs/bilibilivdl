@@ -8,11 +8,13 @@ import com.sxsbsxs.bilivdl.R
 class HomeFragment : Fragment(R.layout.fragment_home) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        view.findViewById<View>(R.id.home_search_button).setOnClickListener {
+        val openSearch = {
             parentFragmentManager.beginTransaction()
                 .replace(R.id.fragment_container, DiscoverFragment())
-                .addToBackStack(null)
+                .addToBackStack("discover")
                 .commit()
         }
+        view.findViewById<View>(R.id.home_search_button).setOnClickListener { openSearch() }
+        view.findViewById<View>(R.id.home_search_cta).setOnClickListener { openSearch() }
     }
 }
