@@ -11,7 +11,8 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.TreeMap
 
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList())
+data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0)
 
 object BiliPlaybackApi {
     private val order = intArrayOf(46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,34,44,52)
@@ -115,7 +116,7 @@ object BiliPlaybackApi {
         }
     }
 
-    suspend fun load(bvid:String, aid:Long, qn:Int=80, cookie:String=""):PlaybackInfo {
+    suspend fun load(bvid:String, aid:Long, qn:Int=80, cookie:String="", pageIndex:Int=0):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
@@ -131,7 +132,19 @@ object BiliPlaybackApi {
             error(if(code == -352) "B站暂时风控了视频详情请求（-352），可稍后重试；普通播放不要求登录" else detail.optString("message","视频信息获取失败"))
         }
         val d=detail.optJSONObject("data")?:error("视频信息为空")
-        val cid=d.optJSONArray("pages")?.optJSONObject(0)?.optLong("cid")?:d.optLong("cid")
+        val pageArray = d.optJSONArray("pages")
+        val parts = if (pageArray != null) (0 until pageArray.length()).mapNotNull { index ->
+            val item = pageArray.optJSONObject(index) ?: return@mapNotNull null
+            val partCid = item.optLong("cid")
+            if (partCid <= 0L) null else VideoPart(
+                cid = partCid,
+                page = item.optInt("page", index + 1),
+                title = item.optString("part").ifBlank { "第 " + (index + 1) + " P" },
+                duration = item.optInt("duration")
+            )
+        } else emptyList()
+        val selectedIndex = pageIndex.coerceIn(0, (parts.size - 1).coerceAtLeast(0))
+        val cid = parts.getOrNull(selectedIndex)?.cid ?: d.optLong("cid")
         if(cid<=0) error("没有获取到视频分P信息")
         val params=mutableMapOf("cid" to cid.toString(),"qn" to qn.toString(),"fnver" to "0","fnval" to "4048","fourk" to "1")
         params.putAll(id)
@@ -139,7 +152,7 @@ object BiliPlaybackApi {
         // 不把 Cookie 或 WBI 签名作为必需条件；登录 Cookie 仅作为可选请求头。
         val resolvedAid = d.optLong("aid", aid)
         // bilimiao2 同款：先尝试 gRPC PlayURL；不可用时自动回退公开 HTTP playurl。
-        tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it }
+        tryGrpcPlayback(resolvedAid, cid, qn)?.let { return it.copy(parts = parts, selectedPart = selectedIndex) }
         val publicParams = mutableMapOf(
             "avid" to resolvedAid.toString(),
             "cid" to cid.toString(),
@@ -179,7 +192,7 @@ object BiliPlaybackApi {
                 return primary.ifBlank { backups?.optString(0).orEmpty() }.takeIf { it.startsWith("https://") || it.startsWith("http://") }
                     ?: error("B站返回了无效的 DASH 资源地址")
             }
-            return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true,streamUrl(video),streamUrl(audio))
+            return PlaybackInfo(cid,DashManifestBuilder.toDataUri(dash,actual),actual,qualities.firstOrNull{it.first==actual}?.second?:"当前清晰度",qualities,true,streamUrl(video),streamUrl(audio), parts = parts, selectedPart = selectedIndex)
         }
         val durls = data.optJSONArray("durl")
         val streams = durls?.let { array ->
