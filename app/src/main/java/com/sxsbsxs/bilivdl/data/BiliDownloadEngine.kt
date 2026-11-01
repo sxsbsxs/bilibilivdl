@@ -96,6 +96,11 @@ object BiliDownloadEngine {
             setRequestProperty("Accept-Encoding", "identity")
             if (offset > 0) setRequestProperty("Range", "bytes=$offset-")
         }
+        // Disconnect the blocking socket immediately when the owning coroutine is cancelled.
+        kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
+            ?.invokeOnCompletion { cause ->
+                if (cause is CancellationException) c.disconnect()
+            }
         try {
             val code = c.responseCode
             if (code != 200 && code != 206) error("CDN 返回 HTTP $code")
