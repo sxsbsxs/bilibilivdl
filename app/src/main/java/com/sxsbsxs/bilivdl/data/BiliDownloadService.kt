@@ -41,6 +41,7 @@ class BiliDownloadService : Service() {
         private const val EXTRA_AID = "aid"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_QN = "qn"
+        private const val EXTRA_EP_ID = "episode_id"
         private const val EXTRA_ACTION = "queue_action"
         private const val ACTION_PAUSE = "pause"
         private const val ACTION_CANCEL = "cancel"
@@ -49,8 +50,8 @@ class BiliDownloadService : Service() {
 
         fun pause(context: Context, id: String) = sendControl(context, id, ACTION_PAUSE)
         fun cancel(context: Context, id: String) = sendControl(context, id, ACTION_CANCEL)
-        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int) =
-            enqueue(context, id, bvid, aid, title, qn)
+        fun resume(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L) =
+            enqueue(context, id, bvid, aid, title, qn, episodeId)
 
         private fun sendControl(context: Context, id: String, action: String) {
             val intent = Intent(context, BiliDownloadService::class.java)
@@ -58,13 +59,14 @@ class BiliDownloadService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int) {
+        fun enqueue(context: Context, id: String, bvid: String, aid: Long, title: String, qn: Int, episodeId: Long = 0L) {
             val intent = Intent(context, BiliDownloadService::class.java).apply {
                 putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_BVID, bvid)
                 putExtra(EXTRA_AID, aid)
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_QN, qn)
+                putExtra(EXTRA_EP_ID, episodeId)
             }
             ContextCompat.startForegroundService(context, intent)
         }
@@ -107,6 +109,7 @@ class BiliDownloadService : Service() {
         val aid = intent.getLongExtra(EXTRA_AID, 0L)
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val qn = intent.getIntExtra(EXTRA_QN, 80)
+        val episodeId = intent.getLongExtra(EXTRA_EP_ID, 0L)
         // Prevent duplicate workers when a task is resumed repeatedly or an intent is redelivered.
         if (running.containsKey(taskId)) return START_REDELIVER_INTENT
 
@@ -118,13 +121,14 @@ class BiliDownloadService : Service() {
                 .put("bvid", bvid)
                 .put("aid", aid)
                 .put("qn", qn)
+                .put("episodeId", episodeId)
                 .put("status", "downloading")
                 .put("progress", "正在获取视频信息")
                 .put("time", System.currentTimeMillis())
             try {
                 updateTask(task)
                 val cookie = BiliSession.cookie(this@BiliDownloadService)
-                val playback = BiliPlaybackApi.load(bvid, aid, qn, cookie)
+                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie)
                 task.put("quality", playback.name)
                 task.put("progress", "准备下载")
                 updateTask(task)
@@ -231,6 +235,7 @@ class BiliDownloadService : Service() {
             bvid = task.optString("bvid"),
             aid = task.optLong("aid"),
             qn = task.optInt("qn", 80),
+            episodeId = task.optLong("episodeId"),
             quality = task.optString("quality"),
             status = task.optString("status", "queued"),
             progress = task.optString("progress"),
