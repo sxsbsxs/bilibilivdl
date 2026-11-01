@@ -1,38 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="@color/background_dark" android:fillViewport="true">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="vertical" android:padding="18dp">
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="下载管理" android:textColor="@color/text_primary" android:textSize="25sp" android:textStyle="bold"/>
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="6dp" android:text="粘贴视频链接、BV号或AV号，获取可用清晰度并下载"
-            android:textColor="@color/text_secondary" android:textSize="13sp"/>
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="20dp" android:hint="视频链接 / BV号 / av号"
-            app:boxBackgroundMode="outline" app:boxStrokeColor="@color/brand">
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/download_input" android:layout_width="match_parent"
-                android:layout_height="wrap_content" android:singleLine="true"
-                android:imeOptions="actionDone" android:textColor="@color/text_primary"/>
-        </com.google.android.material.textfield.TextInputLayout>
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/download_start" android:layout_width="match_parent"
-            android:layout_height="52dp" android:layout_marginTop="12dp"
-            android:text="获取视频并下载" android:textAllCaps="false" app:cornerRadius="14dp"/>
-        <TextView android:id="@+id/download_status" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:layout_marginTop="12dp"
-            android:text="下载文件将保存到手机 Movies/BiliVdl 文件夹"
-            android:textColor="@color/text_secondary" android:textSize="12sp"/>
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="26dp" android:text="下载任务" android:textColor="@color/text_primary"
-            android:textSize="18sp" android:textStyle="bold"/>
-        <TextView android:id="@+id/download_tasks" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:layout_marginTop="10dp"
-            android:padding="14dp" android:background="@drawable/bg_empty_card"
-            android:text="还没有下载任务" android:textColor="@color/text_secondary" android:textSize="13sp"/>
-    </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background_dark" android:fillViewport="true">
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="下载管理" android:textColor="@color/text_primary" android:textSize="25sp" android:textStyle="bold"/>
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="下载入口已整合到视频播放页。打开视频后点击“下载”，这里查看下载进度和历史任务。" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="26dp" android:text="下载任务" android:textColor="@color/text_primary" android:textSize="18sp" android:textStyle="bold"/>
+  <TextView android:id="@+id/download_tasks" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:padding="16dp" android:background="@drawable/bg_empty_card" android:text="还没有下载任务" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+ </LinearLayout>
+</ScrollView>

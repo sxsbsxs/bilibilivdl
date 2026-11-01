@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background_dark" android:fillViewport="true">
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="22dp">
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="我的账号" android:textColor="@color/text_primary" android:textSize="26sp" android:textStyle="bold"/>
+  <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" app:cardBackgroundColor="@color/surface_dark" app:cardCornerRadius="18dp">
+   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+    <TextView android:id="@+id/account_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="未登录" android:textColor="@color/text_primary" android:textSize="20sp" android:textStyle="bold"/>
+    <TextView android:id="@+id/account_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="正在检查账号状态…" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+   </LinearLayout>
+  </com.google.android.material.card.MaterialCardView>
+  <com.google.android.material.button.MaterialButton android:id="@+id/account_login" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="18dp" android:text="导入 B 站登录凭据" android:textAllCaps="false"/>
+  <com.google.android.material.button.MaterialButton android:id="@+id/account_refresh" android:layout_width="match_parent" android:layout_height="50dp" android:text="检查登录状态" android:textAllCaps="false" style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+  <com.google.android.material.button.MaterialButton android:id="@+id/account_logout" android:layout_width="match_parent" android:layout_height="50dp" android:text="退出登录并清除凭据" android:textAllCaps="false" style="@style/Widget.MaterialComponents.Button.TextButton"/>
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="登录说明：当前版本提供 Cookie 导入与有效性验证。Cookie 属于敏感账号凭据，请只从自己的设备获取，不要分享给任何人。" android:textColor="@color/text_secondary" android:textSize="12sp"/>
+ </LinearLayout>
+</ScrollView>
