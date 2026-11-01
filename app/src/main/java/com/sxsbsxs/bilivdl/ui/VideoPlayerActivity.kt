@@ -149,23 +149,42 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun startDownload(qn: Int) {
         b.downloadStatus.text = "正在获取下载地址…"
         lifecycleScope.launch {
+            val taskId = java.util.UUID.randomUUID().toString()
+            val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
+            var task = JSONObject()
+            fun saveTask() {
+                val old = JSONArray(prefs.getString("tasks", "[]"))
+                val updated = JSONArray()
+                for (i in 0 until old.length()) {
+                    val item = old.optJSONObject(i) ?: continue
+                    if (item.optString("id") != taskId) updated.put(item)
+                }
+                updated.put(task)
+                prefs.edit().putString("tasks", updated.toString()).apply()
+            }
             try {
                 val p = withContext(Dispatchers.IO) { BiliPlaybackApi.load(bvid, aid, qn, cookie) }
                 val title = b.playerTitle.text.toString().replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
+                task = JSONObject().put("id", taskId).put("title", title).put("quality", p.name)
+                    .put("status", "downloading").put("progress", "准备下载").put("time", System.currentTimeMillis())
+                saveTask()
                 b.downloadStatus.text = "正在下载并校验资源…"
                 val result = withContext(Dispatchers.IO) {
                     BiliDownloadEngine.download(this@VideoPlayerActivity, p, title, cookie) { done, total, stage ->
-                        runOnUiThread {
-                            b.downloadStatus.text = if (total > 0L) "$stage · ${done * 100 / total}%" else "$stage · ${done / 1024} KB"
-                        }
+                        val label = if (total > 0L) "$stage · \${done * 100 / total}%" else "$stage · \${done / 1024} KB"
+                        task.put("progress", label)
+                        saveTask()
+                        runOnUiThread { b.downloadStatus.text = label }
                     }
                 }
-                val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
-                val tasks = JSONArray(prefs.getString("tasks", "[]"))
-                tasks.put(JSONObject().put("title", title).put("quality", p.name).put("path", result).put("status", "completed").put("time", System.currentTimeMillis()))
-                prefs.edit().putString("tasks", tasks.toString()).apply()
+                task.put("path", result).put("status", "completed").put("progress", "下载完成")
+                saveTask()
                 b.downloadStatus.text = "下载完成 · Movies/BiliVdl/$title.mp4"
-            } catch (e: Exception) { b.downloadStatus.text = "下载失败：${e.message ?: "接口异常"}" }
+            } catch (e: Exception) {
+                task.put("status", "failed").put("progress", e.message ?: "下载失败")
+                saveTask()
+                b.downloadStatus.text = "下载失败：\${e.message ?: "接口异常"}"
+            }
         }
     }
 
