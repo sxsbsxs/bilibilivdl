@@ -753,7 +753,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     layoutManager = LinearLayoutManager(this@VideoPlayerActivity)
                     isNestedScrollingEnabled = true
                     setPadding(16, 4, 16, 4)
-                    adapter = CommentAdapter(::showReplies, ::likeComment).apply {
+                    adapter = CommentAdapter(::showReplies, ::likeComment, ::openUserSpace).apply {
                         submit(listOf(comment) + replies)
                     }
                     layoutParams = android.view.ViewGroup.LayoutParams(-1, (resources.displayMetrics.heightPixels * 0.62f).toInt())
