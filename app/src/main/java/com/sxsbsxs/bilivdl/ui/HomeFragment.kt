@@ -24,6 +24,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private var page = 0
     private var loading = false
     private var hasMore = true
+    private var duplicatePages = 0
     private var loadJob: Job? = null
     private val videos = mutableListOf<com.sxsbsxs.bilivdl.data.BiliVideo>()
     private lateinit var adapter: VideoAdapter
@@ -67,6 +68,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         loadJob?.cancel()
         page = 0
         hasMore = true
+        duplicatePages = 0
         loading = false
         videos.clear()
         adapter.submitList(emptyList())
@@ -96,7 +98,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 added = fresh.size
                 videos.addAll(fresh)
                 page = target
-                hasMore = result.size >= 20
+                duplicatePages = if (added == 0 && result.size >= 20) duplicatePages + 1 else 0
+                hasMore = result.size >= 20 && duplicatePages < 3
                 adapter.submitList(videos.toList())
                 current.homeFeedStatus.text = when {
                     videos.isEmpty() -> "暂时没有推荐视频 · 下拉重试"
@@ -110,9 +113,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 current.homeRecommendations.post {
                     val live = _binding ?: return@post
                     val scroll = live.homeScroll
-                    if (!loading && hasMore && added > 0 && !scroll.canScrollVertically(1)) {
-                        loadPage(page + 1)
-                    }
+                    val needsAnotherPage = added == 0 || !scroll.canScrollVertically(1)
+                    if (!loading && hasMore && needsAnotherPage) loadPage(page + 1)
                 }
             } catch (e: CancellationException) {
                 throw e
