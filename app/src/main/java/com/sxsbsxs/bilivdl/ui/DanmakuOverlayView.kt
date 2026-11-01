@@ -46,7 +46,7 @@ class DanmakuOverlayView @JvmOverloads constructor(
         val now = positionProvider()
         val lanes = max(1, (height / laneHeight).toInt())
         val active = items.asSequence()
-            .filter { it.mode == 1 || it.mode == 4 || it.mode == 5 }
+            .filter { it.mode == 1 || it.mode == 4 || it.mode == 5 || it.mode == 6 }
             .filter { now >= it.timeMs && now - it.timeMs < duration }
             .take(100)
         active.forEach { item ->
@@ -55,13 +55,18 @@ class DanmakuOverlayView @JvmOverloads constructor(
             paint.textSize = (item.fontSize.coerceIn(18, 48) * resources.displayMetrics.scaledDensity).coerceAtLeast(22f)
             paint.color = (0xFF shl 24) or (item.color and 0xFFFFFF)
             val textWidth = paint.measureText(item.text)
-            val y = lane * laneHeight + paint.textSize
+            val topY = lane * laneHeight + paint.textSize
+            val y = when (item.mode) {
+                4 -> height - lane * laneHeight - 4f
+                else -> topY
+            }.coerceIn(paint.textSize, height - 4f)
+            val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
             val x = when (item.mode) {
-                5 -> (width - textWidth) / 2f
-                4 -> (width - textWidth) / 2f
-                else -> width - (width + textWidth) * (elapsed.toFloat() / duration)
+                5, 4 -> (width - textWidth) / 2f
+                6 -> -textWidth + (width + textWidth) * progress
+                else -> width - (width + textWidth) * progress
             }
-            canvas.drawText(item.text, x.coerceAtLeast(0f), y.coerceAtMost(height - 4f), paint)
+            canvas.drawText(item.text, x, y, paint)
         }
         if (playing) postInvalidateDelayed(32L)
     }
