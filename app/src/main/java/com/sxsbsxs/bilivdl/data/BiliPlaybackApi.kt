@@ -200,6 +200,43 @@ object BiliPlaybackApi {
         }.distinctBy { it.bvid.ifBlank { it.aid.toString() } }
     }
 
+    private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String): PlaybackInfo? {
+        val root = get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+        if (root.optInt("code", -1) != 0) return null
+        val data = root.optJSONObject("data") ?: return null
+        val qa = data.optJSONArray("accept_quality")
+        val la = data.optJSONArray("accept_description")
+        val choices = (0 until (qa?.length() ?: 0)).mapNotNull { i ->
+            val id = qa?.optInt(i) ?: 0
+            if (id <= 0) null else id to (la?.optString(i).orEmpty().ifBlank { "清晰度 " + id })
+        }.distinctBy { it.first }.sortedByDescending { it.first }
+        val actual = data.optInt("quality", qn)
+        val dash = data.optJSONObject("dash")
+        if (dash != null) {
+            val va = dash.optJSONArray("video")
+            val aa = dash.optJSONArray("audio")
+            val videos = (0 until (va?.length() ?: 0)).mapNotNull { va?.optJSONObject(it) }
+            val audios = (0 until (aa?.length() ?: 0)).mapNotNull { aa?.optJSONObject(it) }
+            val video = videos.firstOrNull { it.optInt("id") == actual }
+                ?: videos.maxByOrNull { it.optLong("bandwidth") } ?: return null
+            val audio = audios.maxByOrNull { it.optLong("bandwidth") }
+            fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
+            val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
+            val audioUrl = audio?.let { primary(it).ifBlank { it.optJSONArray("backupUrl")?.optString(0).orEmpty() } }
+            if (videoUrl.isBlank()) return null
+            return PlaybackInfo(cid, videoUrl, video.optInt("id", actual),
+                choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual,
+                choices.ifEmpty { listOf(actual to ("清晰度 " + actual)) },
+                isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl)
+        }
+        val durl = data.optJSONArray("durl") ?: return null
+        val urls = (0 until durl.length()).mapNotNull { durl.optJSONObject(it)?.optString("url")?.takeIf { u -> u.startsWith("http") } }
+        if (urls.isEmpty()) return null
+        return PlaybackInfo(cid, urls.first(), actual,
+            choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual,
+            choices.ifEmpty { listOf(actual to ("清晰度 " + actual)) }, segments = urls)
+    }
+
     suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0,
         videoCodec: String = "", audioCodec: String = ""):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
@@ -257,6 +294,8 @@ object BiliPlaybackApi {
                 category = d.optString("tname"), duration = d.optInt("duration"), ownerFace = d.optJSONObject("owner")?.optString("face").orEmpty()
             )
         }
+        // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
+        runCatching { httpPlayUrl(resolvedAid, cid, qn, cookie) }.getOrNull()?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
         // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
         if (cookie.isBlank() && videoCodec.isBlank() && audioCodec.isBlank()) {
