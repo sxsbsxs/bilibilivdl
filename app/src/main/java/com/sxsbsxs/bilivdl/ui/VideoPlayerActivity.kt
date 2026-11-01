@@ -105,7 +105,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.danmakuButton.setOnClickListener {
             danmakuEnabled = !danmakuEnabled
             b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
-            b.danmakuButton.text = if (danmakuEnabled) "弹幕：开" else "弹幕：关"
+            b.danmakuButton.text = if (danmakuEnabled) "弹幕：开 · 长按导出" else "弹幕：关"
         }
         b.danmakuButton.setOnLongClickListener {
             exportDanmaku()
@@ -470,7 +470,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.danmakuOverlay.setDanmaku(items)
                 b.danmakuOverlay.setPlaybackPositionProvider { exo?.currentPosition ?: 0L }
                 b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
-                b.danmakuButton.text = "弹幕：开（${items.size}）"
+                b.danmakuButton.text = "弹幕：开（${items.size}）· 长按导出"
             } catch (e: Exception) {
                 b.danmakuButton.text = "弹幕加载失败"
                 b.playerStatus.text = "播放中 · 弹幕暂不可用：${e.message}"
