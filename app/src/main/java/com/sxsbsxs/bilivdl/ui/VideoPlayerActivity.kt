@@ -247,7 +247,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                 if (authorText.isNotBlank()) b.playerAuthor.text = authorText
                 b.playerAuthorSign.text = p.ownerSign
                 b.playerAuthorSign.visibility = if (p.ownerSign.isBlank()) View.GONE else View.VISIBLE
-                b.playerAuthor.setOnClickListener { if (p.ownerMid > 0L) startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://space.bilibili.com/${p.ownerMid}"))) }
+                b.playerAuthor.setOnClickListener { if (p.ownerMid > 0L) openUserSpace(p.ownerMid) }
+                b.playerAuthorAvatar.setOnClickListener { if (p.ownerMid > 0L) openUserSpace(p.ownerMid) }
                 val face = p.ownerFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
                 if (face.isNotBlank()) Glide.with(this@VideoPlayerActivity)
                     .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
