@@ -173,10 +173,15 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun formatCount(value: Long): String = when {
-        value >= 100_000_000L -> String.format(java.util.Locale.US, "%.1f亿", value / 100_000_000.0)
-        value >= 10_000L -> String.format(java.util.Locale.US, "%.1f万", value / 10_000.0)
-        else -> value.toString()
+    private fun formatCount(value: Long): String {
+        if (value < 10_000L) return value.toString()
+        val divisor = if (value >= 100_000_000L) 100_000_000L else 10_000L
+        val suffix = if (divisor == 100_000_000L) "亿" else "万"
+        // Avoid Formatter interpreting localized suffixes as format conversions.
+        val tenths = (value / (divisor / 10L)).coerceAtLeast(0L)
+        val whole = tenths / 10L
+        val fraction = tenths % 10L
+        return if (fraction == 0L) "$whole$suffix" else "$whole.$fraction$suffix"
     }
 
     private fun showMoreActions() {
