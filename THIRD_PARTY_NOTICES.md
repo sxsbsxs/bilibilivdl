@@ -1,23 +1,28 @@
 # 第三方项目与许可证说明
 
-本项目参考并计划整合以下开源项目的功能与实现。凡实际复制、修改或移植的代码，均应在对应源文件保留原作者版权和许可证声明，并在此记录来源与修改情况。
+本项目整合并适配以下 GPL-3.0 开源项目。上游源码保存在 `upstream/`，其原始许可证、版权声明和来源信息随仓库保留。BiliVdl 的应用界面为独立设计，不复制上游界面。
 
-## BiliMiao（bilimiao2）
+## bilimiao2
 
 - 上游仓库：https://github.com/10miaomiao/bilimiao2
 - 许可证：GNU General Public License v3.0（GPL-3.0-only）
-- 参考范围：视频播放、评论与楼中楼回复、点赞/互动、弹幕处理及相关 Bilibili 接口实现。
-- 当前实际适配：`BiliVideoActionApi.kt`（点赞、投币、收藏、一键三连、发送弹幕）；播放页已接入按钮。并非 bilimiao2 的完整播放器 UI/播放服务移植。
+- 源码位置：`upstream/bilimiao2/`
+- 已接入 Gradle 的模块：`bilimiao-comm`、`bilimiao-download`、`danmaku-engine`，以及其所需 gRPC/proto 依赖。
+- 应用桥接：`BiliVdlApplication.kt` 初始化平台 Provider 并将 BiliVdl Cookie 同步给 WebView CookieManager；`BilimiaoApiBridge.kt` 调用上游视频点赞、投币、一键三连、评论、评论回复和评论点赞接口。
+- 播放器：应用当前使用 Media3 ExoPlayer 与 BiliVdl 自己的播放地址解析、弹幕叠加和播放器页面；尚未把 bilimiao 原版完整播放服务及其所有播放 UI/手势逻辑整体替换进应用。
 
 ## BiliDownload（BVD）
 
 - 上游仓库：https://github.com/KafuuNeko/BiliDownload
 - 许可证：GNU General Public License v3.0
-- 参考范围：下载任务管理、DASH 音视频分轨、断点续传、并发下载、媒体合并与资源管理。
-- 当前实际适配：`BiliDownloadEngine.kt`（DASH 音视频分轨并行下载、HTTP Range 续传、有限重试、Android MediaExtractor/MediaMuxer 无损封装合并、MediaStore 发布）；下载任务页显示任务状态。此为按 BVD 架构适配的实现，不是整套 BVD 源码原样迁入。
+- 源码位置：`upstream/BiliDownload/`
+- 应用当前下载实现：`BiliDownloadEngine.kt` 负责 DASH 音视频轨道并行下载、HTTP Range 续传、失败重试、MediaExtractor/MediaMuxer 合并和 MediaStore 发布；`BiliDownloadService.kt` 负责前台服务下载、任务状态持久化和通知；播放页将下载任务交给该服务。
+- 说明：上游 BVD 完整 Room 数据库、原版 DownloadService 与批量任务 UI 仍保留在上游源码目录中，当前应用没有将其全部替换为原版实现。因此应用下载模块应称为 BVD 架构适配，不应称为完整原样移植。
 
 ## 本项目修改说明
 
-BiliVdl 是独立 Android 客户端工程。项目在整合上游代码时会标记修改内容和日期，不会将上游作者作品冒充为本项目原创。若发布包含 GPL 覆盖代码的组合版本，将按 GPL-3.0 的要求提供完整对应源代码、许可证文本及必要版权声明。
+BiliVdl 采用独立 Android UI 与应用入口。所有上游适配均应保留来源标记；发布包含 GPL 覆盖代码的组合版本时，按 GPL-3.0 提供对应源代码、许可证文本和版权声明。
 
-本项目已开始按 GPL-3.0 条款整合和适配上述项目。仍未完整移植 bilimiao2 的播放器服务/交互，也未移植 BVD 的 Room 任务数据库、后台下载服务、任务暂停恢复与批量下载工作流。
+## 验证边界
+
+GitHub Actions 构建成功只表示代码可编译。B站接口权限、地区/网络限制、不同 CDN 的 DASH 编码兼容性、MediaMuxer 合并和真机后台下载仍需实际设备验证。未通过真机验证的功能不会标注为已验证。
