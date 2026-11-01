@@ -1,0 +1,86 @@
+name: Import upstream playback and download source modules
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/import-upstream-modules.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-source-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout destination
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Clone pinned upstream revisions
+        run: |
+          git clone --filter=blob:none https://github.com/KafuuNeko/BiliDownload.git /tmp/BiliDownload
+          git -C /tmp/BiliDownload checkout f33bd19b131851990e63619bc7d4ef2b044f14f3
+          git clone --filter=blob:none https://github.com/10miaomiao/bilimiao2.git /tmp/bilimiao2
+          git -C /tmp/bilimiao2 checkout eff134d715c3fd13202ebd029261d1fbc33d2171
+      - name: Vendor BVD downloader source and its resources
+        run: |
+          mkdir -p upstream/BiliDownload
+          rsync -a --delete /tmp/BiliDownload/app/src/main/java/cc/kafuu/bilidownload/ upstream/BiliDownload/app/src/main/java/cc/kafuu/bilidownload/
+          rsync -a --delete /tmp/BiliDownload/app/src/main/res/ upstream/BiliDownload/app/src/main/res/
+          rsync -a --delete /tmp/BiliDownload/app/src/main/cpp/ upstream/BiliDownload/app/src/main/cpp/ || true
+          rsync -a --delete /tmp/BiliDownload/app/src/main/assets/ upstream/BiliDownload/app/src/main/assets/ || true
+          rsync -a --delete /tmp/BiliDownload/app/libs/ upstream/BiliDownload/app/libs/ || true
+          rsync -a --delete /tmp/BiliDownload/app/schemas/ upstream/BiliDownload/app/schemas/ || true
+          cp /tmp/BiliDownload/app/src/main/AndroidManifest.xml upstream/BiliDownload/app/src/main/AndroidManifest.xml
+          cp /tmp/BiliDownload/app/build.gradle.kts upstream/BiliDownload/app/build.gradle.kts
+          cp /tmp/BiliDownload/gradle/libs.versions.toml upstream/BiliDownload/gradle-libs.versions.toml
+          cp /tmp/BiliDownload/settings.gradle.kts upstream/BiliDownload/settings.gradle.kts
+          cp /tmp/BiliDownload/build.gradle.kts upstream/BiliDownload/build.gradle.kts
+          cp /tmp/BiliDownload/LICENSE upstream/BiliDownload/LICENSE
+      - name: Vendor bilimiao playback, API, danmaku and download modules
+        run: |
+          mkdir -p upstream/bilimiao2
+          for module in bilimiao-comm bilimiao-download bilimiao-compose bilimiao-cover bilimiao-grpc danmaku-engine; do
+            rsync -a --delete "/tmp/bilimiao2/$module/" "upstream/bilimiao2/$module/"
+          done
+          mkdir -p upstream/bilimiao2/app/src/main/java/com/a10miaomiao/bilimiao/service
+          cp /tmp/bilimiao2/app/src/main/java/com/a10miaomiao/bilimiao/service/PlaybackService.kt upstream/bilimiao2/app/src/main/java/com/a10miaomiao/bilimiao/service/
+          cp /tmp/bilimiao2/gradle/libs.versions.toml upstream/bilimiao2/gradle-libs.versions.toml
+          cp /tmp/bilimiao2/gradle.properties upstream/bilimiao2/gradle.properties
+          cp /tmp/bilimiao2/settings.gradle.kts upstream/bilimiao2/settings.gradle.kts
+          cp /tmp/bilimiao2/build.gradle.kts upstream/bilimiao2/build.gradle.kts
+          cp /tmp/bilimiao2/LICENSE upstream/bilimiao2/LICENSE
+      - name: Record upstream revisions and GPL obligations
+        run: |
+          mkdir -p upstream
+          cat > upstream/UPSTREAM_SOURCES.md <<'EOF'
+          # Vendored upstream source
+
+          GPL-3.0 source imports pinned to exact upstream revisions:
+
+          - BVD / BiliDownload: https://github.com/KafuuNeko/BiliDownload
+            - Revision: f33bd19b131851990e63619bc7d4ef2b044f14f3
+            - Imported the Android source package, resources, manifest, Room schemas, native sources and build metadata. Download implementation is in common/download, common/manager, common/room, service and notification.
+          - bilimiao2: https://github.com/10miaomiao/bilimiao2
+            - Revision: eff134d715c3fd13202ebd029261d1fbc33d2171
+            - Imported complete bilimiao-comm, bilimiao-download, bilimiao-compose, bilimiao-cover, bilimiao-grpc and danmaku-engine modules, PlaybackService and Gradle metadata.
+
+          Original license texts are retained beside each imported source tree. Preserve all upstream copyright notices and GPL-3.0 terms in redistributed builds.
+          EOF
+      - name: Commit imported source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add upstream
+          if git diff --cached --quiet; then
+            echo "No upstream source changes."
+            exit 0
+          fi
+          git commit -m "Vendor BVD downloader and bilimiao playback modules"
+          git push
