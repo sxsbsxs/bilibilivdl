@@ -121,8 +121,8 @@ class BiliDownloadService : Service() {
                 .put("status", "downloading")
                 .put("progress", "正在获取视频信息")
                 .put("time", System.currentTimeMillis())
-            updateTask(task)
             try {
+                updateTask(task)
                 val cookie = BiliSession.cookie(this@BiliDownloadService)
                 val playback = BiliPlaybackApi.load(bvid, aid, qn, cookie)
                 task.put("quality", playback.name)
