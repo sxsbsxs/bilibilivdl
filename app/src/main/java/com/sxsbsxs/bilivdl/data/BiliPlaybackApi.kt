@@ -130,7 +130,7 @@ object BiliPlaybackApi {
                 codec = item.codecs,
                 label = item.height.toString() + "P · " + item.codecs + " · " +
                     (item.bandwidth / 1000).toString() + " kbps",
-                bandwidth = item.bandwidth
+                bandwidth = item.bandwidth.toLong()
             )
         }
         val audios = dash.audio.orEmpty().map { item ->
