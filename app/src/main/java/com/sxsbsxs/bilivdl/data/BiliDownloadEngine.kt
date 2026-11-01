@@ -50,6 +50,26 @@ object BiliDownloadEngine {
                 muxDashTracks(vf, af, merged)
                 if (!merged.isFile || merged.length() == 0L) error("音视频合并失败：输出文件为空")
                 vf.delete(); af.delete()
+            } else if (playback.segments.size > 1) {
+                // DURL 多段视频需要按接口返回顺序全部下载并顺序拼接。
+                val segmentFiles = playback.segments.mapIndexed { index, _ ->
+                    File(dir, "$safe.segment$index.tmp")
+                }
+                try {
+                    segmentFiles.forEachIndexed { index, segmentFile ->
+                        transfer(playback.segments[index], segmentFile, headers) { n, _ ->
+                            val completed = segmentFiles.take(index).sumOf { it.length() } + n
+                            onProgress(completed, -1, "下载视频分段 ${index + 1}/${segmentFiles.size}")
+                        }
+                    }
+                    java.io.FileOutputStream(merged).use { output ->
+                        segmentFiles.forEach { segmentFile ->
+                            segmentFile.inputStream().use { input -> input.copyTo(output, BUFFER_SIZE) }
+                        }
+                    }
+                } finally {
+                    segmentFiles.forEach { it.delete() }
+                }
             } else {
                 transfer(playback.url, merged, headers) { n, total -> onProgress(n, total, "下载视频") }
             }
