@@ -23,7 +23,7 @@ object BiliQrLoginApi {
             val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (body.isBlank()) error("B站登录接口没有返回内容（HTTP ${connection.responseCode}）")
             val cookies = connection.headerFields.entries
-                .filter { it.key.equals("Set-Cookie", ignoreCase = true) }
+                .filter { it.key?.equals("Set-Cookie", ignoreCase = true) == true }
                 .flatMap { it.value.orEmpty() }
                 .map { it.substringBefore(';').trim() }
                 .filter { it.contains('=') }
