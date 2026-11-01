@@ -12,7 +12,7 @@ import java.net.URLEncoder
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
 data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
 data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "")
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "", val title: String = "")
 
 object BiliPlaybackApi {
     private fun get(url: String, cookie: String): JSONObject {
@@ -59,7 +59,7 @@ object BiliPlaybackApi {
             val selected = streams.firstOrNull { it.streamInfo?.quality == requestedQuality }
                 ?: streams.firstOrNull()
                 ?: return null
-            val actualQuality = selected.streamInfo?.quality ?: videoInfo.quality
+            val actualQuality = selected.streamInfo?.quality?.takeIf { it > 0 } ?: return null
             val qualities = streams.mapNotNull { stream ->
                 stream.streamInfo?.let { it.quality to it.newDescription }
             }.distinctBy { it.first }.sortedByDescending { it.first }
@@ -211,8 +211,8 @@ object BiliPlaybackApi {
         }.distinctBy { it.bvid.ifBlank { it.aid.toString() } }
     }
 
-    private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String): PlaybackInfo? {
-        val root = get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+    private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048): PlaybackInfo? {
+        val root = get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=" + fnval + "&fnver=0&force_host=2&fourk=1&otype=json", cookie)
         if (root.optInt("code", -1) != 0) return null
         val data = root.optJSONObject("data") ?: return null
         val qa = data.optJSONArray("accept_quality")
@@ -307,16 +307,19 @@ object BiliPlaybackApi {
                 ownerFace = owner?.optString("face").orEmpty(),
                 ownerMid = owner?.optLong("mid") ?: 0L,
                 ownerSign = runCatching { authorSign(owner?.optLong("mid") ?: 0L, cookie) }.getOrDefault(""),
-                category = d.optString("tname"), duration = d.optInt("duration")
+                category = d.optString("tname"), duration = d.optInt("duration"),
+                title = d.optString("title").replace(Regex("<[^>]*>"), "").trim()
             )
         }
         // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
         // 先请求用户选定档位；若匿名接口对最高档返回空结果，依次尝试常见档位，
         // 但只显示响应中真实存在的视频轨 ID，绝不把请求值当成实际画质。
-        val httpCandidates = listOf(qn, 80, 64, 32, 16).distinct()
-        for (candidate in httpCandidates) {
-            val resolved = runCatching { httpPlayUrl(resolvedAid, cid, candidate, cookie) }.getOrNull()
-            if (resolved != null) return enrich(resolved.copy(parts = parts, selectedPart = selectedIndex))
+        val httpCandidates = listOf(qn, 127, 120, 116, 112, 80, 74, 64, 32, 16).distinct()
+        for (fnval in listOf(4048, 1)) {
+            for (candidate in httpCandidates) {
+                val resolved = runCatching { httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval) }.getOrNull()
+                if (resolved != null) return enrich(resolved.copy(parts = parts, selectedPart = selectedIndex))
+            }
         }
         // 先用 BiliMiao 原版 gRPC 播放实现；失败后调用其 PlayerAPI.getVideoPalyUrl，
         // 与 BiliMiao 自身使用同一套 MiaoHttp、默认 UA、Referer 和请求参数。
@@ -324,111 +327,7 @@ object BiliPlaybackApi {
             tryGrpcPlayback(resolvedAid, cid, qn)?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
         }
 
-        val upstream = runCatching {
-            com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
-                .getVideoPalyUrl(resolvedAid.toString(), cid.toString(), qn, 4048)
-        }.getOrElse { cause ->
-            val detail = cause.message.orEmpty()
-            if (detail.contains("Conversion") && detail.contains("万")) {
-                throw IllegalStateException("B站备用播放接口返回了异常格式数据；公开播放接口和 gRPC 线路均未取得可用流，请稍后重试", cause)
-            }
-            throw IllegalStateException("B站公开播放接口与 gRPC 均未取得可用流；备用线路失败：${detail.ifBlank { "未知解析错误" }}", cause)
-        }
-        val dash = upstream.dash
-        if (dash != null) {
-            val returnedIds = dash.video.map { it.id }.filter { it > 0 }.toSet()
-            val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
-                if (quality !in returnedIds) null
-                else quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
-            }.distinctBy { it.first }.sortedByDescending { it.first }
-            val reportedQuality = upstream.quality.takeIf { it > 0 }
-            fun itemJson(item: com.a10miaomiao.bilimiao.comm.apis.PlayerAPI.DashItem): JSONObject {
-                val segment = JSONObject()
-                    .put("initialization", item.segment_base.initialization)
-                    .put("index_range", item.segment_base.index_range)
-                return JSONObject()
-                    .put("id", item.id)
-                    .put("bandwidth", item.bandwidth)
-                    .put("base_url", item.base_url)
-                    .put("backup_url", org.json.JSONArray(item.backup_url ?: emptyList<String>()))
-                    .put("mime_type", item.mime_type)
-                    .put("codecs", item.codecs)
-                    .put("width", item.width)
-                    .put("height", item.height)
-                    .put("frame_rate", item.frame_rate)
-                    .put("segment_base", segment)
-            }
-            val dashJson = JSONObject()
-                .put("duration", dash.duration)
-                .put("video", org.json.JSONArray().apply { dash.video.forEach { put(itemJson(it)) } })
-                .put("audio", org.json.JSONArray().apply { dash.audio.orEmpty().forEach { put(itemJson(it)) } })
-            val selectedVideoId = videoCodec.substringBefore('|').toIntOrNull()
-            val selectedVideoCodec = videoCodec.substringAfter('|', videoCodec)
-            val video = if (videoCodec.isNotBlank()) {
-                dash.video.firstOrNull { (reportedQuality == null || it.id == reportedQuality) && (selectedVideoId == null || it.id == selectedVideoId) && it.codecs == selectedVideoCodec }
-                    ?: error("B站没有返回所选视频编码：" + videoCodec)
-            } else dash.video.firstOrNull { it.id == reportedQuality }
-                ?: dash.video.maxByOrNull { it.bandwidth }
-                ?: error("BiliMiao 没有返回 DASH 视频轨道")
-            val actual = video.id.takeIf { it > 0 } ?: error("B站没有返回实际视频清晰度")
-            val selectedAudioId = audioCodec.substringBefore('|').toIntOrNull()
-            val selectedAudioCodec = audioCodec.substringAfter('|', audioCodec)
-            val audio = if (audioCodec.isNotBlank()) {
-                dash.audio.orEmpty().firstOrNull { (selectedAudioId == null || it.id == selectedAudioId) && it.codecs == selectedAudioCodec }
-                    ?: error("B站没有返回所选音频编码：" + audioCodec)
-            } else dash.audio?.firstOrNull()
-            fun bestUrl(primary: String, backups: List<String>?): String =
-                primary.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-                    ?: backups.orEmpty().firstOrNull { it.startsWith("https://") || it.startsWith("http://") }
-                    ?: error("BiliMiao 返回了无效的 CDN 地址")
-            return PlaybackInfo(
-                cid = cid,
-                url = DashManifestBuilder.toDataUri(dashJson, actual),
-                quality = actual,
-                name = qualities.firstOrNull { it.first == actual }?.second ?: "当前清晰度",
-                qualities = qualities,
-                isDash = audio != null,
-                videoUrl = bestUrl(video.base_url, video.backup_url),
-                audioUrl = audio?.let { bestUrl(it.base_url, it.backup_url) },
-                videoBackupUrls = video.backup_url.orEmpty().filter { it.isNotBlank() && it != video.base_url },
-                audioBackupUrls = audio?.let { selectedAudio -> selectedAudio.backup_url.orEmpty().filter { it.isNotBlank() && it != selectedAudio.base_url } }.orEmpty(),
-                parts = parts,
-                selectedPart = selectedIndex,
-                viewCount = d.optJSONObject("stat")?.optLong("view") ?: 0L,
-                danmakuCount = d.optJSONObject("stat")?.optLong("danmaku") ?: 0L,
-                pubdate = d.optLong("pubdate"), description = d.optString("desc"),
-                cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty(),
-            likeCount = d.optJSONObject("stat")?.optLong("like") ?: 0L,
-            favoriteCount = d.optJSONObject("stat")?.optLong("favorite") ?: 0L,
-            coinCount = d.optJSONObject("stat")?.optLong("coin") ?: 0L,
-            shareCount = d.optJSONObject("stat")?.optLong("share") ?: 0L,
-            replyCount = d.optJSONObject("stat")?.optLong("reply") ?: 0L,
-            category = d.optString("tname"), duration = d.optInt("duration")
-            )
-        }
-        val streams = upstream.durl.orEmpty().mapNotNull { segment ->
-            segment.url.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-        }
-        if (streams.isEmpty()) error("BiliMiao 没有返回可播放的视频流")
-        val actual = upstream.quality.takeIf { it > 0 }
-            ?: error("B站没有返回实际清晰度，已停止显示预设画质")
-        val qualities = upstream.accept_quality.mapIndexedNotNull { index, quality ->
-            if (quality != actual) null
-            else quality to upstream.accept_description.getOrNull(index).orEmpty().ifBlank { "清晰度 $quality" }
-        }.ifEmpty { listOf(actual to "清晰度 $actual") }
-        return PlaybackInfo(
-            cid = cid,
-            url = streams.first(),
-            quality = actual,
-            name = qualities.firstOrNull { it.first == actual }?.second ?: "当前清晰度",
-            qualities = qualities,
-            segments = streams,
-            parts = parts,
-            selectedPart = selectedIndex,
-            viewCount = d.optJSONObject("stat")?.optLong("view") ?: 0L,
-            danmakuCount = d.optJSONObject("stat")?.optLong("danmaku") ?: 0L,
-            pubdate = d.optLong("pubdate"), description = d.optString("desc"),
-            cover = d.optString("pic"), author = d.optJSONObject("owner")?.optString("name").orEmpty()
-        )
+        // Avoid the legacy parser: it converts localized numeric values (e.g. 万) and can throw. Only trust streams returned by official JSON or gRPC.
+        error("B站公开播放接口（DASH/DURL）和 gRPC 均未返回可用视频流；已停止使用会触发本地化数字解析异常的旧线路，请稍后重试或切换网络")
     }
 }
