@@ -23,7 +23,6 @@ import com.sxsbsxs.bilivdl.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.nio.ByteBuffer
 
 /** 本地资源详情：信息、播放、音频提取、分享和删除。 */
@@ -137,7 +136,7 @@ class DownloadedResourceActivity : AppCompatActivity() {
         val progress = ProgressBar(this).apply { isIndeterminate = true }
         val dialog = AlertDialog.Builder(this).setTitle("正在提取音频")
             .setMessage("正在读取视频音轨并封装为 M4A，请稍候。")
-            .setView(progress).setNegativeButton("取消", null).create()
+            .setView(progress).create()
         dialog.show()
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { remuxAudioTrack() } }
@@ -157,11 +156,11 @@ class DownloadedResourceActivity : AppCompatActivity() {
         var muxer: MediaMuxer? = null
         var outputUri: Uri? = null
         var outputFd: ParcelFileDescriptor? = null
+        var inputFd: ParcelFileDescriptor? = null
         var muxerStarted = false
         try {
-            contentResolver.openFileDescriptor(resourceUri, "r")?.use { pfd ->
-                extractor.setDataSource(pfd.fileDescriptor)
-            } ?: error("无法读取视频文件")
+            inputFd = contentResolver.openFileDescriptor(resourceUri, "r") ?: error("无法读取视频文件")
+            extractor.setDataSource(inputFd!!.fileDescriptor)
             var sourceTrack = -1
             var sourceFormat: MediaFormat? = null
             for (i in 0 until extractor.trackCount) {
@@ -175,7 +174,7 @@ class DownloadedResourceActivity : AppCompatActivity() {
                 }
             }
             if (sourceTrack < 0 || sourceFormat == null) error("视频中没有可提取的音轨")
-            val safeName = titleText.replace(Regex("[\\\\/:*?\\"<>|]"), "_").take(70).ifBlank { "bilibili_audio" }
+            val safeName = titleText.replace(Regex("""[\\/:*?"<>|]"""), "_").take(70).ifBlank { "bilibili_audio" }
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "$safeName.m4a")
                 put(MediaStore.MediaColumns.MIME_TYPE, "audio/mp4")
@@ -220,6 +219,7 @@ class DownloadedResourceActivity : AppCompatActivity() {
             if (muxerStarted) runCatching { muxer?.stop() }
             runCatching { muxer?.release() }
             runCatching { outputFd?.close() }
+            runCatching { inputFd?.close() }
             extractor.release()
         }
     }
