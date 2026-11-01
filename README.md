@@ -13,9 +13,9 @@ BiliVdl 是一款独立设计界面的 Android 哔哩哔哩视频播放与下载
 ## 视频
 
 - 关键词搜索视频，支持直接输入 BV 号或 AV 号
-- 参考 bilimiao 的免登录公开播放接口获取播放地址（`/x/player/playurl`），登录 Cookie 作为可选项；公开接口受限时回退 WBI 播放接口
+- 参考 bilimiao2 的 gRPC PlayURL 优先 + 免登录公开 HTTP `/x/player/playurl` 备用双线路；gRPC 不可用时自动回退 HTTP，登录 Cookie 仅作为可选项；HTTP 公开接口受限时再回退 WBI 播放接口
 - 获取视频播放信息和可用清晰度
-- Media3 播放器，支持 DASH 与 MP4/durl 播放
+- Media3 播放器，支持 DASH 音视频轨合并、MP4/durl 播放及多段 DURL 连续播放
 - 播放清晰度切换、倍速控制
 - 弹幕加载、时间轴叠加与发送
 - 评论分页、排序、回复、点赞与发表评论
@@ -24,7 +24,7 @@ BiliVdl 是一款独立设计界面的 Android 哔哩哔哩视频播放与下载
 ## 下载
 
 - 从播放页选择下载清晰度
-- DASH 视频轨与音频轨并行下载
+- DASH 视频轨与音频轨并行下载；多段 DURL 按顺序完整下载并合并
 - HTTP Range 断点续传与失败重试
 - Android MediaExtractor / MediaMuxer 合并音视频
 - 通过前台服务在离开播放页后继续下载
