@@ -75,7 +75,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
   }
   when (task.status) {
    "downloading" -> action("暂停") { BiliDownloadService.pause(context, task.taskId) }
-   "paused", "failed", "queued" -> action("继续") { BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn) }
+   "paused", "failed", "queued" -> action("继续") { BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId) }
   }
   if (task.status in setOf("downloading", "paused", "failed", "queued")) action("取消") { BiliDownloadService.cancel(context, task.taskId) }
   row.addView(actions)
