@@ -29,6 +29,8 @@ import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Persistent foreground download runner. It keeps downloads alive after the player
@@ -81,6 +83,7 @@ class BiliDownloadService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val active = AtomicInteger(0)
+    private val taskPersistenceMutex = Mutex()
     private lateinit var notificationManager: NotificationManager
 
     override fun onCreate() {
@@ -178,7 +181,7 @@ class BiliDownloadService : Service() {
                     val previous = lastProgressWrite.get()
                     if (now - previous >= 1000L && lastProgressWrite.compareAndSet(previous, now)) {
                         val snapshot = JSONObject(task.toString())
-                        scope.launch { runCatching { updateTask(snapshot) } }
+                        scope.launch { runCatching { updateProgress(snapshot) } }
                     }
                     notificationManager.notify(NOTIFICATION_ID, notification(title, done, total.takeIf { it > 0L }))
                 }
@@ -248,6 +251,26 @@ class BiliDownloadService : Service() {
     }
 
     private suspend fun updateTask(task: JSONObject) {
+        taskPersistenceMutex.withLock { persistTask(task) }
+    }
+
+    /** Ignore delayed progress snapshots once a task has moved out of downloading state. */
+    private suspend fun updateProgress(task: JSONObject) {
+        taskPersistenceMutex.withLock {
+            val id = task.optString("id")
+            val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
+            val stillDownloading = synchronized(BiliDownloadService::class.java) {
+                val current = JSONArray(prefs.getString("tasks", "[]"))
+                (0 until current.length()).any { index ->
+                    val item = current.optJSONObject(index)
+                    item?.optString("id") == id && item.optString("status") == "downloading"
+                }
+            }
+            if (stillDownloading) persistTask(task)
+        }
+    }
+
+    private suspend fun persistTask(task: JSONObject) {
         val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
         synchronized(BiliDownloadService::class.java) {
             val old = JSONArray(prefs.getString("tasks", "[]"))
