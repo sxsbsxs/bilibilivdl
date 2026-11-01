@@ -21,10 +21,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
       - name: Install Android API 37
-        run: sdkmanager "platforms;android-37" "build-tools;37.0.0" "ndk;28.1.13356709" "cmake;3.31.0"
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null; "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;37.0.0" "ndk;28.1.13356709" "cmake;3.31.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
