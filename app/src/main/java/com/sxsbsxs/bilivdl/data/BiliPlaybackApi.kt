@@ -54,14 +54,14 @@ object BiliPlaybackApi {
             )
             val response = BiliGRPCHttp.request { PlayURLGRPC.playView(request) }.awaitCall()
             val videoInfo = response.videoInfo ?: return null
-            val streams = videoInfo.streamList.filter { it.content != null }.sortedByDescending { it.streamInfo?.quality ?: 0 }
+            val streams = videoInfo.streamList.filter { it.content != null && (it.streamInfo?.quality ?: 0) > 0 }.sortedByDescending { it.streamInfo?.quality ?: 0 }
             if (streams.isEmpty()) return null
             val selected = streams.firstOrNull { it.streamInfo?.quality == requestedQuality }
                 ?: streams.firstOrNull()
                 ?: return null
             val actualQuality = selected.streamInfo?.quality?.takeIf { it > 0 } ?: return null
             val qualities = streams.mapNotNull { stream ->
-                stream.streamInfo?.let { it.quality to it.newDescription }
+                stream.streamInfo?.takeIf { it.quality > 0 }?.let { it.quality to it.newDescription }
             }.distinctBy { it.first }.sortedByDescending { it.first }
             when (val content = selected.content ?: return null) {
                 is Stream.Content.DashVideo -> {
