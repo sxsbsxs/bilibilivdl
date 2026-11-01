@@ -1,6 +1,5 @@
 package com.sxsbsxs.bilivdl.data
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -96,9 +95,7 @@ class BiliDownloadService : Service() {
                     .put("status", "completed")
                     .put("progress", "下载完成")
                 updateTask(task)
-                notificationManager.notify(NOTIFICATION_ID, notification("下载完成：$title", null, null).apply {
-                    flags = flags or Notification.FLAG_AUTO_CANCEL
-                })
+                notificationManager.notify(NOTIFICATION_ID, notification("下载完成：$title", null, null))
             } catch (error: Exception) {
                 task.put("status", "failed")
                     .put("progress", error.message ?: "下载失败")
