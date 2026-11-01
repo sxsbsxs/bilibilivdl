@@ -160,6 +160,48 @@ object BiliPlaybackApi {
         return DownloadStreamChoices(videos, audios)
     }
 
+
+    /**
+     * B站视频详情页的相关推荐接口。结果按官方返回顺序展示，最多保留 20 条。
+     */
+    fun relatedVideos(bvid: String, aid: Long, cookie: String = ""): List<BiliVideo> {
+        require(bvid.isNotBlank() || aid > 0L) { "缺少视频编号，无法获取相关推荐" }
+        val id = if (bvid.isNotBlank()) "bvid=${enc(bvid)}" else "aid=$aid"
+        val root = get("https://api.bilibili.com/x/web-interface/archive/related?$id", cookie)
+        if (root.optInt("code", -1) != 0) {
+            error(root.optString("message", "获取相关推荐失败"))
+        }
+        val items = root.optJSONArray("data") ?: return emptyList()
+        return (0 until minOf(items.length(), 20)).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            val bvidValue = item.optString("bvid")
+            val aidValue = item.optLong("aid")
+            if (bvidValue.isBlank() && aidValue <= 0L) return@mapNotNull null
+            val owner = item.optJSONObject("owner")
+            val stat = item.optJSONObject("stat")
+            BiliVideo(
+                title = item.optString("title").replace(Regex("<[^>]+>"), ""),
+                cover = item.optString("pic").let { if (it.startsWith("//")) "https:$it" else it },
+                author = owner?.optString("name").orEmpty().ifBlank { "未知 UP 主" },
+                play = stat?.optLong("view")?.toString() ?: "0",
+                duration = item.optInt("duration").let { seconds ->
+                    if (seconds <= 0) "" else "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+                },
+                bvid = bvidValue,
+                aid = aidValue,
+                description = item.optString("desc"),
+                danmaku = stat?.optLong("danmaku"),
+                likes = stat?.optLong("like"),
+                favorites = stat?.optLong("favorite"),
+                coins = stat?.optLong("coin"),
+                shares = stat?.optLong("share"),
+                comments = stat?.optLong("reply"),
+                category = item.optString("tname"),
+                pubdate = item.optLong("pubdate").takeIf { it > 0L }
+            )
+        }.distinctBy { it.bvid.ifBlank { it.aid.toString() } }
+    }
+
     suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0,
         videoCodec: String = "", audioCodec: String = ""):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}

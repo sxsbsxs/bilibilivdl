@@ -52,6 +52,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
     private var info: PlaybackInfo? = null
+    private lateinit var relatedAdapter: VideoAdapter
     private var videoBackupIndex = 0
     private var audioBackupIndex = 0
     private var selectedSubtitleUri: android.net.Uri? = null
@@ -103,6 +104,20 @@ class VideoPlayerActivity : AppCompatActivity() {
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentsList.layoutManager = LinearLayoutManager(this)
         b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
+        relatedAdapter = VideoAdapter { video ->
+            startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                putExtra(EXTRA_BVID, video.bvid)
+                putExtra(EXTRA_AID, video.aid)
+                putExtra(EXTRA_TITLE, video.title)
+                putExtra(EXTRA_COVER, video.cover)
+                putExtra(EXTRA_AUTHOR, video.author)
+            })
+        }
+        b.relatedVideosList.layoutManager = LinearLayoutManager(this)
+        b.relatedVideosList.adapter = relatedAdapter
+        b.playerInfoTab.setOnClickListener { showDetailTab(true) }
+        b.playerCommentsTab.setOnClickListener { showDetailTab(false) }
+        showDetailTab(true)
         b.qualityButton.setOnClickListener { showQuality() }
         b.partButton.setOnClickListener { showParts() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
@@ -142,6 +157,31 @@ class VideoPlayerActivity : AppCompatActivity() {
         loadComments(true)
     }
 
+    private fun showDetailTab(showInfo: Boolean) {
+        b.playerInfoPanel.visibility = if (showInfo) View.VISIBLE else View.GONE
+        b.playerCommentsPanel.visibility = if (showInfo) View.GONE else View.VISIBLE
+        b.playerInfoTab.isSelected = showInfo
+        b.playerCommentsTab.isSelected = !showInfo
+        b.playerInfoTab.alpha = if (showInfo) 1f else 0.68f
+        b.playerCommentsTab.alpha = if (showInfo) 0.68f else 1f
+    }
+
+    private fun loadRelatedVideos() {
+        b.relatedVideosStatus.text = "正在加载相关视频…"
+        lifecycleScope.launch {
+            try {
+                val items = withContext(Dispatchers.IO) {
+                    BiliPlaybackApi.relatedVideos(bvid, aid, cookie)
+                }
+                relatedAdapter.submitList(items)
+                b.relatedVideosStatus.text = if (items.isEmpty()) "暂时没有相关推荐"
+                    else "根据当前视频推荐 · 共 ${items.size} 条"
+            } catch (error: Exception) {
+                b.relatedVideosStatus.text = "相关推荐加载失败：${error.message ?: "网络异常"}"
+            }
+        }
+    }
+
     private fun formatCount(value: Long): String = when {
         value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
         value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1万", value / 10_000.0)
@@ -154,6 +194,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             try {
                 val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
+                loadRelatedVideos()
                 videoLiked = if (cookie.isNotBlank() && aid > 0L) {
                     runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }.getOrDefault(false)
                 } else false
