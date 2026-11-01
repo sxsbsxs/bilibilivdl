@@ -226,7 +226,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun likeComment(comment: VideoComment) {
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) { BiliInteractionApi.likeComment(aid, comment.id, true, cookie) }
+                val result = withContext(Dispatchers.IO) { BiliInteractionApi.likeComment(aid, comment.id, !comment.liked, cookie) }
+                (b.commentsList.adapter as CommentAdapter).updateLike(comment.id, !comment.liked)
                 b.commentsStatus.text = result
             } catch (e: Exception) { b.commentsStatus.text = e.message ?: "点赞失败" }
         }

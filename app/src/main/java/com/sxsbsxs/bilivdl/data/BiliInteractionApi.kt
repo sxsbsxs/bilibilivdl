@@ -13,7 +13,8 @@ data class VideoComment(
     val text: String,
     val likes: Int,
     val replyCount: Int,
-    val mid: Long
+    val mid: Long,
+    val liked: Boolean = false
 )
 
 data class DanmakuItem(
@@ -83,17 +84,19 @@ object BiliInteractionApi {
                 text = content?.optString("message").orEmpty(),
                 likes = item.optInt("like"),
                 replyCount = item.optInt("rcount"),
-                mid = member?.optLong("mid") ?: 0L
+                mid = member?.optLong("mid") ?: 0L,
+                liked = item.optJSONObject("reply_control")?.optInt("action") == 1
             )
         }
         val pageInfo = data.optJSONObject("page")
-        val hasMore = result.size >= 20 && (pageInfo?.optInt("count") ?: Int.MAX_VALUE) > page * 20
-        return CommentPage(result, hasMore, pageInfo?.optInt("count") ?: result.size)
+        val cursor = data.optJSONObject("cursor")
+        val hasMore = cursor?.optBoolean("is_end") == false || (cursor == null && result.size >= 20)
+        return CommentPage(result, hasMore, cursor?.optInt("all_count") ?: pageInfo?.optInt("count") ?: result.size)
     }
 
     fun replies(aid: Long, rootId: Long, page: Int = 1, cookie: String = ""): List<VideoComment> {
         val root = request(
-            "https://api.bilibili.com/x/v2/reply/reply?oid=$aid&type=1&root=$rootId&pn=$page&ps=20",
+            "https://api.bilibili.com/x/v2/reply/main?oid=$aid&plat=2&root=$rootId&sort=0&type=1&pn=$page&ps=20",
             cookie
         )
         val code = root.optInt("code", -1)
@@ -108,7 +111,8 @@ object BiliInteractionApi {
                 text = item.optJSONObject("content")?.optString("message").orEmpty(),
                 likes = item.optInt("like"),
                 replyCount = item.optInt("rcount"),
-                mid = member?.optLong("mid") ?: 0L
+                mid = member?.optLong("mid") ?: 0L,
+                liked = item.optJSONObject("reply_control")?.optInt("action") == 1
             )
         }
     }
