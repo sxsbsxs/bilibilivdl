@@ -14,7 +14,8 @@ import com.sxsbsxs.bilivdl.databinding.ItemCommentBinding
 
 class CommentAdapter(
     private val onReplies: (VideoComment) -> Unit,
-    private val onLike: (VideoComment) -> Unit
+    private val onLike: (VideoComment) -> Unit,
+    private val onUser: (Long) -> Unit
 ) : RecyclerView.Adapter<CommentAdapter.Holder>() {
 
     private val data = mutableListOf<VideoComment>()
@@ -46,7 +47,7 @@ class CommentAdapter(
             parent,
             false
         )
-        return Holder(binding, onReplies, onLike)
+        return Holder(binding, onReplies, onLike, onUser)
     }
 
     override fun getItemCount(): Int = data.size
@@ -58,7 +59,8 @@ class CommentAdapter(
     class Holder(
         private val binding: ItemCommentBinding,
         private val onReplies: (VideoComment) -> Unit,
-        private val onLike: (VideoComment) -> Unit
+        private val onLike: (VideoComment) -> Unit,
+        private val onUser: (Long) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(comment: VideoComment) {
@@ -74,6 +76,8 @@ class CommentAdapter(
             binding.commentReplies.text =
                 if (comment.replyCount > 0) "查看 ${comment.replyCount} 条回复" else "回复"
 
+            binding.commentAvatar.setOnClickListener { onUser(comment.mid) }
+            binding.commentUser.setOnClickListener { onUser(comment.mid) }
             binding.commentReplies.setOnClickListener { onReplies(comment) }
             binding.commentLikes.setOnClickListener { onLike(comment) }
         }
