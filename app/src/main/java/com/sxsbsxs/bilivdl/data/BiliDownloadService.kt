@@ -85,6 +85,7 @@ class BiliDownloadService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val active = AtomicInteger(0)
+    private val latestStartId = AtomicInteger(0)
     private val taskPersistenceMutex = Mutex()
     private lateinit var notificationManager: NotificationManager
 
@@ -124,6 +125,7 @@ class BiliDownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId.set(startId)
         val taskId = intent?.getStringExtra(EXTRA_ID) ?: return START_NOT_STICKY
         val action = intent.getStringExtra(EXTRA_ACTION)
         if (action == ACTION_PAUSE || action == ACTION_CANCEL) {
@@ -212,7 +214,7 @@ class BiliDownloadService : Service() {
                 if (slotAcquired) downloadSlots.release()
                 running.remove(taskId, this.coroutineContext[Job])
                 if (active.decrementAndGet() == 0) {
-                    stopSelfResult(startId)
+                    stopSelfResult(latestStartId.get())
                 }
             }
         }
