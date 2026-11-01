@@ -65,8 +65,22 @@ object BilimiaoApiBridge {
         }
         val cursor = data.optJSONObject("cursor")
         val pageInfo = data.optJSONObject("page")
-        val hasMore = cursor?.optBoolean("is_end") == false || (cursor == null && result.size >= 20)
-        return CommentPage(result, hasMore, cursor?.optInt("all_count") ?: pageInfo?.optInt("count") ?: result.size)
+        // New responses expose cursor.is_end; older responses expose page num/size/count.
+        // A missing is_end must not be interpreted as "there are more pages".
+        val hasMore = when {
+            cursor?.has("is_end") == true -> !cursor.optBoolean("is_end", true)
+            pageInfo != null -> {
+                val current = pageInfo.optInt("num", page)
+                val size = pageInfo.optInt("size", 20).coerceAtLeast(1)
+                val total = pageInfo.optInt("count", result.size)
+                current * size < total
+            }
+            else -> result.size >= 20
+        }
+        val total = cursor?.optInt("all_count")?.takeIf { it > 0 }
+            ?: pageInfo?.optInt("count")?.takeIf { it > 0 }
+            ?: result.size
+        return CommentPage(result, hasMore, total)
     }
 
     suspend fun replies(aid: Long, rootId: Long, page: Int = 1): List<VideoComment> {
