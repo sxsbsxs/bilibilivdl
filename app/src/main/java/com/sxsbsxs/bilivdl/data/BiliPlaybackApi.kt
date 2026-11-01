@@ -212,14 +212,17 @@ object BiliPlaybackApi {
                 .put("duration", dash.duration)
                 .put("video", org.json.JSONArray().apply { dash.video.forEach { put(itemJson(it)) } })
                 .put("audio", org.json.JSONArray().apply { dash.audio.orEmpty().forEach { put(itemJson(it)) } })
+            val selectedVideoId = videoCodec.substringBefore('|').toIntOrNull()
+            val selectedVideoCodec = videoCodec.substringAfter('|', videoCodec)
             val video = if (videoCodec.isNotBlank()) {
-                dash.video.firstOrNull { it.id == actual && it.codecs == videoCodec }
+                dash.video.firstOrNull { it.id == actual && (selectedVideoId == null || it.id == selectedVideoId) && it.codecs == selectedVideoCodec }
                     ?: error("B站没有返回所选视频编码：" + videoCodec)
             } else dash.video.firstOrNull { it.id == actual } ?: dash.video.lastOrNull()
                 ?: error("BiliMiao 没有返回 DASH 视频轨道")
+            val selectedAudioId = audioCodec.substringBefore('|').toIntOrNull()
+            val selectedAudioCodec = audioCodec.substringAfter('|', audioCodec)
             val audio = if (audioCodec.isNotBlank()) {
-                dash.audio.orEmpty().firstOrNull { it.id == audioCodec.toIntOrNull() && it.codecs == audioCodec.substringAfter('|', audioCodec) }
-                    ?: dash.audio.orEmpty().firstOrNull { it.codecs == audioCodec }
+                dash.audio.orEmpty().firstOrNull { (selectedAudioId == null || it.id == selectedAudioId) && it.codecs == selectedAudioCodec }
                     ?: error("B站没有返回所选音频编码：" + audioCodec)
             } else dash.audio?.firstOrNull()
             fun bestUrl(primary: String, backups: List<String>?): String =

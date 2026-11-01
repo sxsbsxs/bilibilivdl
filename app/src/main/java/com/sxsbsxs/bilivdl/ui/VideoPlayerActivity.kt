@@ -344,7 +344,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     .setPositiveButton("下一步") { _, _ ->
                         val selectedVideo = options.video[videoIndex]
                         if (options.audio.isEmpty()) {
-                            startDownload(qn, selectedVideo.codec, "")
+                            startDownload(qn, selectedVideo.id.toString() + "|" + selectedVideo.codec, "")
                         } else {
                             var audioIndex = 0
                             val audioLabels = options.audio.map {
@@ -355,7 +355,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                                 .setSingleChoiceItems(audioLabels, 0) { _, which -> audioIndex = which }
                                 .setNegativeButton("取消", null)
                                 .setPositiveButton("开始下载") { _, _ ->
-                                    startDownload(qn, selectedVideo.codec, options.audio[audioIndex].codec)
+                                    startDownload(qn, selectedVideo.id.toString() + "|" + selectedVideo.codec, options.audio[audioIndex].id.toString() + "|" + options.audio[audioIndex].codec)
                                 }.show()
                         }
                     }.show()
@@ -369,7 +369,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun startDownload(qn: Int, videoCodec: String = "", audioCodec: String = "") {
         val taskId = java.util.UUID.randomUUID().toString()
         val title = b.playerTitle.text.toString()
-            .replace(Regex("[\\\\/:*?""<>|]"), "_")
+            .replace(Regex("[\\\\/:*?\\\"<>|]"), "_")
             .take(70)
             .ifBlank { "bilibili_video" }
         val task = JSONObject()
