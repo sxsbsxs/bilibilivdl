@@ -118,6 +118,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.playerInfoTab.setOnClickListener { showDetailTab(true) }
         b.playerCommentsTab.setOnClickListener { showDetailTab(false) }
         showDetailTab(true)
+        loadRelatedVideos()
         b.qualityButton.setOnClickListener { showQuality() }
         b.partButton.setOnClickListener { showParts() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
@@ -195,7 +196,6 @@ class VideoPlayerActivity : AppCompatActivity() {
             try {
                 val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
                 info = p
-                loadRelatedVideos()
                 videoLiked = if (cookie.isNotBlank() && aid > 0L) {
                     runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }.getOrDefault(false)
                 } else false
