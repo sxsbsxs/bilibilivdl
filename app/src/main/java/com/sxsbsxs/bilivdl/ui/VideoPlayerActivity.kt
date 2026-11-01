@@ -323,7 +323,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val folders = withContext(Dispatchers.IO) {
-                    BilimiaoApiBridge.favoriteFolders(requireAid())
+                    BiliVideoActionApi.favoriteFolders(cookie)
                 }
                 if (folders.isEmpty()) {
                     b.playerStatus.text = "没有可用的收藏夹"
@@ -335,7 +335,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                         lifecycleScope.launch {
                             try {
                                 withContext(Dispatchers.IO) {
-                                    BilimiaoApiBridge.addFavorite(requireAid(), folders[index].first)
+                                    BiliVideoActionApi.addFavorite(requireAid(), folders[index].first, cookie)
                                 }
                                 b.playerStatus.text = "已收藏到「${folders[index].second}」"
                             } catch (e: Exception) {
