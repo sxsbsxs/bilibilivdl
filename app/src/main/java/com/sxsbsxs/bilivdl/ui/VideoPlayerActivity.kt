@@ -30,6 +30,7 @@ import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
 import com.sxsbsxs.bilivdl.data.BiliDownloadService
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
 import com.sxsbsxs.bilivdl.data.VideoComment
+import com.sxsbsxs.bilivdl.data.DanmakuItem
 import com.sxsbsxs.bilivdl.databinding.ActivityVideoPlayerBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,6 +62,17 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
     private var danmakuEnabled = true
+    private var loadedDanmaku: List<DanmakuItem> = emptyList()
+    private var pendingDanmakuXml = ""
+    private val danmakuExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/xml")) { uri ->
+        if (uri != null) {
+            runCatching {
+                contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(pendingDanmakuXml) }
+                    ?: error("无法写入弹幕文件")
+            }.onSuccess { b.playerStatus.text = "弹幕 XML 已导出" }
+             .onFailure { b.playerStatus.text = "弹幕导出失败：${it.message}" }
+        }
+    }
     private var commentPage = 1
     private var commentHasMore = true
     private var commentLoading = false
@@ -94,6 +106,10 @@ class VideoPlayerActivity : AppCompatActivity() {
             danmakuEnabled = !danmakuEnabled
             b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
             b.danmakuButton.text = if (danmakuEnabled) "弹幕：开" else "弹幕：关"
+        }
+        b.danmakuButton.setOnLongClickListener {
+            exportDanmaku()
+            true
         }
         b.commentSort.setOnClickListener {
             commentSort = if (commentSort == 3) 2 else 3
@@ -450,6 +466,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val items = withContext(Dispatchers.IO) { BiliInteractionApi.danmaku(cid, cookie) }
+                loadedDanmaku = items
                 b.danmakuOverlay.setDanmaku(items)
                 b.danmakuOverlay.setPlaybackPositionProvider { exo?.currentPosition ?: 0L }
                 b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
@@ -459,6 +476,31 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = "播放中 · 弹幕暂不可用：${e.message}"
             }
         }
+    }
+
+
+    private fun exportDanmaku() {
+        if (loadedDanmaku.isEmpty()) {
+            b.playerStatus.text = "当前视频还没有加载到弹幕"
+            return
+        }
+        fun xml(value: String): String = value.replace("&", "&amp;")
+            .replace("<", "&lt;").replace(">", "&gt;")
+            .replace("\"", "&quot;").replace("'", "&apos;")
+        pendingDanmakuXml = buildString {
+            append("""<?xml version="1.0" encoding="UTF-8"?>\n""")
+            append("<i><chatserver>chat.bilibili.com</chatserver><chatid>0</chatid><mission>0</mission><maxlimit>")
+            append(loadedDanmaku.size).append("</maxlimit><state>0</state><real_name>0</real_name><source>k-v</source>\n")
+            loadedDanmaku.forEach { item ->
+                append("<d p=\"").append(item.timeMs / 1000.0).append(",").append(item.mode).append(",")
+                    .append(item.fontSize).append(",").append(item.color).append(",0,")
+                    .append(item.pool).append(",0,0\">").append(xml(item.text)).append("</d>\n")
+            }
+            append("</i>")
+        }
+        val file = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "视频" }
+            .replace(Regex("""[\\\\/:*?"<>|]"""), "_").take(60)
+        danmakuExportLauncher.launch("${file}_弹幕.xml")
     }
 
     private fun resetComments() {
