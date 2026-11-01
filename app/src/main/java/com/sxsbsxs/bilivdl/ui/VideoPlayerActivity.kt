@@ -45,6 +45,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentLoading = false
     private var commentSort = 3
     private var videoLiked = false
+    private var playbackSpeedIndex = 0
+    private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 0.75f)
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
     private val aid by lazy { intent.getLongExtra(EXTRA_AID, 0L) }
     private val cookie by lazy { BiliSession.cookie(this) }
@@ -58,6 +60,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment)
         b.qualityButton.setOnClickListener { showQuality() }
         b.playerDownload.setOnClickListener { showDownloadQuality() }
+        b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.danmakuButton.setOnClickListener {
             danmakuEnabled = !danmakuEnabled
             b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
@@ -122,6 +125,14 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.playerStatus.text = "获取播放地址失败：${e.message ?: "接口异常"}"
             }
         }
+    }
+
+    private fun cyclePlaybackSpeed() {
+        val player = exo ?: run { b.playerStatus.text = "播放器尚未准备好"; return }
+        playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.size
+        val speed = playbackSpeeds[playbackSpeedIndex]
+        player.setPlaybackSpeed(speed)
+        b.playbackSpeedButton.text = "倍速 ${speed}x"
     }
 
     private fun showQuality() {
