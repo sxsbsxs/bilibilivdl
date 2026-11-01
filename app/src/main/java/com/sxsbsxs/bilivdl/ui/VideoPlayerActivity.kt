@@ -668,6 +668,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                         withContext(Dispatchers.IO) {
                             BilimiaoApiBridge.coin(requireAid(), if (which == 1) 2 else 1, which == 2)
                         }
+                        if (which == 2) {
+                            videoLiked = true
+                            b.videoLike.text = "已点赞"
+                        }
                         b.playerStatus.text = if (which == 2) "投币并点赞成功" else "投币成功"
                     } catch (e: Exception) {
                         b.playerStatus.text = e.message ?: "投币失败"
