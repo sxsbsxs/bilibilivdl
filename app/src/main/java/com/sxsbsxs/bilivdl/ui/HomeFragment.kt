@@ -37,6 +37,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private var loading = false
     private var hasMore = true
     private var duplicatePages = 0
+    private var feedGeneration = 0
     private var loadJob: Job? = null
     private val videos = mutableListOf<com.sxsbsxs.bilivdl.data.BiliVideo>()
     private lateinit var adapter: VideoAdapter
@@ -123,6 +124,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             try {
                 val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(item.seasonId) }
                 if (season.episodes.isEmpty()) error("该番剧暂时没有可用剧集")
+                if (!isAdded || _binding == null) return@launch
                 val labels: Array<CharSequence> = season.episodes.map { episode ->
                     listOf(episode.title, episode.longTitle).filter { it.isNotBlank() }.joinToString(" · ")
                 }.toTypedArray()
@@ -142,9 +144,11 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                     }
                     .setNegativeButton("关闭", null)
                     .show()
-                b.homeSearchStatus.text = "已加载 ${season.episodes.size} 集，选择剧集即可播放"
+                _binding?.homeSearchStatus?.text = "已加载 ${season.episodes.size} 集，选择剧集即可播放"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                b.homeSearchStatus.text = "番剧详情加载失败：${e.message ?: "网络异常"}"
+                _binding?.homeSearchStatus?.text = "番剧详情加载失败：${e.message ?: "网络异常"}"
             }
         }
     }
@@ -212,17 +216,22 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                         b.homeSearchStatus.text = "没有找到对应视频"
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                b.homeSearchStatus.text = "搜索失败：${e.message ?: "网络异常"}"
+                _binding?.homeSearchStatus?.text = "搜索失败：${e.message ?: "网络异常"}"
             } finally {
-                b.homeSearchProgress.visibility = View.GONE
-                b.homeSearchSubmit.isEnabled = true
+                _binding?.let { live ->
+                    live.homeSearchProgress.visibility = View.GONE
+                    live.homeSearchSubmit.isEnabled = true
+                }
             }
         }
     }
 
     private fun refresh() {
         val binding = _binding ?: return
+        feedGeneration++
         loadJob?.cancel()
         page = 0
         hasMore = true
@@ -240,6 +249,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         if (loading || (!hasMore && target > 1)) return
 
         loading = true
+        val generation = feedGeneration
         if (target == 1 && !binding.homeSwipe.isRefreshing) {
             binding.homeProgress.visibility = View.VISIBLE
         }
@@ -251,6 +261,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 val result = withContext(Dispatchers.IO) {
                     BiliPopularApi.loadPopular(target, cookie)
                 }
+                if (generation != feedGeneration) return@launch
                 val current = _binding ?: return@launch
                 val known = videos.mapTo(hashSetOf()) { it.bvid }
                 val fresh = result.filter { it.bvid.isNotBlank() && known.add(it.bvid) }
@@ -273,14 +284,20 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Pull-to-refresh is the recovery action; do not leave diagnostic text in the feed.
-                _binding?.homeFeedStatus?.visibility = View.GONE
-            } finally {
-                _binding?.let {
-                    it.homeProgress.visibility = View.GONE
-                    it.homeSwipe.isRefreshing = false
+                if (generation == feedGeneration) {
+                    _binding?.let { live ->
+                        live.homeFeedStatus.visibility = View.VISIBLE
+                        live.homeFeedStatus.text = "推荐加载失败，向下滑动重试"
+                    }
                 }
-                loading = false
+            } finally {
+                if (generation == feedGeneration) {
+                    _binding?.let { live ->
+                        live.homeProgress.visibility = View.GONE
+                        live.homeSwipe.isRefreshing = false
+                    }
+                    loading = false
+                }
             }
         }
     }
