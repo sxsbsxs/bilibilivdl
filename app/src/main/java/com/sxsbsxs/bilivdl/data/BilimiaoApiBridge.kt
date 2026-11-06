@@ -11,6 +11,7 @@ import bilibili.app.dynamic.v2.DynamicItem
 import bilibili.app.dynamic.v2.Module
 import bilibili.app.dynamic.v2.ModuleDynamic
 import bilibili.app.dynamic.v2.Paragraph
+import bilibili.app.dynamic.v2.TextNode
 import com.a10miaomiao.bilimiao.comm.network.BiliGRPCHttp
 
 /**
@@ -81,7 +82,17 @@ object BilimiaoApiBridge {
     private fun paragraphText(paragraph: Paragraph?): String {
         val content = paragraph?.content
         return when (content) {
-            is Paragraph.Content.Text -> content.value.nodes.joinToString("") { it.rawText }
+            is Paragraph.Content.Text -> content.value.nodes.joinToString("") { node ->
+                // Match bilimiao2's rich-text parser: raw_text is not populated
+                // consistently for WORD/EMOTE/LINK nodes in every API response.
+                when (val text = node.text) {
+                    is TextNode.Text.Word -> text.value.words
+                    is TextNode.Text.Link -> text.value.showText?.words.orEmpty()
+                    is TextNode.Text.Emote ->
+                        text.value.rawText?.words.orEmpty().ifBlank { "[表情]" }
+                    else -> node.rawText
+                }
+            }
             else -> ""
         }
     }
