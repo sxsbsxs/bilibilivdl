@@ -3,8 +3,15 @@ package com.sxsbsxs.bilivdl.ui
 import com.sxsbsxs.bilivdl.R
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.media.AudioManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
+import android.widget.SeekBar
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -100,6 +107,32 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var pendingSeekPosition = 0L
     private var selectedPartIndex = 0
     private var resumePosition = 0L
+    private val playerUiHandler = Handler(Looper.getMainLooper())
+    private var controlsHideRunnable: Runnable? = null
+    private var longPressRunnable: Runnable? = null
+    private var pendingSingleTap: Runnable? = null
+    private var gestureDownX = 0f
+    private var gestureDownY = 0f
+    private var gestureMoved = false
+    private var temporarySpeed = false
+    private var fullscreen = false
+    private var lastTapAt = 0L
+    private var updatingSeek = false
+    private val progressUpdater = object : Runnable {
+        override fun run() {
+            if (!isFinishing && ::b.isInitialized) {
+                val player = exo
+                val seek = findViewById<SeekBar?>(R.id.player_seek)
+                if (player != null && seek != null && !updatingSeek && player.duration > 0L) {
+                    seek.max = 1000
+                    seek.progress = ((player.currentPosition.toDouble() / player.duration).coerceIn(0.0, 1.0) * 1000).toInt()
+                    findViewById<TextView>(R.id.player_time)?.text =
+                        "${timeLabel(player.currentPosition)} / ${timeLabel(player.duration)}"
+                }
+                playerUiHandler.postDelayed(this, 500L)
+            }
+        }
+    }
     private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 0.75f)
     private val bvid by lazy { intent.getStringExtra(EXTRA_BVID).orEmpty() }
     private val aid by lazy { intent.getLongExtra(EXTRA_AID, 0L) }
@@ -111,6 +144,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         super.onCreate(saved)
         b = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(b.root)
+        setupPlayerControls()
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         b.playerAuthor.text = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { "哔哩哔哩视频" }
         b.playerAuthor.setOnClickListener { if (currentOwnerMid > 0L) openUserSpace(currentOwnerMid) }
@@ -342,6 +376,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                                 pendingSeekPosition = 0L
                                 resumePosition = 0L
                                 player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                                updatePlayerControlLabels()
                                 b.playerStatus.visibility = View.GONE
                                 b.playerStatus.text = "正在播放 · ${p.name}"
                             }
@@ -575,6 +610,188 @@ class VideoPlayerActivity : AppCompatActivity() {
             .setNegativeButton("取消", null)
             .show()
     }
+
+    private fun setupPlayerControls() {
+        val layer = findViewById<View>(R.id.player_gesture_layer)
+        val play = findViewById<TextView>(R.id.player_play_pause)
+        val back = findViewById<TextView>(R.id.player_back10)
+        val forward = findViewById<TextView>(R.id.player_forward10)
+        val speed = findViewById<TextView>(R.id.player_speed)
+        val full = findViewById<TextView>(R.id.player_fullscreen)
+        val seek = findViewById<SeekBar>(R.id.player_seek)
+        play.setOnClickListener { exo?.let { if (it.isPlaying) it.pause() else it.play() }; updatePlayerControlLabels() }
+        back.setOnClickListener { seekBy(-10_000L) }
+        forward.setOnClickListener { seekBy(10_000L) }
+        speed.setOnClickListener { cyclePlaybackSpeed(); updatePlayerControlLabels() }
+        full.setOnClickListener { toggleFullscreen() }
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onStartTrackingTouch(bar: SeekBar) { updatingSeek = true }
+            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
+                if (fromUser) findViewById<TextView>(R.id.player_time).text =
+                    "${timeLabel((exo?.duration?.coerceAtLeast(0L) ?: 0L) * value / 1000L)} / ${timeLabel(exo?.duration ?: 0L)}"
+            }
+            override fun onStopTrackingTouch(bar: SeekBar) {
+                val player = exo
+                if (player != null && player.duration > 0L) player.seekTo(player.duration * bar.progress / 1000L)
+                updatingSeek = false
+            }
+        })
+        layer.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    gestureDownX = event.x
+                    gestureDownY = event.y
+                    gestureMoved = false
+                    temporarySpeed = false
+                    longPressRunnable?.let(playerUiHandler::removeCallbacks)
+                    longPressRunnable = Runnable {
+                        temporarySpeed = true
+                        val current = exo?.playbackParameters?.speed ?: 1f
+                        exo?.setPlaybackSpeed((current * 2f).coerceAtMost(3f))
+                        showGestureStatus("长按加速 · ${(current * 2f).coerceAtMost(3f)}x")
+                    }.also { playerUiHandler.postDelayed(it, 420L) }
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - gestureDownX
+                    val dy = event.y - gestureDownY
+                    if (kotlin.math.abs(dx) > dp(18) || kotlin.math.abs(dy) > dp(18)) {
+                        gestureMoved = true
+                        longPressRunnable?.let(playerUiHandler::removeCallbacks)
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    longPressRunnable?.let(playerUiHandler::removeCallbacks)
+                    val dx = event.x - gestureDownX
+                    val dy = event.y - gestureDownY
+                    if (temporarySpeed) {
+                        exo?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                        showGestureStatus("已恢复 ${playbackSpeeds[playbackSpeedIndex]}x")
+                    } else if (gestureMoved && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                        val duration = exo?.duration?.takeIf { it > 0L } ?: 0L
+                        val jump = (dx / view.width.coerceAtLeast(1) * duration.coerceAtMost(120_000L)).toLong()
+                        seekBy(jump)
+                        showGestureStatus(if (jump >= 0) "快进 ${timeLabel(jump)}" else "快退 ${timeLabel(-jump)}")
+                    } else if (gestureMoved) {
+                        if (gestureDownX < view.width / 2f) {
+                            val attrs = window.attributes
+                            val current = if (attrs.screenBrightness < 0f) 0.5f else attrs.screenBrightness
+                            attrs.screenBrightness = (current - dy / view.height.coerceAtLeast(1) * 1.4f).coerceIn(0.05f, 1f)
+                            window.attributes = attrs
+                            showGestureStatus("亮度 ${(attrs.screenBrightness * 100).toInt()}%")
+                        } else {
+                            val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+                            val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                            val steps = (kotlin.math.abs(dy) / dp(34)).toInt().coerceAtLeast(1)
+                            val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                            val next = (current + if (dy < 0) steps else -steps).coerceIn(0, max)
+                            audio.setStreamVolume(AudioManager.STREAM_MUSIC, next, 0)
+                            showGestureStatus("音量 ${next * 100 / max}%")
+                        }
+                    } else {
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (now - lastTapAt < 280L) {
+                            pendingSingleTap?.let(playerUiHandler::removeCallbacks)
+                            pendingSingleTap = null
+                            when {
+                                event.x < view.width / 3f -> seekBy(-10_000L)
+                                event.x > view.width * 2f / 3f -> seekBy(10_000L)
+                                else -> { exo?.let { if (it.isPlaying) it.pause() else it.play() }; updatePlayerControlLabels() }
+                            }
+                            lastTapAt = 0L
+                        } else {
+                            lastTapAt = now
+                            pendingSingleTap = Runnable { togglePlayerControls() }
+                            playerUiHandler.postDelayed(pendingSingleTap!!, 280L)
+                        }
+                    }
+                    scheduleControlsHide()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    longPressRunnable?.let(playerUiHandler::removeCallbacks)
+                    if (temporarySpeed) exo?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                    true
+                }
+                else -> true
+            }
+        }
+        updatePlayerControlLabels()
+        playerUiHandler.removeCallbacks(progressUpdater)
+        playerUiHandler.post(progressUpdater)
+        scheduleControlsHide()
+    }
+
+    private fun timeLabel(ms: Long): String {
+        val seconds = (ms.coerceAtLeast(0L) / 1000L)
+        return if (seconds >= 3600) "${seconds / 3600}:${(seconds / 60 % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}"
+        else "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+    }
+
+    private fun seekBy(delta: Long) {
+        val player = exo ?: return
+        val target = (player.currentPosition + delta).coerceIn(0L, player.duration.takeIf { it > 0L } ?: Long.MAX_VALUE)
+        player.seekTo(target)
+        showGestureStatus(if (delta >= 0) "快进" else "快退")
+    }
+
+    private fun showGestureStatus(message: String) {
+        findViewById<TextView>(R.id.player_gesture_status).apply {
+            text = message
+            visibility = View.VISIBLE
+        }
+        scheduleControlsHide()
+    }
+
+    private fun updatePlayerControlLabels() {
+        if (!::b.isInitialized) return
+        findViewById<TextView>(R.id.player_play_pause)?.text = if (exo?.isPlaying == true) "暂停" else "播放"
+        findViewById<TextView>(R.id.player_speed)?.text = "${playbackSpeeds[playbackSpeedIndex]}x"
+    }
+
+    private fun togglePlayerControls() {
+        val controls = findViewById<View>(R.id.player_controls)
+        controls.visibility = if (controls.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        if (controls.visibility == View.VISIBLE) scheduleControlsHide()
+    }
+
+    private fun scheduleControlsHide() {
+        controlsHideRunnable?.let(playerUiHandler::removeCallbacks)
+        controlsHideRunnable = Runnable {
+            if (exo?.isPlaying == true && !fullscreen) {
+                findViewById<View>(R.id.player_controls)?.visibility = View.GONE
+            } else if (exo?.isPlaying == true) {
+                findViewById<View?>(R.id.player_controls)?.visibility = View.GONE
+            }
+        }.also { playerUiHandler.postDelayed(it, 3500L) }
+    }
+
+    private fun toggleFullscreen() {
+        val frame = findViewById<View>(R.id.player_frame)
+        val content = b.playerScroll.getChildAt(0) as? LinearLayout ?: return
+        val details = content.getChildAt(1)
+        fullscreen = !fullscreen
+        if (fullscreen) {
+            details.visibility = View.GONE
+            content.layoutParams = content.layoutParams.apply { height = ViewGroup.LayoutParams.MATCH_PARENT }
+            frame.layoutParams = frame.layoutParams.apply { height = ViewGroup.LayoutParams.MATCH_PARENT }
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+            findViewById<TextView>(R.id.player_fullscreen).text = "退出全屏"
+        } else {
+            details.visibility = View.VISIBLE
+            content.layoutParams = content.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
+            frame.layoutParams = frame.layoutParams.apply { height = dp(220) }
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            findViewById<TextView>(R.id.player_fullscreen).text = "全屏"
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun cyclePlaybackSpeed() {
         val player = exo ?: run { b.playerStatus.text = "播放器尚未准备好"; return }
@@ -1102,6 +1319,10 @@ class VideoPlayerActivity : AppCompatActivity() {
         super.onStop()
     }
     override fun onDestroy() {
+        playerUiHandler.removeCallbacks(progressUpdater)
+        controlsHideRunnable?.let(playerUiHandler::removeCallbacks)
+        longPressRunnable?.let(playerUiHandler::removeCallbacks)
+        pendingSingleTap?.let(playerUiHandler::removeCallbacks)
         b.playerView.player = null
         exo?.release()
         exo = null

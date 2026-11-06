@@ -31,6 +31,9 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         _binding = FragmentDownloadBinding.bind(view)
+        b.localFiles.setOnClickListener {
+            startActivity(Intent(requireContext(), LocalDownloadsActivity::class.java))
+        }
         b.clearCompleted.setOnClickListener {
             AlertDialog.Builder(requireContext()).setTitle("清理已完成")
                 .setMessage("只清除下载记录，不会删除已保存到系统视频库的文件。")
