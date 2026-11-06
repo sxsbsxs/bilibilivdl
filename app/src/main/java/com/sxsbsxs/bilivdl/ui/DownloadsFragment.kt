@@ -25,6 +25,7 @@ import com.sxsbsxs.bilivdl.data.BiliDownloadService
 import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
 import com.sxsbsxs.bilivdl.data.queue.DownloadTaskEntity
 import com.sxsbsxs.bilivdl.databinding.FragmentDownloadBinding
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -216,16 +217,13 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
 
         val removable = tasks.filter { it.status == "failed" || it.status == "cancelled" }
         if (removable.isNotEmpty()) {
-            val cleanup = MaterialButton(context).apply {
+            val cleanup = TextView(context).apply {
                 text = "移除失败记录（${removable.size}）"
-                isAllCaps = false
+                gravity = Gravity.CENTER
                 minHeight = dp(34)
                 textSize = 12f
-                elevation = 0f
-                strokeWidth = dp(1)
-                strokeColor = android.content.res.ColorStateList.valueOf(context.getColor(R.color.stroke_dark))
-                backgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(R.color.surface_dark))
                 setTextColor(context.getColor(R.color.text_secondary))
+                background = context.getDrawable(android.R.drawable.list_selector_background)
                 setOnClickListener {
                     AlertDialog.Builder(context)
                         .setTitle("移除失败记录")
@@ -417,6 +415,9 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                             } ?: error("无法写入目标文件")
                         }
                         exported++
+                    } catch (cancelled: CancellationException) {
+                        destination?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+                        throw cancelled
                     } catch (_: Exception) {
                         failed++
                         destination?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
