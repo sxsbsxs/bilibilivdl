@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-debug-build-${{ github.run_id }}
+  group: android-debug-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
