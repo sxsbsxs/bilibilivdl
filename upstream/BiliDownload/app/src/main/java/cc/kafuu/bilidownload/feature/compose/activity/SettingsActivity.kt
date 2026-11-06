@@ -119,7 +119,7 @@ class SettingsActivity : CoreCompActivity() {
             return
         }
 
-        val permission = Manifest.permission.ACCESS_LOCAL_NETWORK
+        val permission = "android.permission.ACCESS_LOCAL_NETWORK"
         if (ContextCompat.checkSelfPermission(this, permission) ==
             PackageManager.PERMISSION_GRANTED
         ) {

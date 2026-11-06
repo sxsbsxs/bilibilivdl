@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.jetbrains.kotlin.compose)
+    id("com.android.legacy-kapt")
     alias(libs.plugins.ksp)
 }
 android {
@@ -35,6 +36,8 @@ dependencies {
     compileOnly(files("$rootDir/app/libs/ffmpeg-kit.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core:1.15.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.activity:activity:1.8.0")
     implementation("org.jetbrains.kotlin:kotlin-reflect:2.3.10")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
@@ -67,9 +70,9 @@ dependencies {
     implementation("org.greenrobot:eventbus:3.3.1")
     implementation("org.jsoup:jsoup:1.16.1")
     implementation("com.chibatching.kotpref:kotpref:2.13.2")
-    implementation("androidx.media3:media3-exoplayer:1.5.1")
-    implementation("androidx.media3:media3-ui:1.5.1")
-    implementation("androidx.media3:media3-session:1.5.1")
+    implementation("androidx.media3:media3-exoplayer:1.11.0")
+    implementation("androidx.media3:media3-ui:1.11.0")
+    implementation("androidx.media3:media3-session:1.11.0")
 }
 kotlin {
     compilerOptions {

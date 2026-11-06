@@ -42,7 +42,7 @@ class LocalNetworkPermissionRequester(
                 return@launch
             }
 
-            val permission = Manifest.permission.ACCESS_LOCAL_NETWORK
+            val permission = "android.permission.ACCESS_LOCAL_NETWORK"
             if (ContextCompat.checkSelfPermission(activity, permission) ==
                 PackageManager.PERMISSION_GRANTED
             ) {
