@@ -189,7 +189,7 @@ object BiliPlaybackApi {
                 // Keep the same strict quality ceiling as the official JSON and gRPC paths.
                 // Do not silently jump to a different tier when the requested one is unavailable.
                 val eligibleVideo = dash.video.filter {
-                    it.id in 1..qn && (videoCodec.isBlank() || it.codecs.equals(videoCodec, ignoreCase = true))
+                    it.id in 1..qn && (videoCodec.isBlank() || it.id == qn && it.codecs.equals(videoCodec, ignoreCase = true))
                 }
                 val selected = eligibleVideo.maxByOrNull { it.id } ?: return@runCatching null
                 val eligibleAudio = dash.audio.orEmpty().filter {
@@ -367,7 +367,7 @@ object BiliPlaybackApi {
             val bandwidth = item.optLong("bandwidth")
             val frameRate = item.optString("frameRate").ifBlank { item.optString("frame_rate") }
             if (id <= 0 || codec.isBlank() || id in lockedIds) null else {
-                val fps = frameRate.takeIf { it.isNotBlank() }?.let { " · $it fps" }.orEmpty()
+                val fps = frameRate.takeIf { it.isNotBlank() }?.let { value -> " · " + if (value.contains("fps", ignoreCase = true)) value else "$value fps" }.orEmpty()
                 DownloadStreamOption(
                     id = id,
                     codec = codec,
@@ -515,7 +515,7 @@ object BiliPlaybackApi {
             val eligibleVideos = videos.filter {
                 it.optInt("id") in 1..qn &&
                     (if (hasSupportFormats || hasAcceptedQualityList) it.optInt("id") in allowedIds else true) &&
-                    (videoCodec.isBlank() || it.optString("codecs").equals(videoCodec, ignoreCase = true))
+                    (videoCodec.isBlank() || it.optInt("id") == qn && it.optString("codecs").equals(videoCodec, ignoreCase = true))
             }
             val video = eligibleVideos.maxWithOrNull(
                 compareBy<JSONObject> { it.optInt("id") }.thenBy { it.optLong("bandwidth") }
@@ -560,7 +560,7 @@ object BiliPlaybackApi {
         isLoggedIn: Boolean = cookie.isNotBlank(), onStage: (String) -> Unit = {}):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         // The player dialog stores "trackId|codec" for both regular videos and bangumi.
-        // Regular video playback only needs the codec name; bangumi bridge parses both parts.
+        // Preserve the selected audio track ID as well as its codec when refreshing URLs.
         val requestedVideoCodec = videoCodec.substringAfter('|', videoCodec)
         val requestedAudioTrackId = audioCodec.substringBefore('|').toIntOrNull()
         val requestedAudioCodec = audioCodec.substringAfter('|', audioCodec)
@@ -665,7 +665,7 @@ object BiliPlaybackApi {
         // A silent 1080P downgrade must not suppress discovery of 4K/HDR/8K tracks.
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
         val independentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality, grpc?.quality).maxOrNull() ?: 0
-        if (qn >= 80 && independentBestQuality < qn) {
+        if (requestedVideoCodec.isBlank() && qn >= 80 && independentBestQuality < qn) {
             onStage("正在核对视频实际可用画质…")
             discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, requestedVideoCodec, isVip, isLoggedIn) }
                 .onFailure { if (it is CancellationException) throw it }
@@ -674,7 +674,7 @@ object BiliPlaybackApi {
             val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
             if (highestDiscovered != null && highestDiscovered.first > independentBestQuality) {
                 val retried = runCatching {
-                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec, isVip, isLoggedIn, onStage) { reportedRestrictions = it }
+                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec, requestedAudioTrackId, isVip, isLoggedIn, onStage) { reportedRestrictions = it }
                 }.onFailure { if (it is CancellationException) throw it }.getOrNull()
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
