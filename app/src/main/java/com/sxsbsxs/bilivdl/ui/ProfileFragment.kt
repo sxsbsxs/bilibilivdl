@@ -32,7 +32,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         refreshEntry = view.findViewById(R.id.account_refresh)
         logoutEntry = view.findViewById(R.id.account_logout)
         loginEntry?.setOnClickListener {
-            startActivity(android.content.Intent(requireContext(), WebLoginActivity::class.java))
+            startActivity(android.content.Intent(requireContext(), QrLoginActivity::class.java))
         }
         refreshEntry?.setOnClickListener { refresh() }
         logoutEntry?.setOnClickListener {
