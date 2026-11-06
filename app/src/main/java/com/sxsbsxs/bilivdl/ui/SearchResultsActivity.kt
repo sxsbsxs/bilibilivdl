@@ -6,9 +6,11 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BangumiApiBridge
 import com.sxsbsxs.bilivdl.data.BangumiSearchResult
+import com.sxsbsxs.bilivdl.data.BiliApi
 import com.sxsbsxs.bilivdl.data.BiliVideo
 import com.sxsbsxs.bilivdl.databinding.ActivitySearchResultsBinding
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +23,16 @@ class SearchResultsActivity : AppCompatActivity() {
         const val EXTRA_BANGUMI = "search_bangumi"
         const val EXTRA_VIDEO_RESULTS = "search_video_results"
         const val EXTRA_BANGUMI_RESULTS = "search_bangumi_results"
+        private const val PAGE_SIZE = 20
     }
 
     private lateinit var b: ActivitySearchResultsBinding
+    private var query = ""
+    private var page = 1
+    private var loadingMore = false
+    private var hasMore = true
+    private var videoAdapter: VideoAdapter? = null
+    private val seenIds = hashSetOf<String>()
 
     @Suppress("DEPRECATION")
     private fun <T : java.io.Serializable> readExtra(key: String): T? {
@@ -38,7 +47,7 @@ class SearchResultsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivitySearchResultsBinding.inflate(layoutInflater)
         setContentView(b.root)
-        val query = intent.getStringExtra(EXTRA_QUERY).orEmpty()
+        query = intent.getStringExtra(EXTRA_QUERY).orEmpty()
         val bangumi = intent.getBooleanExtra(EXTRA_BANGUMI, false)
         b.searchResultsTitle.text = if (bangumi) "番剧搜索结果" else "视频搜索结果"
         b.searchResultsQuery.text = "“$query”"
@@ -51,16 +60,55 @@ class SearchResultsActivity : AppCompatActivity() {
         } else {
             b.searchResultsList.layoutManager = GridLayoutManager(this, 2)
             val results = readExtra<ArrayList<BiliVideo>>(EXTRA_VIDEO_RESULTS).orEmpty()
+            seenIds.addAll(results.map { it.bvid.ifBlank { it.aid.toString() } })
+            hasMore = results.size >= PAGE_SIZE
             b.searchResultsCount.text = "找到 ${results.size} 个视频"
-            b.searchResultsList.adapter = VideoAdapter { video ->
-                startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
-                    putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
-                    putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
-                    putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
-                    putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
-                    putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
-                })
-            }.also { it.submitList(results) }
+            videoAdapter = VideoAdapter(::openVideo).also { it.submitList(results) }
+            b.searchResultsList.adapter = videoAdapter
+            b.searchResultsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    super.onScrolled(recyclerView, dx, dy)
+                    val manager = recyclerView.layoutManager as? GridLayoutManager ?: return
+                    if (dy > 0 && !loadingMore && hasMore &&
+                        manager.findLastVisibleItemPosition() >= (manager.itemCount - 5).coerceAtLeast(0)) {
+                        loadNextPage()
+                    }
+                }
+            })
+        }
+    }
+
+    private fun openVideo(video: BiliVideo) {
+        startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+            putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
+            putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
+            putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
+            putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
+            putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
+        })
+    }
+
+    private fun loadNextPage() {
+        if (loadingMore || !hasMore || query.isBlank()) return
+        loadingMore = true
+        val nextPage = page + 1
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { BiliApi.searchVideos(query, nextPage, PAGE_SIZE) }
+                val fresh = result.filter { seenIds.add(it.bvid.ifBlank { it.aid.toString() }) }
+                if (fresh.isNotEmpty()) {
+                    page = nextPage
+                    val adapter = videoAdapter ?: return@launch
+                    adapter.submitList(adapter.currentList + fresh)
+                }
+                hasMore = result.size >= PAGE_SIZE && fresh.isNotEmpty()
+                val count = videoAdapter?.itemCount ?: 0
+                b.searchResultsCount.text = if (hasMore) "已加载 $count 个视频" else "共找到 $count 个视频"
+            } catch (error: Exception) {
+                b.searchResultsCount.text = "已加载 ${videoAdapter?.itemCount ?: 0} 个视频 · 加载更多失败"
+            } finally {
+                loadingMore = false
+            }
         }
     }
 
