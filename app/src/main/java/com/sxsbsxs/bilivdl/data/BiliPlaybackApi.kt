@@ -399,6 +399,10 @@ object BiliPlaybackApi {
     suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0,
         videoCodec: String = "", audioCodec: String = ""):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
+        // The player dialog stores "trackId|codec" for both regular videos and bangumi.
+        // Regular video playback only needs the codec name; bangumi bridge parses both parts.
+        val requestedVideoCodec = videoCodec.substringAfter('|', videoCodec)
+        val requestedAudioCodec = audioCodec.substringAfter('|', audioCodec)
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
         val detailUrl = "https://api.bilibili.com/x/web-interface/view?" +
@@ -467,7 +471,7 @@ object BiliPlaybackApi {
         for (fnval in listOf(4048, 1)) {
             for (candidate in httpCandidates) {
                 val resolved = runCatching {
-                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, videoCodec, audioCodec)
+                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec)
                 }.getOrNull()
                     ?: continue
                 if (bestHttp == null || resolved.quality > bestHttp!!.quality) bestHttp = resolved
@@ -481,22 +485,22 @@ object BiliPlaybackApi {
         // Try independent app/gRPC routes before the slow per-tier probe. The previous
         // order could issue many sequential requests before trying the BiliMiao route.
         val miao = if ((bestHttp?.quality ?: 0) < qn)
-            tryBilimiaoPlayback(resolvedAid, cid, qn, videoCodec, audioCodec) else null
+            tryBilimiaoPlayback(resolvedAid, cid, qn, requestedVideoCodec, requestedAudioCodec) else null
         val currentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality).maxOrNull() ?: 0
-        val grpc = if (videoCodec.isBlank() && audioCodec.isBlank() && currentBestQuality < qn)
+        val grpc = if (requestedVideoCodec.isBlank() && requestedAudioCodec.isBlank() && currentBestQuality < qn)
             tryGrpcPlayback(resolvedAid, cid, qn) else null
 
         // Only probe individual tiers if every independent route is still at 720P or below.
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
         val independentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality, grpc?.quality).maxOrNull() ?: 0
         if (qn >= 80 && independentBestQuality <= 64) {
-            discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, videoCodec) }
+            discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, requestedVideoCodec) }
                 .getOrDefault(emptyList())
                 .filter { it.first <= qn }
             val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
             if (highestDiscovered != null && highestDiscovered.first > independentBestQuality) {
                 val retried = runCatching {
-                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, videoCodec, audioCodec)
+                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec)
                 }.getOrNull()
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
