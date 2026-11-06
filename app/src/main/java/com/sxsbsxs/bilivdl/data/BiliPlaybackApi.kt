@@ -13,8 +13,21 @@ import java.net.URL
 import java.net.URLEncoder
 
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
-data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
-data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
+data class DownloadStreamOption(
+    val id: Int,
+    val codec: String,
+    val label: String,
+    val bandwidth: Long,
+    val height: Int = 0,
+    val frameRate: String = "",
+    val codecId: Long = 0L,
+    val mimeType: String = ""
+)
+data class DownloadStreamChoices(
+    val video: List<DownloadStreamOption>,
+    val audio: List<DownloadStreamOption>,
+    val lockedQualities: List<RestrictedQuality> = emptyList()
+)
 data class RestrictedQuality(val id: Int, val label: String, val requiresLogin: Boolean, val requiresVip: Boolean)
 data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "", val title: String = "", val restrictedQualities: List<RestrictedQuality> = emptyList())
 
@@ -167,7 +180,7 @@ object BiliPlaybackApi {
      * BiliMiao 使用独立的请求头和官方 playurl 解析器。
      * 当公开 JSON 线路静默降档时，用它做第二条独立 HTTP 路线核对真实轨道。
      */
-    private suspend fun tryBilimiaoPlayback(aid: Long, cid: Long, qn: Int, videoCodec: String = "", audioCodec: String = ""): PlaybackInfo? {
+    private suspend fun tryBilimiaoPlayback(aid: Long, cid: Long, qn: Int, videoCodec: String = "", audioCodec: String = "", audioTrackId: Int? = null): PlaybackInfo? {
         return runCatching {
             val data = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
                 .getVideoPalyUrl(aid.toString(), cid.toString(), qn, 4048)
@@ -180,7 +193,8 @@ object BiliPlaybackApi {
                 }
                 val selected = eligibleVideo.maxByOrNull { it.id } ?: return@runCatching null
                 val eligibleAudio = dash.audio.orEmpty().filter {
-                    audioCodec.isBlank() || it.codecs.equals(audioCodec, ignoreCase = true)
+                    (audioTrackId == null || it.id == audioTrackId) &&
+                        (audioCodec.isBlank() || it.codecs.equals(audioCodec, ignoreCase = true))
                 }
                 val audio = eligibleAudio.maxByOrNull { it.bandwidth }
                 if (audioCodec.isNotBlank() && audio == null) return@runCatching null
@@ -309,6 +323,101 @@ object BiliPlaybackApi {
 
 
     /**
+     * Fetch the complete DASH resource list using the same request shape as
+     * KafuuNeko/BiliDownload: qn is intentionally omitted so Bilibili returns
+     * every resource track instead of negotiating one quality in advance.
+     * Video, normal audio, Dolby audio and FLAC are kept as distinct choices.
+     */
+    suspend fun downloadStreamChoicesAll(
+        aid: Long,
+        cid: Long,
+        cookie: String,
+        isVip: Boolean,
+        isLoggedIn: Boolean
+    ): DownloadStreamChoices {
+        require(aid > 0L && cid > 0L) { "缺少视频编号或 CID" }
+        currentCoroutineContext().ensureActive()
+        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&fnval=4048&fnver=0&fourk=1&high_quality=1&otype=json"
+        val root = get(url, cookie)
+        if (root.optInt("code", -1) != 0) {
+            error(root.optString("message").ifBlank { "B站清晰度解析失败（\${root.optInt("code")}）" })
+        }
+        val data = root.optJSONObject("data") ?: error("B站没有返回播放资源")
+        val support = data.optJSONArray("support_formats")
+        val locked = (0 until (support?.length() ?: 0)).mapNotNull { index ->
+            val item = support?.optJSONObject(index) ?: return@mapNotNull null
+            val id = item.optInt("quality")
+            if (id <= 0) null else RestrictedQuality(
+                id,
+                item.optString("new_description")
+                    .ifBlank { item.optString("display_desc") }
+                    .ifBlank { qualityLabel(id) },
+                item.optInt("need_login") == 1,
+                item.optInt("need_vip") == 1
+            )
+        }.filter { (it.requiresLogin && !isLoggedIn) || (it.requiresVip && !isVip) }
+        val lockedIds = locked.map { it.id }.toSet()
+        val dash = data.optJSONObject("dash") ?: error("B站没有返回 DASH 资源，无法按轨道选择")
+        val videoArray = dash.optJSONArray("video")
+        val video = (0 until (videoArray?.length() ?: 0)).mapNotNull { index ->
+            val item = videoArray?.optJSONObject(index) ?: return@mapNotNull null
+            val id = item.optInt("id")
+            val codec = item.optString("codecs")
+            val height = item.optInt("height")
+            val bandwidth = item.optLong("bandwidth")
+            val frameRate = item.optString("frameRate").ifBlank { item.optString("frame_rate") }
+            if (id <= 0 || codec.isBlank() || id in lockedIds) null else {
+                val fps = frameRate.takeIf { it.isNotBlank() }?.let { " · $it fps" }.orEmpty()
+                DownloadStreamOption(
+                    id = id,
+                    codec = codec,
+                    label = "\${height}P$fps · $codec · \${bandwidth / 1000} kbps",
+                    bandwidth = bandwidth,
+                    height = height,
+                    frameRate = frameRate,
+                    codecId = item.optLong("codecid"),
+                    mimeType = item.optString("mimeType")
+                )
+            }
+        }.distinctBy { Triple(it.id, it.codec, it.bandwidth) }
+            .sortedWith(compareByDescending<DownloadStreamOption> { it.id }.thenByDescending { it.bandwidth })
+
+        val audioResources = mutableListOf<Pair<JSONObject, String>>()
+        val audioArray = dash.optJSONArray("audio")
+        for (index in 0 until (audioArray?.length() ?: 0)) {
+            audioArray?.optJSONObject(index)?.let { audioResources += it to "" }
+        }
+        val dolbyArray = dash.optJSONObject("dolby")?.optJSONArray("audio")
+        for (index in 0 until (dolbyArray?.length() ?: 0)) {
+            dolbyArray?.optJSONObject(index)?.let { audioResources += it to "杜比音频" }
+        }
+        dash.optJSONObject("flac")?.optJSONObject("audio")?.let {
+            audioResources += it to "FLAC 无损"
+        }
+        val audio = audioResources.mapNotNull { (item, typeLabel) ->
+            val id = item.optInt("id")
+            val codec = item.optString("codecs")
+            val bandwidth = item.optLong("bandwidth")
+            if (id <= 0 || codec.isBlank()) null else {
+                val type = typeLabel.takeIf { it.isNotBlank() }?.let { "$it · " }.orEmpty()
+                DownloadStreamOption(
+                    id = id,
+                    codec = codec,
+                    label = type + codec + " · " + (bandwidth / 1000) + " kbps",
+                    bandwidth = bandwidth,
+                    codecId = item.optLong("codecid"),
+                    mimeType = item.optString("mimeType")
+                )
+            }
+        }.distinctBy { Triple(it.id, it.codec, it.bandwidth) }
+            .sortedWith(compareByDescending<DownloadStreamOption> { it.bandwidth }.thenBy { it.id })
+
+        if (video.isEmpty()) error("B站没有返回当前账号可用的视频轨道")
+        if (audio.isEmpty()) error("B站没有返回可用音频轨道")
+        return DownloadStreamChoices(video, audio, locked)
+    }
+
+    /**
      * B站视频详情页的相关推荐接口。结果按官方返回顺序展示，最多保留 20 条。
      */
     fun relatedVideos(bvid: String, aid: Long, cookie: String = ""): List<BiliVideo> {
@@ -349,8 +458,8 @@ object BiliPlaybackApi {
     }
 
     private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048,
-        videoCodec: String = "", audioCodec: String = "", isVip: Boolean = false,
-        isLoggedIn: Boolean = cookie.isNotBlank(), onStage: (String) -> Unit = {},
+        videoCodec: String = "", audioCodec: String = "", audioTrackId: Int? = null,
+        isVip: Boolean = false, isLoggedIn: Boolean = cookie.isNotBlank(), onStage: (String) -> Unit = {},
         onRestrictions: (List<RestrictedQuality>) -> Unit = {}): PlaybackInfo? {
         onStage("正在请求 WBI 播放地址…")
         val wbiRoot = runCatching { get(wbiPlayUrl(aid, cid, qn, fnval, cookie), cookie) }.getOrNull()
@@ -413,7 +522,8 @@ object BiliPlaybackApi {
             ) ?: return null
             val actual = video.optInt("id").takeIf { it in 1..qn } ?: return null
             val eligibleAudios = audios.filter {
-                audioCodec.isBlank() || it.optString("codecs").equals(audioCodec, ignoreCase = true)
+                (audioTrackId == null || it.optInt("id") == audioTrackId) &&
+                    (audioCodec.isBlank() || it.optString("codecs").equals(audioCodec, ignoreCase = true))
             }
             val audio = eligibleAudios.maxByOrNull { it.optLong("bandwidth") }
             if (audioCodec.isNotBlank() && audio == null) return null
@@ -452,6 +562,7 @@ object BiliPlaybackApi {
         // The player dialog stores "trackId|codec" for both regular videos and bangumi.
         // Regular video playback only needs the codec name; bangumi bridge parses both parts.
         val requestedVideoCodec = videoCodec.substringAfter('|', videoCodec)
+        val requestedAudioTrackId = audioCodec.substringBefore('|').toIntOrNull()
         val requestedAudioCodec = audioCodec.substringAfter('|', audioCodec)
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
@@ -525,7 +636,7 @@ object BiliPlaybackApi {
                 currentCoroutineContext().ensureActive()
                 onStage(if (fnval == 4048) "正在尝试 HTTP / WBI 线路…" else "正在尝试兼容 HTTP 线路…")
                 val resolved = runCatching {
-                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec, isVip, isLoggedIn, onStage) { if (it.isNotEmpty()) reportedRestrictions = it }
+                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec, requestedAudioTrackId, isVip, isLoggedIn, onStage) { if (it.isNotEmpty()) reportedRestrictions = it }
                 }.onFailure { if (it is CancellationException) throw it }.getOrNull()
                     ?: continue
                 if (bestHttp == null || resolved.quality > bestHttp!!.quality) bestHttp = resolved
@@ -540,7 +651,7 @@ object BiliPlaybackApi {
         // order could issue many sequential requests before trying the BiliMiao route.
         onStage("HTTP 线路未达到请求画质，正在尝试 BiliMiao 备用线路…")
         val miaoRaw = if ((bestHttp?.quality ?: 0) < qn)
-            tryBilimiaoPlayback(resolvedAid, cid, qn, requestedVideoCodec, requestedAudioCodec) else null
+            tryBilimiaoPlayback(resolvedAid, cid, qn, requestedVideoCodec, requestedAudioCodec, requestedAudioTrackId) else null
         val activeRestrictions = bestHttp?.restrictedQualities?.takeIf { it.isNotEmpty() } ?: reportedRestrictions
         val lockedIds = activeRestrictions.map { it.id }.toSet()
         val miao = miaoRaw?.takeUnless { it.quality in lockedIds }
