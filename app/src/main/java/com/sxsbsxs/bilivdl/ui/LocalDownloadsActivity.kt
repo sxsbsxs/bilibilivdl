@@ -157,8 +157,8 @@ class LocalDownloadsActivity : AppCompatActivity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(9), dp(9), dp(9), dp(9))
-            background = getDrawable(R.drawable.bg_empty_card)
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
+            background = getDrawable(R.drawable.bg_surface_card)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) }
             isClickable = true; isFocusable = true
         }
         val thumb = ImageView(this).apply {

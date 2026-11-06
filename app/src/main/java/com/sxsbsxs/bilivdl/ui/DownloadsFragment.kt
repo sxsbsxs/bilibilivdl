@@ -112,7 +112,8 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 textSize = 11f
                 gravity = Gravity.CENTER
                 setPadding(dp(8), dp(7), dp(8), dp(7))
-                setTextColor(requireContext().getColor(if (taskFilter == key) R.color.brand else R.color.text_secondary))
+                setTextColor(requireContext().getColor(if (taskFilter == key) R.color.brand_dark else R.color.text_secondary))
+                background = requireContext().getDrawable(if (taskFilter == key) R.drawable.bg_pill_soft else R.drawable.bg_surface_card)
                 setOnClickListener {
                     taskFilter = key
                     refreshTasks(currentTasks)
@@ -138,10 +139,10 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 isAllCaps = false
                 isEnabled = enabled
                 minHeight = dp(36)
-                backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(if (enabled) R.color.brand_soft else R.color.surface_elevated))
                 strokeWidth = 0
                 elevation = 0f
-                setTextColor(context.getColor(R.color.text_secondary))
+                setTextColor(context.getColor(if (enabled) R.color.brand_dark else R.color.text_secondary))
                 textSize = 12f
                 setOnClickListener { action() }
                 layoutParams = LinearLayout.LayoutParams(0, dp(36), 1f).apply {
@@ -176,7 +177,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = context.getDrawable(R.drawable.bg_empty_card)
+            background = context.getDrawable(R.drawable.bg_surface_card)
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
@@ -250,10 +251,10 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 text = label
                 isAllCaps = false
                 minHeight = dp(38)
-                backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(R.color.brand_soft))
                 strokeWidth = 0
                 elevation = 0f
-                setTextColor(context.getColor(R.color.brand))
+                setTextColor(context.getColor(R.color.brand_dark))
                 textSize = 12f
                 setOnClickListener { click() }
                 layoutParams = LinearLayout.LayoutParams(
