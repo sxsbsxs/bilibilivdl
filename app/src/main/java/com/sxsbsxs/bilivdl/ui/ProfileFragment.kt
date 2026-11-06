@@ -9,7 +9,6 @@ import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.button.MaterialButton
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliSession
 import kotlinx.coroutines.Dispatchers
@@ -29,8 +28,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         view.findViewById<TextView>(R.id.account_qr_login).setOnClickListener {
             startActivity(android.content.Intent(requireContext(), QrLoginActivity::class.java))
         }
-        view.findViewById<MaterialButton>(R.id.account_refresh).setOnClickListener { refresh() }
-        view.findViewById<MaterialButton>(R.id.account_logout).setOnClickListener {
+        view.findViewById<TextView>(R.id.account_refresh).setOnClickListener { refresh() }
+        view.findViewById<TextView>(R.id.account_logout).setOnClickListener {
             BiliSession.clear(requireContext())
             accountName?.text = "未登录"
             status?.text = "登录凭据已清除"
