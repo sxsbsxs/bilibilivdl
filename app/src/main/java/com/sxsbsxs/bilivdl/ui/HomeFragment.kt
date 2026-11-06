@@ -269,10 +269,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _binding?.homeFeedStatus?.apply {
-                    text = "推荐暂时无法加载，下拉重试"
-                    visibility = View.VISIBLE
-                }
+                // Pull-to-refresh is the recovery action; do not leave diagnostic text in the feed.
+                _binding?.homeFeedStatus?.visibility = View.GONE
             } finally {
                 _binding?.let {
                     it.homeProgress.visibility = View.GONE
