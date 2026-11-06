@@ -4,6 +4,9 @@ import bilibili.app.playurl.v1.PlayURLGRPC
 import bilibili.app.playurl.v1.PlayViewReq
 import bilibili.app.playurl.v1.Stream
 import com.a10miaomiao.bilimiao.comm.network.BiliGRPCHttp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -152,6 +155,8 @@ object BiliPlaybackApi {
                     )
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             // 某些网络环境可能无法访问 gRPC；不可因此阻断匿名 HTTP 播放。
             null
@@ -204,7 +209,7 @@ object BiliPlaybackApi {
                 val label = data.accept_quality.zip(data.accept_description).toMap()[actual] ?: qualityLabel(actual)
                 PlaybackInfo(cid, urls.first(), actual, label, listOf(actual to label), segments = urls)
             }
-        }.getOrNull()
+        }.onFailure { if (it is CancellationException) throw it }.getOrNull()
     }
 
     suspend fun downloadQualities(aid: Long, cid: Long, cookie: String, videoCodec: String = "", isVip: Boolean = false, isLoggedIn: Boolean = cookie.isNotBlank()): List<Pair<Int, String>> {
@@ -213,6 +218,7 @@ object BiliPlaybackApi {
         val requested = listOf(127, 126, 125, 120, 116, 112, 80, 74, 64, 32, 16)
         val found = linkedMapOf<Int, String>()
         for (qn in requested) {
+            currentCoroutineContext().ensureActive()
             // WBI 请求即使 HTTP 200，也可能返回业务错误码；这种情况同样要回退普通 playurl，
             // 不能只在网络异常时回退，否则整轮清晰度探测可能一直停留在单一降档结果。
             val wbiRoot = runCatching { get(wbiPlayUrl(aid, cid, qn, 4048, cookie), cookie) }.getOrNull()
@@ -460,10 +466,10 @@ object BiliPlaybackApi {
                 error(if (code == -352) "B站暂时限制了游客视频详情请求（-352），请稍后重试" else detail.optString("message", "视频信息获取失败"))
             }
             detail.optJSONObject("data") ?: error("视频信息为空")
-        }.getOrElse { publicError ->
+        }.onFailure { if (it is CancellationException) throw it }.getOrElse { publicError ->
             runCatching {
                 BilimiaoApiBridge.videoInfo(if (bvid.isNotBlank()) bvid else aid.toString(), if (bvid.isNotBlank()) "BV" else "AV")
-            }.getOrElse { fallbackError ->
+            }.onFailure { if (it is CancellationException) throw it }.getOrElse { fallbackError ->
                 throw IllegalStateException("公开视频详情和 BiliMiao 备用详情均失败：${publicError.message}；${fallbackError.message}", fallbackError)
             }
         }
@@ -514,11 +520,13 @@ object BiliPlaybackApi {
         var bestHttp: PlaybackInfo? = null
         var reportedRestrictions: List<RestrictedQuality> = emptyList()
         for (fnval in listOf(4048, 1)) {
+            currentCoroutineContext().ensureActive()
             for (candidate in httpCandidates) {
+                currentCoroutineContext().ensureActive()
                 onStage(if (fnval == 4048) "正在尝试 HTTP / WBI 线路…" else "正在尝试兼容 HTTP 线路…")
                 val resolved = runCatching {
                     httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec, isVip, isLoggedIn, onStage) { if (it.isNotEmpty()) reportedRestrictions = it }
-                }.getOrNull()
+                }.onFailure { if (it is CancellationException) throw it }.getOrNull()
                     ?: continue
                 if (bestHttp == null || resolved.quality > bestHttp!!.quality) bestHttp = resolved
                 // Exact requested tier is authoritative; otherwise continue probing lower qn requests
@@ -548,13 +556,14 @@ object BiliPlaybackApi {
         if (qn >= 80 && independentBestQuality <= 64) {
             onStage("正在核对视频实际可用画质…")
             discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, requestedVideoCodec, isVip, isLoggedIn) }
+                .onFailure { if (it is CancellationException) throw it }
                 .getOrDefault(emptyList())
                 .filter { it.first <= qn }
             val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
             if (highestDiscovered != null && highestDiscovered.first > independentBestQuality) {
                 val retried = runCatching {
                     httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec, isVip, isLoggedIn, onStage) { reportedRestrictions = it }
-                }.getOrNull()
+                }.onFailure { if (it is CancellationException) throw it }.getOrNull()
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
         }
