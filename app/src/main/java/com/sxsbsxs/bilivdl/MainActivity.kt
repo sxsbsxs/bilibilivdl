@@ -24,14 +24,15 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val selected = savedInstanceState?.getInt(STATE_SELECTED_TAB, R.id.nav_home)
+            ?: R.id.nav_home
+        // Set the restored selection before attaching the listener so the initial
+        // selection cannot enqueue the same Fragment transaction twice.
+        binding.bottomNavigation.selectedItemId = selected
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             showPage(item.itemId)
             true
         }
-
-        val selected = savedInstanceState?.getInt(STATE_SELECTED_TAB, R.id.nav_home)
-            ?: R.id.nav_home
-        binding.bottomNavigation.selectedItemId = selected
         showPage(selected)
     }
 
@@ -42,7 +43,8 @@ class MainActivity : AppCompatActivity() {
 
     fun openAccountPage() {
         binding.bottomNavigation.selectedItemId = R.id.nav_profile
-        showPage(R.id.nav_profile)
+        // The selected-item listener switches tabs when the selection changes.
+        // When already selected, the profile is already visible.
     }
 
     /**
