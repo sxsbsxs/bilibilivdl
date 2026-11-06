@@ -24,8 +24,8 @@ BiliVdl is an independent video client and downloader. Its interface must have i
 |---|---|---|
 | Primary | #FB7299 | #FF82A8 |
 | Primary pressed | #E85D87 | #FB7299 |
-| Primary container | #FFF0F4 | #3B202B |
-| Canvas | #F6F7F9 | #101114 |
+| Primary container | #FFE3EC | #3B202B |
+| Canvas | #FFF5F8 | #101114 |
 | Surface | #FFFFFF | #191A1F |
 | Muted surface | #F1F3F6 | #24262D |
 | Main text | #24252A | #F1F2F3 |
