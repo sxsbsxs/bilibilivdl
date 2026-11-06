@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="page_horizontal_padding">18dp</dimen>
-    <dimen name="card_corner_radius">16dp</dimen>
-    <dimen name="control_corner_radius">14dp</dimen>
-    <dimen name="content_spacing">12dp</dimen>
+<dimen name="page_horizontal_padding">16dp</dimen><dimen name="card_corner_radius">14dp</dimen><dimen name="control_corner_radius">12dp</dimen><dimen name="content_spacing">12dp</dimen>
+<dimen name="space_xs">4dp</dimen><dimen name="space_sm">8dp</dimen><dimen name="space_md">12dp</dimen><dimen name="space_lg">16dp</dimen><dimen name="space_xl">24dp</dimen>
+<dimen name="icon_small">18dp</dimen><dimen name="icon_medium">22dp</dimen><dimen name="control_height">40dp</dimen>
 </resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+<color name="brand">#FF82A8</color><color name="brand_dark">#FB7299</color><color name="brand_soft">#3B202B</color>
+<color name="background_dark">#101114</color><color name="surface_dark">#191A1F</color><color name="surface_elevated">#24262D</color>
+<color name="text_primary">#F1F2F3</color><color name="text_secondary">#A6ABB3</color><color name="icon_tint">#C4C8CE</color>
+<color name="stroke_dark">#30333B</color><color name="divider">#2A2D34</color><color name="overlay_scrim">#99000000</color>
+<color name="white">#FFFFFF</color><color name="black">#000000</color>
+</resources>
