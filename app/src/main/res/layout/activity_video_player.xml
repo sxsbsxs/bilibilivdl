@@ -47,24 +47,29 @@
                 android:layout_marginBottom="12dp"
                 android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
+                <TextView
                     android:id="@+id/player_info_tab"
                     android:layout_width="0dp"
-                    android:layout_height="42dp"
+                    android:layout_height="44dp"
                     android:layout_weight="1"
-                    android:text="信息"
-                    android:textAllCaps="false"
-                    app:cornerRadius="12dp" />
+                    android:gravity="center"
+                    android:text="视频详情"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
 
-                <com.google.android.material.button.MaterialButton
+                <TextView
                     android:id="@+id/player_comments_tab"
                     android:layout_width="0dp"
-                    android:layout_height="42dp"
+                    android:layout_height="44dp"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:text="评论区"
-                    android:textAllCaps="false"
-                    app:cornerRadius="12dp" />
+                    android:gravity="center"
+                    android:text="评论"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
             </LinearLayout>
 
             <LinearLayout
@@ -79,7 +84,8 @@
                 android:layout_height="wrap_content"
                 android:maxLines="3"
                 android:textColor="@color/text_primary"
-                android:textSize="19sp"
+                android:textSize="18sp"
+                android:includeFontPadding="false"
                 android:textStyle="bold" />
 
             <LinearLayout
@@ -126,7 +132,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/player_stats"
@@ -149,6 +155,7 @@
 
             <TextView
                 android:id="@+id/player_status"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
@@ -258,42 +265,42 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/video_like"
                     android:layout_width="0dp"
-                    android:layout_height="52dp"
+                    android:layout_height="68dp"
                     android:layout_weight="1"
                     android:text="点赞"
                     app:icon="@drawable/ic_action_like"
                     app:iconGravity="textTop"
-                    app:iconPadding="1dp"
-                    app:iconSize="23dp"
-                    app:cornerRadius="10dp"
+                    app:iconPadding="4dp"
+                    app:iconSize="21dp"
+                    style="@style/Widget.Material3.Button.TextButton"\n                    android:insetTop="0dp"\n                    android:insetBottom="0dp"\n                    android:minHeight="68dp"\n                    android:paddingTop="4dp"\n                    android:paddingBottom="5dp"\n                    android:textSize="12sp"
                     android:textAllCaps="false" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/video_coin"
                     android:layout_width="0dp"
-                    android:layout_height="52dp"
+                    android:layout_height="68dp"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
                     android:text="投币"
                     app:icon="@drawable/ic_action_coin"
                     app:iconGravity="textTop"
-                    app:iconPadding="1dp"
-                    app:iconSize="23dp"
-                    app:cornerRadius="10dp"
+                    app:iconPadding="4dp"
+                    app:iconSize="21dp"
+                    style="@style/Widget.Material3.Button.TextButton"\n                    android:insetTop="0dp"\n                    android:insetBottom="0dp"\n                    android:minHeight="68dp"\n                    android:paddingTop="4dp"\n                    android:paddingBottom="5dp"\n                    android:textSize="12sp"
                     android:textAllCaps="false" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/video_favorite"
                     android:layout_width="0dp"
-                    android:layout_height="52dp"
+                    android:layout_height="68dp"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
                     android:text="收藏"
                     app:icon="@drawable/ic_action_favorite"
                     app:iconGravity="textTop"
-                    app:iconPadding="1dp"
-                    app:iconSize="23dp"
-                    app:cornerRadius="10dp"
+                    app:iconPadding="4dp"
+                    app:iconSize="21dp"
+                    style="@style/Widget.Material3.Button.TextButton"\n                    android:insetTop="0dp"\n                    android:insetBottom="0dp"\n                    android:minHeight="68dp"\n                    android:paddingTop="4dp"\n                    android:paddingBottom="5dp"\n                    android:textSize="12sp"
                     android:textAllCaps="false" />
             </LinearLayout>
 
@@ -308,6 +315,7 @@
 
             <TextView
                 android:id="@+id/download_status"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -324,6 +332,7 @@
 
                 <TextView
                     android:id="@+id/related_videos_status"
+                    android:visibility="gone"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
