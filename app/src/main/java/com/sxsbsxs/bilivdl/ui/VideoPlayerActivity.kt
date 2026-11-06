@@ -379,6 +379,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                                 updatePlayerControlLabels()
                                 b.playerStatus.visibility = View.GONE
                                 b.playerStatus.text = "正在播放 · ${p.name}"
+                                findViewById<TextView>(R.id.player_gesture_status).text = p.name
                             }
                         }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {

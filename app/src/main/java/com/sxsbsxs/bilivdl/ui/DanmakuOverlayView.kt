@@ -9,6 +9,7 @@ import android.util.AttributeSet
 import android.view.View
 import com.sxsbsxs.bilivdl.data.DanmakuItem
 import kotlin.math.max
+import org.json.JSONArray
 
 class DanmakuOverlayView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -47,13 +48,17 @@ class DanmakuOverlayView @JvmOverloads constructor(
         val now = positionProvider()
         val lanes = max(1, (height / laneHeight).toInt())
         val active = items.asSequence()
-            .filter { it.mode == 1 || it.mode == 4 || it.mode == 5 || it.mode == 6 }
+            .filter { it.mode in setOf(1, 2, 3, 4, 5, 6, 7) }
             .filter { now >= it.timeMs && now - it.timeMs < duration }
             .take(100)
         active.forEach { item ->
             val elapsed = now - item.timeMs
+            val displayText = if (item.mode == 7) {
+                runCatching { JSONArray(item.text).optString(4).ifBlank { item.text } }.getOrDefault(item.text)
+            } else item.text
+            if (displayText.isBlank()) return@forEach
             val lane = ((item.timeMs / 1300L) % lanes).toInt()
-            paint.textSize = (item.fontSize.coerceIn(18, 48) * resources.displayMetrics.scaledDensity).coerceAtLeast(22f)
+            paint.textSize = ((item.fontSize.coerceIn(18, 48) * if (item.mode == 2) 0.78f else 1f) * resources.displayMetrics.scaledDensity).coerceAtLeast(22f)
             val sourceColor = (0xFF shl 24) or (item.color and 0xFFFFFF)
             val hsv = FloatArray(3)
             Color.colorToHSV(sourceColor, hsv)
@@ -61,15 +66,16 @@ class DanmakuOverlayView @JvmOverloads constructor(
             // Lift their brightness while preserving hue, then draw a dark outline.
             hsv[2] = max(hsv[2], 0.76f)
             val readableColor = Color.HSVToColor(0xFF, hsv)
-            val textWidth = paint.measureText(item.text)
+            val textWidth = paint.measureText(displayText)
             val topY = lane * laneHeight + paint.textSize
             val y = when (item.mode) {
                 4 -> height - lane * laneHeight - 4f
+                7 -> height * 0.5f
                 else -> topY
             }.coerceIn(paint.textSize, height - 4f)
             val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
             val x = when (item.mode) {
-                5, 4 -> (width - textWidth) / 2f
+                4, 5, 7 -> (width - textWidth) / 2f
                 6 -> -textWidth + (width + textWidth) * progress
                 else -> width - (width + textWidth) * progress
             }
@@ -77,7 +83,7 @@ class DanmakuOverlayView @JvmOverloads constructor(
             paint.strokeWidth = 3.5f
             paint.color = 0xD9000000.toInt()
             paint.clearShadowLayer()
-            canvas.drawText(item.text, x, y, paint)
+            canvas.drawText(displayText, x, y, paint)
             paint.style = Paint.Style.FILL
             paint.color = readableColor
             paint.setShadowLayer(3f, 1f, 2f, 0xCC000000.toInt())
