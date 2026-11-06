@@ -104,10 +104,7 @@ object BiliPlaybackApi {
                     it.content != null &&
                         (it.streamInfo?.quality ?: 0) in 1..requestedQuality
                 }
-                .sortedWith(
-                    compareByDescending<bilibili.app.playurl.v1.Stream> { it.streamInfo?.quality ?: 0 }
-                        .thenByDescending { it.streamInfo?.bandwidth ?: 0L }
-                )
+                .sortedByDescending { it.streamInfo?.quality ?: 0 }
             if (streams.isEmpty()) return null
             val selected = streams.firstOrNull { it.streamInfo?.quality == requestedQuality }
                 ?: streams.firstOrNull()
