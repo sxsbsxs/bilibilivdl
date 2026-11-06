@@ -166,12 +166,13 @@ object BiliPlaybackApi {
                 .getVideoPalyUrl(aid.toString(), cid.toString(), qn, 4048)
             val dash = data.dash
             if (dash != null && dash.video.isNotEmpty()) {
-                val selected = dash.video.filter { it.id > 0 && it.id <= qn }
-                    .maxByOrNull { it.id } ?: dash.video.maxByOrNull { it.bandwidth }
-                    ?: return@runCatching null
+                // Keep the same strict quality ceiling as the official JSON and gRPC paths.
+                // Do not silently jump to a different tier when the requested one is unavailable.
+                val selected = dash.video.filter { it.id in 1..qn }
+                    .maxByOrNull { it.id } ?: return@runCatching null
                 val audio = dash.audio.orEmpty().maxByOrNull { it.bandwidth }
                 val labels = data.accept_quality.zip(data.accept_description).toMap()
-                val qualities = dash.video.map { it.id }.filter { it > 0 }.distinct()
+                val qualities = dash.video.map { it.id }.filter { it in 1..qn }.distinct()
                     .sortedDescending().map { it to (labels[it] ?: qualityLabel(it)) }
                 val videoUrl = selected.base_url.ifBlank { selected.backup_url?.firstOrNull().orEmpty() }
                 val audioUrl = audio?.let { track -> track.base_url.ifBlank { track.backup_url?.firstOrNull().orEmpty() } }
