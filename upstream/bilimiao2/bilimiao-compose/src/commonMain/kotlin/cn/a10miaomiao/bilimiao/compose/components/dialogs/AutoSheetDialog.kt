@@ -1,6 +1,5 @@
 package cn.a10miaomiao.bilimiao.compose.components.dialogs
 
-import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -80,8 +79,7 @@ internal fun rememberAutoSheetDialogState(): AutoSheetDialogState =
  * 居中状态下，卡片四周的透明区域与两侧遮罩行为一致：点击即关闭（同样会先询问 [onPreDismiss]），
  * 下滑同样可以关闭，只有卡片内部的点击不会穿透到遮罩。
  *
- * 另外，官方 [ModalBottomSheet] 的收起动画默认走 Material 的 FastEffects 曲线（stiffness 3800 的
- * 弹簧），收起时会显得过于急促；这里让收起复用打开时的弹簧曲线，做到开关对称。
+ * 进出场动效使用 Material3 稳定版的默认弹簧；弹层关闭流程由控制器和 onPreDismiss 统一管理。
  *
  * @param modifier 作用于弹层内容容器（调用方常用来设置背景色、最大高度等，会被裁剪进卡片圆角内）
  * @param state 控制器：由 [AutoSheetDialogHost] 持有，用于请求播放关闭动画
