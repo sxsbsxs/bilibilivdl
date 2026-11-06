@@ -17,10 +17,17 @@ object FfmpegMediaProcessor {
     private val executionMutex = Mutex()
 
     suspend fun mergeDashTracks(video: File, audio: File, output: File) {
-        execute(listOf("-y", "-i", video.absolutePath, "-i", audio.absolutePath,
+        val arguments = mutableListOf(
+            "-y", "-i", video.absolutePath, "-i", audio.absolutePath,
             "-map", "0:v:0", "-map", "1:a:0", "-c", "copy",
-            "-fflags", "+genpts", "-avoid_negative_ts", "make_zero",
-            "-movflags", "+faststart", output.absolutePath), output)
+            "-fflags", "+genpts", "-avoid_negative_ts", "make_zero"
+        )
+        // FLAC cannot be stored in MP4. Preserve the selected lossless track in Matroska.
+        if (!output.extension.equals("mkv", ignoreCase = true)) {
+            arguments += listOf("-movflags", "+faststart")
+        }
+        arguments += output.absolutePath
+        execute(arguments, output)
     }
 
     suspend fun mergeSegments(segments: List<File>, output: File) {
