@@ -439,8 +439,10 @@ object BiliPlaybackApi {
         // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
         // 先请求用户选定档位；若匿名接口对最高档返回空结果，依次尝试常见档位，
         // 但只显示响应中真实存在的视频轨 ID，绝不把请求值当成实际画质。
-        val httpCandidates = listOf(qn, 127, 126, 125, 120, 116, 112, 80, 74, 64, 32, 16)
-            .filter { it <= qn }.distinct()
+        // Ask for the user's requested tier once. If B站 silently downgrades it,
+        // independent BiliMiao/gRPC routes and the verified-track probe handle recovery;
+        // serially retrying every lower qn only adds latency and often repeats the same 720P cap.
+        val httpCandidates = listOf(qn)
         var bestHttp: PlaybackInfo? = null
         for (fnval in listOf(4048, 1)) {
             for (candidate in httpCandidates) {
