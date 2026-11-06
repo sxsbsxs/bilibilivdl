@@ -29,7 +29,7 @@ data class DownloadStreamChoices(
     val lockedQualities: List<RestrictedQuality> = emptyList()
 )
 data class RestrictedQuality(val id: Int, val label: String, val requiresLogin: Boolean, val requiresVip: Boolean)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "", val title: String = "", val restrictedQualities: List<RestrictedQuality> = emptyList())
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "", val title: String = "", val restrictedQualities: List<RestrictedQuality> = emptyList(), val audioCodec: String = "")
 
 object BiliPlaybackApi {
     private fun get(url: String, cookie: String): JSONObject {
@@ -214,7 +214,8 @@ object BiliPlaybackApi {
                     videoUrl = videoUrl,
                     audioUrl = audioUrl?.takeIf { it.isNotBlank() },
                     videoBackupUrls = selected.backup_url.orEmpty().filter { it.isNotBlank() && it != videoUrl },
-                    audioBackupUrls = audio?.backup_url.orEmpty().filter { it.isNotBlank() && it != audioUrl }
+                    audioBackupUrls = audio?.backup_url.orEmpty().filter { it.isNotBlank() && it != audioUrl },
+                    audioCodec = audio?.codecs.orEmpty()
                 )
             } else {
                 val actual = data.quality.takeIf { it > 0 } ?: return@runCatching null
@@ -566,7 +567,8 @@ object BiliPlaybackApi {
                 isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl,
                 videoBackupUrls = backupUrls(video).filterNot { it == videoUrl },
                 audioBackupUrls = audio?.let { backupUrls(it) }.orEmpty().filterNot { it == audioUrl },
-                restrictedQualities = restricted)
+                restrictedQualities = restricted,
+                audioCodec = audio?.optString("codecs").orEmpty())
         }
         val durl = data.optJSONArray("durl") ?: return null
         val urls = (0 until durl.length()).mapNotNull { durl.optJSONObject(it)?.optString("url")?.takeIf { u -> u.startsWith("http") } }
