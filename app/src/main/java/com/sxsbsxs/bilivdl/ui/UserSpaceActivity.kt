@@ -93,12 +93,16 @@ class UserSpaceActivity : AppCompatActivity() {
             }
             shortcuts.visibility = View.VISIBLE
             findViewById<TextView>(R.id.space_own_title).text = "我的内容"
+            findViewById<TextView>(R.id.space_video_heading).text = "我的投稿"
+            findViewById<TextView>(R.id.space_page_title).text = "我的空间"
             bindOwnShortcut(R.id.space_own_favorites, AccountLibraryActivity.TYPE_FAVORITES, myMid)
+            bindOwnShortcut(R.id.space_own_following, AccountLibraryActivity.TYPE_FOLLOWING, myMid)
             bindOwnShortcut(R.id.space_own_bangumi, AccountLibraryActivity.TYPE_BANGUMI, myMid)
             bindOwnShortcut(R.id.space_own_cinema, AccountLibraryActivity.TYPE_CINEMA, myMid)
             bindOwnShortcut(R.id.space_own_history, AccountLibraryActivity.TYPE_HISTORY, myMid)
             bindOwnShortcut(R.id.space_own_watch_later, AccountLibraryActivity.TYPE_WATCH_LATER, myMid)
             bindOwnShortcut(R.id.space_own_liked, AccountLibraryActivity.TYPE_LIKED, myMid)
+            bindOwnShortcut(R.id.space_own_messages, AccountLibraryActivity.TYPE_MESSAGES, myMid)
         }
     }
 

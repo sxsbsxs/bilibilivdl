@@ -25,6 +25,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private var status: TextView? = null
     private var accountName: TextView? = null
     private var accountAvatar: ImageView? = null
+    private var accountHeader: View? = null
+    private var openProfileJob: Job? = null
     private var loginEntry: TextView? = null
     private var refreshEntry: TextView? = null
     private var logoutEntry: TextView? = null
@@ -37,10 +39,13 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         status = view.findViewById(R.id.account_status)
         accountName = view.findViewById(R.id.account_name)
         accountAvatar = view.findViewById(R.id.account_avatar)
+        accountHeader = view.findViewById(R.id.account_header_card)
         loginEntry = view.findViewById(R.id.account_qr_login)
         refreshEntry = view.findViewById(R.id.account_refresh)
         logoutEntry = view.findViewById(R.id.account_logout)
         loginEntry?.setOnClickListener { startActivity(Intent(requireContext(), QrLoginActivity::class.java)) }
+        accountHeader?.setOnClickListener { openOwnSpace() }
+        accountAvatar?.setOnClickListener { openOwnSpace() }
         refreshEntry?.setOnClickListener { refresh(showLoading = true) }
         logoutEntry?.setOnClickListener {
             AlertDialog.Builder(requireContext()).setTitle("退出登录")
@@ -98,6 +103,35 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         }
     }
 
+    private fun openOwnSpace() {
+        val ctx = context?.applicationContext ?: return
+        if (BiliSession.cookie(ctx).isBlank()) {
+            startActivity(Intent(requireContext(), QrLoginActivity::class.java))
+            return
+        }
+        if (accountMid > 0L) {
+            startActivity(Intent(requireContext(), UserSpaceActivity::class.java)
+                .putExtra(UserSpaceActivity.EXTRA_MID, accountMid))
+            return
+        }
+        if (openProfileJob?.isActive == true) return
+        openProfileJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val account = withContext(Dispatchers.IO) { BiliSession.account(ctx) }
+                if (!isAdded) return@launch
+                if (account.isLogin && account.mid > 0L) {
+                    accountMid = account.mid
+                    startActivity(Intent(requireContext(), UserSpaceActivity::class.java)
+                        .putExtra(UserSpaceActivity.EXTRA_MID, account.mid))
+                } else {
+                    startActivity(Intent(requireContext(), QrLoginActivity::class.java))
+                }
+            } catch (error: Exception) {
+                if (isAdded) status?.text = error.message ?: "暂时无法打开个人空间，请刷新账号"
+            }
+        }
+    }
+
     private fun renderAccount(account: BiliAccount) {
         if (!account.isLogin) { renderLoggedOut(); return }
         accountMid = account.mid
@@ -113,10 +147,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 .placeholder(R.drawable.bg_comment_avatar).error(R.drawable.bg_comment_avatar)
                 .circleCrop().into(accountAvatar ?: return)
         } else accountAvatar?.setImageResource(R.drawable.bg_comment_avatar)
-        accountAvatar?.setOnClickListener {
-            if (account.mid > 0L) startActivity(Intent(requireContext(), UserSpaceActivity::class.java)
-                .putExtra(UserSpaceActivity.EXTRA_MID, account.mid))
-        }
+        accountHeader?.isClickable = true
+        accountAvatar?.setOnClickListener { openOwnSpace() }
     }
 
     private fun renderLoggedOut() {
@@ -127,7 +159,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         accountName?.text = "未登录"
         status?.text = "浏览、搜索和游客可用的播放功能无需登录"
         accountAvatar?.setImageResource(R.drawable.bg_comment_avatar)
-        accountAvatar?.setOnClickListener(null)
+        accountAvatar?.setOnClickListener { openOwnSpace() }
+        accountHeader?.isClickable = true
     }
 
     private fun logout() {
@@ -152,9 +185,9 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     }
 
     override fun onDestroyView() {
-        refreshJob?.cancel(); logoutJob?.cancel()
-        refreshJob = null; logoutJob = null
-        status = null; accountName = null; accountAvatar = null
+        refreshJob?.cancel(); logoutJob?.cancel(); openProfileJob?.cancel()
+        refreshJob = null; logoutJob = null; openProfileJob = null
+        status = null; accountName = null; accountAvatar = null; accountHeader = null
         loginEntry = null; refreshEntry = null; logoutEntry = null
         super.onDestroyView()
     }
