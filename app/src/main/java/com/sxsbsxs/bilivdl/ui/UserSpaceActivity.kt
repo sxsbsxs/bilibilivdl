@@ -53,7 +53,8 @@ class UserSpaceActivity : AppCompatActivity() {
             isNestedScrollingEnabled = false
         }
         findViewById<ScrollView>(R.id.space_scroll).setOnScrollChangeListener(
-            ScrollView.OnScrollChangeListener { scroll, _, y, _, _ ->
+            View.OnScrollChangeListener { changedView, _, y, _, _ ->
+                val scroll = changedView as ScrollView
                 val content = scroll.getChildAt(0) ?: return@OnScrollChangeListener
                 if (!videosLoading && videosHasMore && y + scroll.height >= content.measuredHeight - 500) {
                     loadCreatorVideos(mid, reset = false)
