@@ -307,7 +307,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                     player.addListener(object : Player.Listener {
                         override fun onPlayerError(error: PlaybackException) {
                             if (!tryNextCdn(player, p, source)) {
-                                b.playerStatus.text = "播放失败：${error.errorCodeName}。备用线路也已尝试完，请检查网络或清晰度"
+                                b.playerStatus.visibility = View.VISIBLE
+                                b.playerStatus.text = "播放失败：${error.errorCodeName}，请检查网络或清晰度"
                             }
                         }
                         override fun onPlaybackStateChanged(state: Int) {
@@ -363,7 +364,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             player.prepare()
             player.seekTo(position)
             player.playWhenReady = wasPlaying
-            b.playerStatus.text = "主线路失败，正在切换备用 CDN…"
+            b.playerStatus.visibility = View.VISIBLE
+            b.playerStatus.text = "正在切换备用线路…"
             true
         } catch (_: Exception) { false }
     }
@@ -580,7 +582,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                     .setNegativeButton("取消", null)
                     .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(choices[selected].first) }
                     .show()
-                b.downloadStatus.text = "已读取 ${choices.size} 档清晰度"
+                b.downloadStatus.visibility = View.GONE
+                b.downloadStatus.text = ""
             } catch (error: Exception) {
                 b.downloadStatus.text = "读取清晰度失败：${error.message ?: "网络异常"}"
             }
@@ -664,8 +667,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             .apply()
         try {
             BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec, selectedPartIndex, intent.getStringExtra(EXTRA_COVER).orEmpty(), intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
-            b.downloadStatus.text = "已加入后台下载 · " + (info?.name ?: "清晰度 " + qn) +
-                if (videoCodec.isNotBlank()) " · " + videoCodec else ""
+            b.downloadStatus.visibility = View.GONE
+            b.downloadStatus.text = ""
         } catch (error: Exception) {
             task.put("status", "failed").put("progress", error.message ?: "无法启动下载服务")
             val current = JSONArray(prefs.getString("tasks", "[]"))
@@ -675,6 +678,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 updated.put(if (item.optString("id") == taskId) task else item)
             }
             prefs.edit().putString("tasks", updated.toString()).apply()
+            b.downloadStatus.visibility = View.VISIBLE
             b.downloadStatus.text = "下载任务启动失败：" + error.message
         }
     }
@@ -701,6 +705,7 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun exportDanmaku() {
         if (loadedDanmaku.isEmpty()) {
+            b.playerStatus.visibility = View.VISIBLE
             b.playerStatus.text = "当前视频还没有加载到弹幕"
             return
         }
@@ -733,7 +738,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun loadComments(reset: Boolean) {
         if (commentLoading || (!commentHasMore && !reset)) return
         commentLoading = true
-        b.commentsStatus.text = if (reset) "正在加载评论…" else "正在加载更多评论…"
+        b.commentsStatus.visibility = View.GONE
         lifecycleScope.launch {
             try {
                 val page = commentPage
@@ -742,7 +747,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                 commentPage = page + 1
                 commentHasMore = result.hasMore && result.comments.isNotEmpty()
                 b.commentsTitle.text = "评论区 · " + formatCount(result.total.toLong())
-                b.commentsStatus.text = "评论 · ${result.total} 条" + if (commentHasMore) " · 上滑加载更多" else " · 已加载完"
+                b.commentsStatus.visibility = if (result.comments.isEmpty() && reset) View.VISIBLE else View.GONE
+                if (result.comments.isEmpty() && reset) b.commentsStatus.text = "暂无评论"
                 // RecyclerView 位于关闭嵌套滚动的 NestedScrollView 中，追加内容后主动检查是否仍接近底部。
                 if (commentHasMore) b.playerScroll.post {
                     val content = b.playerScroll.getChildAt(0)
@@ -752,7 +758,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                b.commentsStatus.text = "评论加载失败：${e.message ?: "网络异常"}"
+                b.commentsStatus.visibility = View.VISIBLE
+                b.commentsStatus.text = "评论加载失败，请稍后重试"
             } finally { commentLoading = false }
         }
     }
