@@ -156,16 +156,24 @@ object BiliDownloadEngine {
             }
             if (code != 200 && code != 206) throw CdnHttpException(code)
             val append = offset > 0 && code == 206
+            var rangeTotal = -1L
             if (append) {
                 val range = Regex("bytes (\\d+)-(\\d+)/(\\d+|\\*)").matchEntire(c.getHeaderField("Content-Range").orEmpty())
-                if (range?.groupValues?.get(1)?.toLongOrNull() != offset) {
+                val rangeStart = range?.groupValues?.get(1)?.toLongOrNull()
+                val rangeEnd = range?.groupValues?.get(2)?.toLongOrNull()
+                rangeTotal = range?.groupValues?.get(3)?.takeIf { it != "*" }?.toLongOrNull() ?: -1L
+                val length = c.getHeaderFieldLong("Content-Length", -1L)
+                val rangeLength = if (rangeStart != null && rangeEnd != null) rangeEnd - rangeStart + 1L else -1L
+                if (rangeStart != offset || rangeEnd == null || rangeEnd < offset ||
+                    (rangeTotal >= 0L && rangeEnd >= rangeTotal) ||
+                    (length >= 0L && rangeLength != length)) {
                     RandomAccessFile(file,"rw").use { it.setLength(0) }
-                    error("续传范围不匹配")
+                    error("服务器返回的续传范围与本地文件不匹配，已清除不可信临时片段")
                 }
             }
             val start = if (append) offset else 0L
             val len = c.getHeaderFieldLong("Content-Length", -1L)
-            val total = if (len >= 0) start + len else -1L
+            val total = if (rangeTotal > 0L) rangeTotal else if (len >= 0) start + len else -1L
             RandomAccessFile(file,"rw").use { out ->
                 if (!append) out.setLength(0)
                 out.seek(start)
