@@ -31,6 +31,21 @@ object BiliPlaybackApi {
     }
     private fun enc(s:String)=URLEncoder.encode(s,"UTF-8")
 
+    private fun qualityLabel(id: Int): String = when (id) {
+        127 -> "8K"
+        126 -> "杜比视界"
+        125 -> "HDR"
+        120 -> "4K"
+        116 -> "1080P 60帧"
+        112 -> "1080P 高码率"
+        80 -> "1080P"
+        74 -> "720P 60帧"
+        64 -> "720P"
+        32 -> "480P"
+        16 -> "360P"
+        else -> "清晰度 $id"
+    }
+
     private val wbiMixinTable = intArrayOf(
         46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,
         33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,
@@ -292,9 +307,16 @@ object BiliPlaybackApi {
             val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
             val audioUrl = audio?.let { primary(it).ifBlank { it.optJSONArray("backupUrl")?.optString(0).orEmpty() } }
             if (videoUrl.isBlank()) return null
-            return PlaybackInfo(cid, videoUrl, video.optInt("id", actual),
-                choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual,
-                (choices.filter { choice -> videos.any { it.optInt("id") == choice.first } } + (actual to (choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual))).distinctBy { it.first }.sortedByDescending { it.first },
+            // accept_quality 是能力声明/排序提示，不是 DASH 实际轨道清单。
+            // 以 dash.video 中真实存在的 id 为准，避免 accept_quality 缺项时把高画质过滤掉。
+            val labelsById = choices.toMap()
+            val realQualities = videos.mapNotNull { track ->
+                val id = track.optInt("id")
+                id.takeIf { it > 0 }?.let { it to (labelsById[it] ?: qualityLabel(it)) }
+            }.distinctBy { it.first }.sortedByDescending { it.first }
+            return PlaybackInfo(cid, videoUrl, actual,
+                labelsById[actual] ?: qualityLabel(actual),
+                realQualities.ifEmpty { listOf(actual to qualityLabel(actual)) },
                 isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl)
         }
         val durl = data.optJSONArray("durl") ?: return null
