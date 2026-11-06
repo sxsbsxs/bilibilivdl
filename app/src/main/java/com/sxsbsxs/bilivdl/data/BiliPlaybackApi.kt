@@ -236,7 +236,7 @@ object BiliPlaybackApi {
         val url = wbiPlayUrl(aid, cid, qn, 4048, cookie)
         val wbiRoot = runCatching { get(url, cookie) }.getOrNull()
         val root = if (wbiRoot?.optInt("code", -1) == 0) wbiRoot else
-            get("https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+            get("https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&high_quality=1&otype=json", cookie)
         if (root.optInt("code", -1) == 0) {
             val dash = root.optJSONObject("data")?.optJSONObject("dash")
             if (dash != null) {
@@ -323,7 +323,7 @@ object BiliPlaybackApi {
     private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048): PlaybackInfo? {
         val wbiRoot = runCatching { get(wbiPlayUrl(aid, cid, qn, fnval, cookie), cookie) }.getOrNull()
         val root = if (wbiRoot?.optInt("code", -1) == 0) wbiRoot else
-            get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=" + fnval + "&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+            get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=" + fnval + "&fnver=0&force_host=2&fourk=1&high_quality=1&otype=json", cookie)
         if (root.optInt("code", -1) != 0) return null
         val data = root.optJSONObject("data") ?: return null
         val qa = data.optJSONArray("accept_quality")
