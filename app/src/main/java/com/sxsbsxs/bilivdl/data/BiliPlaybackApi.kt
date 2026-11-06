@@ -458,7 +458,9 @@ object BiliPlaybackApi {
     }
 
     private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048,
-        videoCodec: String = "", audioCodec: String = "", audioTrackId: Int? = null,
+        videoCodec: String = "", audioCodec: String = "",
+        videoTrackId: Int? = null, videoCodecId: Long? = null,
+        audioTrackId: Int? = null, audioCodecId: Long? = null,
         isVip: Boolean = false, isLoggedIn: Boolean = cookie.isNotBlank(), onStage: (String) -> Unit = {},
         onRestrictions: (List<RestrictedQuality>) -> Unit = {}): PlaybackInfo? {
         onStage("正在请求 WBI 播放地址…")
@@ -505,7 +507,12 @@ object BiliPlaybackApi {
             val va = dash.optJSONArray("video")
             val aa = dash.optJSONArray("audio")
             val videos = (0 until (va?.length() ?: 0)).mapNotNull { va?.optJSONObject(it) }
-            val audios = (0 until (aa?.length() ?: 0)).mapNotNull { aa?.optJSONObject(it) }
+            val audios = mutableListOf<JSONObject>().apply {
+                for (index in 0 until (aa?.length() ?: 0)) aa?.optJSONObject(index)?.let(::add)
+                val dolby = dash.optJSONObject("dolby")?.optJSONArray("audio")
+                for (index in 0 until (dolby?.length() ?: 0)) dolby?.optJSONObject(index)?.let(::add)
+                dash.optJSONObject("flac")?.optJSONObject("audio")?.let(::add)
+            }
             // B站的 data.quality 可能是本次请求协商出的档位（例如 64/720P），
             // 但 dash.video 里仍可能包含更高的真实可用轨道。不能优先照搬 data.quality，
             // 否则 qn=127 也会被应用固定选成 720P。
@@ -515,6 +522,8 @@ object BiliPlaybackApi {
             val eligibleVideos = videos.filter {
                 it.optInt("id") in 1..qn &&
                     (if (hasSupportFormats || hasAcceptedQualityList) it.optInt("id") in allowedIds else true) &&
+                    (videoTrackId == null || it.optInt("id") == videoTrackId) &&
+                    (videoCodecId == null || it.optLong("codecid") == videoCodecId) &&
                     (videoCodec.isBlank() || it.optInt("id") == qn && it.optString("codecs").equals(videoCodec, ignoreCase = true))
             }
             val video = eligibleVideos.maxWithOrNull(
@@ -523,6 +532,7 @@ object BiliPlaybackApi {
             val actual = video.optInt("id").takeIf { it in 1..qn } ?: return null
             val eligibleAudios = audios.filter {
                 (audioTrackId == null || it.optInt("id") == audioTrackId) &&
+                    (audioCodecId == null || it.optLong("codecid") == audioCodecId) &&
                     (audioCodec.isBlank() || it.optString("codecs").equals(audioCodec, ignoreCase = true))
             }
             val audio = eligibleAudios.maxByOrNull { it.optLong("bandwidth") }
@@ -561,9 +571,16 @@ object BiliPlaybackApi {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         // The player dialog stores "trackId|codec" for both regular videos and bangumi.
         // Preserve the selected audio track ID as well as its codec when refreshing URLs.
-        val requestedVideoCodec = videoCodec.substringAfter('|', videoCodec)
-        val requestedAudioTrackId = audioCodec.substringBefore('|').toIntOrNull()
-        val requestedAudioCodec = audioCodec.substringAfter('|', audioCodec)
+        val videoSelection = videoCodec.split('|', limit = 3)
+        val audioSelection = audioCodec.split('|', limit = 3)
+        val requestedVideoTrackId = videoSelection.firstOrNull()?.toIntOrNull()
+        val requestedVideoCodec = if (videoSelection.size >= 2) videoSelection[1] else videoCodec
+        val requestedVideoCodecId = videoSelection.getOrNull(2)?.toLongOrNull()
+        val requestedAudioTrackId = audioSelection.firstOrNull()?.toIntOrNull()
+        val requestedAudioCodec = if (audioSelection.size >= 2) audioSelection[1] else audioCodec
+        val requestedAudioCodecId = audioSelection.getOrNull(2)?.toLongOrNull()
+        val hasExplicitTrackSelection = requestedVideoTrackId != null || requestedVideoCodecId != null ||
+            requestedAudioTrackId != null || requestedAudioCodecId != null
         val id=if(bvid.isNotBlank()) mapOf("bvid" to bvid) else mapOf("aid" to aid.toString())
         // bilimiao 使用免登录的普通视频详情接口；先走公开接口，避免把 WBI/登录状态当作播放前置条件。
         val detailUrl = "https://api.bilibili.com/x/web-interface/view?" +
@@ -636,7 +653,7 @@ object BiliPlaybackApi {
                 currentCoroutineContext().ensureActive()
                 onStage(if (fnval == 4048) "正在尝试 HTTP / WBI 线路…" else "正在尝试兼容 HTTP 线路…")
                 val resolved = runCatching {
-                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec, requestedAudioTrackId, isVip, isLoggedIn, onStage) { if (it.isNotEmpty()) reportedRestrictions = it }
+                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec, requestedVideoTrackId, requestedVideoCodecId, requestedAudioTrackId, requestedAudioCodecId, isVip, isLoggedIn, onStage) { if (it.isNotEmpty()) reportedRestrictions = it }
                 }.onFailure { if (it is CancellationException) throw it }.getOrNull()
                     ?: continue
                 if (bestHttp == null || resolved.quality > bestHttp!!.quality) bestHttp = resolved
@@ -650,7 +667,7 @@ object BiliPlaybackApi {
         // Try independent app/gRPC routes before the slow per-tier probe. The previous
         // order could issue many sequential requests before trying the BiliMiao route.
         onStage("HTTP 线路未达到请求画质，正在尝试 BiliMiao 备用线路…")
-        val miaoRaw = if ((bestHttp?.quality ?: 0) < qn)
+        val miaoRaw = if (!hasExplicitTrackSelection && (bestHttp?.quality ?: 0) < qn)
             tryBilimiaoPlayback(resolvedAid, cid, qn, requestedVideoCodec, requestedAudioCodec, requestedAudioTrackId) else null
         val activeRestrictions = bestHttp?.restrictedQualities?.takeIf { it.isNotEmpty() } ?: reportedRestrictions
         val lockedIds = activeRestrictions.map { it.id }.toSet()
@@ -665,7 +682,7 @@ object BiliPlaybackApi {
         // A silent 1080P downgrade must not suppress discovery of 4K/HDR/8K tracks.
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
         val independentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality, grpc?.quality).maxOrNull() ?: 0
-        if (requestedVideoCodec.isBlank() && qn >= 80 && independentBestQuality < qn) {
+        if (!hasExplicitTrackSelection && requestedVideoCodec.isBlank() && qn >= 80 && independentBestQuality < qn) {
             onStage("正在核对视频实际可用画质…")
             discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, requestedVideoCodec, isVip, isLoggedIn) }
                 .onFailure { if (it is CancellationException) throw it }
@@ -674,7 +691,7 @@ object BiliPlaybackApi {
             val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
             if (highestDiscovered != null && highestDiscovered.first > independentBestQuality) {
                 val retried = runCatching {
-                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec, requestedAudioTrackId, isVip, isLoggedIn, onStage) { reportedRestrictions = it }
+                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec, requestedVideoTrackId, requestedVideoCodecId, requestedAudioTrackId, requestedAudioCodecId, isVip, isLoggedIn, onStage) { reportedRestrictions = it }
                 }.onFailure { if (it is CancellationException) throw it }.getOrNull()
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
