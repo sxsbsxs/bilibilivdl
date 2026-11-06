@@ -69,14 +69,14 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
         fun bind(v: BiliVideo) {
             // Derive the cover height from the measured card width so the same feed
             // keeps a true 16:9 thumbnail on narrow phones and in split-screen mode.
-            binding.videoCover.post {
-                val width = binding.videoCover.width
+            binding.videoCoverFrame.post {
+                val width = binding.videoCoverFrame.width
                 if (width > 0) {
                     val targetHeight = (width * 9f / 16f).toInt()
-                    val params = binding.videoCover.layoutParams
+                    val params = binding.videoCoverFrame.layoutParams
                     if (params.height != targetHeight) {
                         params.height = targetHeight
-                        binding.videoCover.layoutParams = params
+                        binding.videoCoverFrame.layoutParams = params
                     }
                 }
             }
