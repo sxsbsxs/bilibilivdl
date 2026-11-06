@@ -1138,6 +1138,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.commentsTitle.text = "评论区 · " + formatCount(result.total.toLong())
 
                 val continueAfterEmptyPage = result.comments.isEmpty() && commentHasMore
+                b.commentsStatus.setOnClickListener(null)
                 b.commentsStatus.text = when {
                     result.comments.isNotEmpty() && commentHasMore -> "上滑加载更多"
                     result.comments.isNotEmpty() -> "没有更多评论了"
@@ -1145,11 +1146,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     continueAfterEmptyPage -> "正在跳过空页…"
                     else -> "暂时没有更多可展示的评论"
                 }
-                b.commentsStatus.visibility = if (result.comments.isNotEmpty() && !commentHasMore) {
-                    View.VISIBLE
-                } else {
-                    View.VISIBLE
-                }
+                b.commentsStatus.visibility = View.VISIBLE
 
                 if (continueAfterEmptyPage) {
                     b.commentsList.post {
@@ -1218,9 +1215,15 @@ class VideoPlayerActivity : AppCompatActivity() {
             .setView(root)
             .setNegativeButton("关闭", null)
             .create()
+        var activeReplyTarget = replyTo
 
         replyAdapter = CommentAdapter(
-            onReplies = { nested -> showReplies(rootComment, nested) },
+            onReplies = { nested ->
+                activeReplyTarget = nested
+                input.hint = if (nested.id == rootComment.id) "回复这条评论…" else "回复 ${nested.user}…"
+                status.visibility = View.VISIBLE
+                status.text = "正在回复 ${nested.user}"
+            },
             onLike = { target ->
                 if (replyAdapter.beginLike(target.id)) {
                     lifecycleScope.launch {
@@ -1273,6 +1276,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     emptyPages = if (result.comments.isEmpty() && result.hasMore) emptyPages + 1 else 0
                     hasMore = result.hasMore && emptyPages < 3
                     shouldContinueEmpty = result.comments.isEmpty() && hasMore
+                    status.setOnClickListener(null)
                     status.text = when {
                         result.comments.isNotEmpty() && hasMore -> "上滑加载更多回复"
                         result.comments.isNotEmpty() -> "没有更多回复了"
@@ -1289,7 +1293,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                     throw cancelled
                 } catch (error: Exception) {
                     status.visibility = View.VISIBLE
-                    status.text = "回复加载失败：${error.message ?: "网络异常"}"
+                    status.text = "回复加载失败：${error.message ?: "网络异常"}，点击重试"
+                    status.setOnClickListener { loadReplyPage(reset = false) }
                 } finally {
                     loading = false
                 }
@@ -1320,7 +1325,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                         // Keep the original root ID for the thread and the tapped reply ID
                         // as the parent; nested replies must not become new root threads.
                         BilimiaoApiBridge.sendReply(
-                            aid, rootComment.id, replyTo.id, message
+                            aid, rootComment.id, activeReplyTarget.id, message
                         )
                     }
                     input.setText("")
