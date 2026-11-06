@@ -18,7 +18,8 @@ data class VideoComment(
     val face: String = "",
     val ctime: Long = 0L,
     val isUp: Boolean = false,
-    val level: Int = 0
+    val level: Int = 0,
+    val likedByUp: Boolean = false
 )
 
 data class DanmakuItem(
