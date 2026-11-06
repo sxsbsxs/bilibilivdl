@@ -206,7 +206,7 @@ object BiliInteractionApi {
                             3 -> mode = v.toInt()
                             4 -> size = v.toInt()
                             5 -> color = v.toInt()
-                            9 -> pool = v.toInt()
+                            11 -> pool = v.toInt()
                         }
                     }
                     field == 7 && wire == 2 -> {
@@ -243,10 +243,14 @@ object BiliInteractionApi {
             if (view.optInt("code") != 0) error(view.optString("message", "弹幕分段信息获取失败"))
             val total = view.optJSONObject("data")?.optJSONObject("dmSge")?.optInt("total", 1)
                 ?.coerceIn(1, 60) ?: 1
+            // 某一段被风控或 CDN 临时失败时，保留已成功的其他分段；
+            // 不要因为单段失败就丢弃整条弹幕流并退回已逐渐停用的旧 XML 接口。
             buildList {
                 for (segment in 1..total) {
-                    val bytes = getBytes("https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid=$cid&segment_index=$segment")
-                    addAll(parseSegment(bytes))
+                    val bytes = runCatching {
+                        getBytes("https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid=$cid&segment_index=$segment")
+                    }.getOrNull() ?: continue
+                    runCatching { parseSegment(bytes) }.getOrNull()?.let { addAll(it) }
                 }
             }.distinctBy { it.timeMs to it.text }.sortedBy { it.timeMs }
         }.getOrNull()
