@@ -20,7 +20,7 @@
    android:layout_marginTop="8dp" android:gravity="center" android:text="使用 B站 APP 扫描二维码登录"
    android:textColor="@color/text_secondary" android:textSize="14sp"/>
   <com.google.android.material.card.MaterialCardView android:layout_width="280dp" android:layout_height="280dp"
-   android:layout_marginTop="28dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="18dp">
+   android:layout_marginTop="28dp" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="20dp" app:cardElevation="3dp">
    <ImageView android:id="@+id/qr_image" android:layout_width="match_parent" android:layout_height="match_parent"
     android:padding="12dp" android:scaleType="fitCenter" android:contentDescription="B站登录二维码"/>
   </com.google.android.material.card.MaterialCardView>
@@ -29,7 +29,7 @@
    android:textColor="@color/text_primary" android:textSize="14sp"/>
   <com.google.android.material.button.MaterialButton android:id="@+id/qr_refresh"
    android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="18dp"
-   android:text="刷新二维码" android:textAllCaps="false" app:cornerRadius="12dp"/>
+   android:text="刷新二维码" android:textAllCaps="false" app:cornerRadius="999dp" app:backgroundTint="@color/brand"/>
   <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
    android:layout_marginTop="16dp" android:gravity="center" android:text="请确认登录请求来自你正在使用的设备，不要将二维码转发给他人。"
    android:textColor="@color/text_secondary" android:textSize="12sp"/>

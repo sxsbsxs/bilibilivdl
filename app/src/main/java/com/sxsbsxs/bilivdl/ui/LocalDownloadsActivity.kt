@@ -47,7 +47,7 @@ class LocalDownloadsActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(12)); setOnClickListener { finish() }
         })
         search = EditText(this).apply {
-            hint = "搜索已下载视频"; textSize = 14f; singleLine = true
+            hint = "搜索已下载视频"; textSize = 14f; setSingleLine(true)
             setTextColor(getColor(R.color.text_primary))
             setHintTextColor(getColor(R.color.text_secondary))
             setPadding(dp(12), 0, dp(12), 0)
@@ -181,7 +181,7 @@ class LocalDownloadsActivity : AppCompatActivity() {
         })
         card.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
         if (selectionMode) card.addView(TextView(this).apply {
-            text = if (isSelected) "✓" else "○"; textSize = 20f
+            this.text = if (isSelected) "✓" else "○"; textSize = 20f
             setTextColor(getColor(R.color.brand)); setPadding(dp(5), dp(4), dp(5), dp(4))
         })
         card.setOnClickListener {
@@ -231,8 +231,10 @@ class LocalDownloadsActivity : AppCompatActivity() {
 
     private fun toolButton(label: String, action: () -> Unit): TextView = TextView(this).apply {
         text = label; textSize = 12f; gravity = Gravity.CENTER
-        setTextColor(getColor(R.color.text_secondary))
-        setPadding(dp(8), 0, dp(8), 0); minHeight = dp(36)
+        setTextColor(getColor(R.color.brand_dark))
+        setPadding(dp(10), 0, dp(10), 0); minHeight = dp(34)
+        background = getDrawable(R.drawable.bg_pill_soft)
+        foreground = getDrawable(android.R.drawable.list_selector_background)
         setOnClickListener { action() }
     }
 

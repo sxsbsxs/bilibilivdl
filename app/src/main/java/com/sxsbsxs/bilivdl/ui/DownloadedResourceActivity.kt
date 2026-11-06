@@ -65,9 +65,10 @@ class DownloadedResourceActivity : AppCompatActivity() {
         })
         root.addView(TextView(this).apply {
             text = buildInfo(quality)
-            textSize = 14f
+            textSize = 13f
             setTextColor(getColor(R.color.text_secondary))
-            setPadding(0, dp(16), 0, dp(22))
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = getDrawable(R.drawable.bg_surface_card)
         })
         addAction(root, "播放视频") { playResource() }
         addAction(root, "提取音频（保存为 M4A）") { extractAudio() }
@@ -106,13 +107,9 @@ class DownloadedResourceActivity : AppCompatActivity() {
     }
 
     private fun playResource() {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(resourceUri, contentResolver.getType(resourceUri) ?: "video/*")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        runCatching { startActivity(intent) }.onFailure {
-            Toast.makeText(this, "没有找到可播放此视频的应用", Toast.LENGTH_SHORT).show()
-        }
+        startActivity(Intent(this, LocalMediaPlayerActivity::class.java)
+            .putExtra(LocalMediaPlayerActivity.EXTRA_URI, resourceUri.toString())
+            .putExtra(LocalMediaPlayerActivity.EXTRA_TITLE, titleText))
     }
 
     private fun shareUri(uri: Uri, mime: String, chooser: String) {
@@ -241,6 +238,15 @@ class DownloadedResourceActivity : AppCompatActivity() {
         root.addView(MaterialButton(this).apply {
             text = label
             isAllCaps = false
+            insetTop = 0
+            insetBottom = 0
+            cornerRadius = dp(999)
+            elevation = 0f
+            val primary = label == "播放视频"
+            backgroundTintList = android.content.res.ColorStateList.valueOf(
+                getColor(if (primary) R.color.brand else R.color.brand_soft)
+            )
+            setTextColor(getColor(if (primary) R.color.white else R.color.brand_dark))
             setOnClickListener { action() }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(48)
