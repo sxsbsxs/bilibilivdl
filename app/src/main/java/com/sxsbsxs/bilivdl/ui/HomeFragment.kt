@@ -59,6 +59,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeSearchEntry.setOnClickListener { openSearch() }
         b.homeSearchInput.setOnClickListener { b.homeSearchInput.requestFocus() }
         b.homeSearchSubmit.setOnClickListener { searchOnHome() }
+        b.homeRefreshRecommendations.setOnClickListener { refresh() }
         b.homeSearchInput.setOnEditorActionListener { _, action, _ ->
             if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE) {
                 searchOnHome()
