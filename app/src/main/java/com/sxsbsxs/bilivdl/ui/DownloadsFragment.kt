@@ -82,6 +82,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     }
 
     private fun refreshTasks(tasks: List<DownloadTaskEntity>) {
+        val previousScrollY = _binding?.downloadScroll?.scrollY ?: 0
         currentTasks = tasks
         updateSpeedSamples(tasks)
         b.downloadTaskControls.removeAllViews()
@@ -89,6 +90,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             b.downloadSummary.text = ""
             b.downloadTasks.visibility = View.VISIBLE
             b.downloadTasks.text = "暂无下载任务"
+            restoreDownloadScroll(previousScrollY)
             return
         }
         val active = tasks.count { it.status == "queued" || it.status == "downloading" }
@@ -114,6 +116,17 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 setPadding(dp(8), dp(20), dp(8), dp(20))
             })
         } else visible.forEach { addTaskCard(it) }
+        restoreDownloadScroll(previousScrollY)
+    }
+
+    private fun restoreDownloadScroll(previousScrollY: Int) {
+        _binding?.downloadTaskControls?.post {
+            _binding?.downloadScroll?.let { scroll ->
+                val contentHeight = scroll.getChildAt(0)?.height ?: 0
+                val maxScroll = (contentHeight - scroll.height).coerceAtLeast(0)
+                scroll.scrollTo(0, previousScrollY.coerceIn(0, maxScroll))
+            }
+        }
     }
 
     private fun addTaskFilters(tasks: List<DownloadTaskEntity>) {
@@ -374,6 +387,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
 
     /** 将已完成任务复制到用户通过系统文件选择器授权的目录，不移动或删除原文件。 */
     private fun exportCompletedFiles(treeUri: Uri) {
+        val appContext = requireContext().applicationContext
         val targets = currentTasks.filter { it.status == "completed" && it.outputPath.isNotBlank() }
         if (targets.isEmpty()) {
             Toast.makeText(requireContext(), "没有可导出的已完成文件", Toast.LENGTH_SHORT).show()
@@ -381,7 +395,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                val context = requireContext().applicationContext
+                val context = appContext
                 val resolver = context.contentResolver
                 val rootDocument = DocumentsContract.buildDocumentUriUsingTree(
                     treeUri, DocumentsContract.getTreeDocumentId(treeUri)
@@ -415,10 +429,10 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 }
                 exported to failed
             }
-            if (_binding != null) {
+            if (_binding != null && isAdded) {
                 val (exported, failed) = result
                 Toast.makeText(
-                    requireContext(),
+                    appContext,
                     "导出完成：成功 $exported 个，失败 $failed 个",
                     Toast.LENGTH_LONG
                 ).show()
