@@ -1,5 +1,7 @@
 package com.sxsbsxs.bilivdl.ui
 
+import com.sxsbsxs.bilivdl.R
+
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
