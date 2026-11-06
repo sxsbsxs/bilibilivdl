@@ -5,7 +5,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sxsbsxs.bilivdl.data.BangumiApiBridge
 import com.sxsbsxs.bilivdl.data.BangumiSearchResult
@@ -43,7 +43,7 @@ class SearchResultsActivity : AppCompatActivity() {
         b.searchResultsTitle.text = if (bangumi) "番剧搜索结果" else "视频搜索结果"
         b.searchResultsQuery.text = "“$query”"
         b.searchResultsBack.setOnClickListener { finish() }
-        b.searchResultsList.layoutManager = LinearLayoutManager(this)
+        b.searchResultsList.layoutManager = GridLayoutManager(this, 2)
 
         if (bangumi) {
             val results = readExtra<ArrayList<BangumiSearchResult>>(EXTRA_BANGUMI_RESULTS).orEmpty()
