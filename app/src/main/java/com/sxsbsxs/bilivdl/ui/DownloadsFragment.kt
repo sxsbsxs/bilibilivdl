@@ -198,6 +198,38 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 }.show()
         }
         b.downloadTaskControls.addView(controls)
+
+        val removable = tasks.filter { it.status == "failed" || it.status == "cancelled" }
+        if (removable.isNotEmpty()) {
+            val cleanup = MaterialButton(context).apply {
+                text = "移除失败记录（${removable.size}）"
+                isAllCaps = false
+                minHeight = dp(34)
+                textSize = 12f
+                elevation = 0f
+                strokeWidth = dp(1)
+                strokeColor = android.content.res.ColorStateList.valueOf(context.getColor(R.color.stroke_dark))
+                backgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(R.color.surface_dark))
+                setTextColor(context.getColor(R.color.text_secondary))
+                setOnClickListener {
+                    AlertDialog.Builder(context)
+                        .setTitle("移除失败记录")
+                        .setMessage("只移除失败和已取消的任务记录，不会删除已下载文件。未完成的临时文件会保留。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("移除") { _, _ ->
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                removable.forEach { dao.delete(it.taskId) }
+                            }
+                        }.show()
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(36)
+                ).apply {
+                    bottomMargin = dp(8)
+                }
+            }
+            b.downloadTaskControls.addView(cleanup)
+        }
     }
 
     private fun addTaskCard(task: DownloadTaskEntity) {
