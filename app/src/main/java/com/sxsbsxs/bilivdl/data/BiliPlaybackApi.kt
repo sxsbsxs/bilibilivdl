@@ -122,6 +122,7 @@ object BiliPlaybackApi {
                         it.id == dash.audioId && it.baseUrl.isNotBlank()
                     } ?: videoInfo.dashAudio.firstOrNull { it.baseUrl.isNotBlank() }
                     val audioUrl = audio?.let { it.baseUrl.ifBlank { it.backupUrl.firstOrNull().orEmpty() } }
+                    if (audioUrl.isNullOrBlank()) return null
                     PlaybackInfo(
                         cid = cid,
                         url = videoUrl,
@@ -182,7 +183,7 @@ object BiliPlaybackApi {
                     .sortedDescending().map { it to (labels[it] ?: qualityLabel(it)) }
                 val videoUrl = selected.base_url.ifBlank { selected.backup_url?.firstOrNull().orEmpty() }
                 val audioUrl = audio?.let { track -> track.base_url.ifBlank { track.backup_url?.firstOrNull().orEmpty() } }
-                if (videoUrl.isBlank()) return@runCatching null
+                if (videoUrl.isBlank() || audioUrl.isNullOrBlank()) return@runCatching null
                 PlaybackInfo(
                     cid = cid,
                     url = videoUrl,
@@ -222,6 +223,7 @@ object BiliPlaybackApi {
             val labels = data.optJSONArray("accept_description")
             val accepted = data.optJSONArray("accept_quality")
             val dashVideo = data.optJSONObject("dash")?.optJSONArray("video")
+            if (dashVideo == null && videoCodec.isNotBlank()) continue
             val actualIds = if (dashVideo != null) {
                 (0 until dashVideo.length()).mapNotNull { index ->
                     val track = dashVideo.optJSONObject(index) ?: return@mapNotNull null
@@ -372,7 +374,7 @@ object BiliPlaybackApi {
             fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
             val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
             val audioUrl = audio?.let { primary(it).ifBlank { it.optJSONArray("backupUrl")?.optString(0).orEmpty() } }
-            if (videoUrl.isBlank()) return null
+            if (videoUrl.isBlank() || audioUrl.isNullOrBlank()) return null
             // accept_quality 是能力声明/排序提示，不是 DASH 实际轨道清单。
             // 以 dash.video 中真实存在的 id 为准，避免 accept_quality 缺项时把高画质过滤掉。
             val labelsById = choices.toMap()
