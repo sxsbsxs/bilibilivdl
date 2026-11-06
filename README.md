@@ -1,6 +1,13 @@
-# BiliVdl 1.1.0
+# BiliVdl 2.0.3
 
 BiliVdl 是一款独立设计界面的 Android 哔哩哔哩视频播放与下载应用，使用 Kotlin、Android XML 和 Media3。
+
+## 2.0.3 更新
+
+- 播放页互动区采用图标 + 文字的轻量布局，恢复分享、分P、弹幕和字幕的直接入口，不再把常用操作藏进“更多”。
+- 新增 BVD 风格的哔哩哔哩官方网页登录页；Cookie 必须通过导航接口验证后才保存，并显示账号昵称与 UID。
+- 新增 Chaquopy 内嵌 Python 3.11 与 yt-dlp 通用链接下载入口；仅向 bilibili.com 域名发送 B 站 Cookie，其他网站不会收到账号凭据。
+- 保留 B 站原生 DASH/DURL 下载作为主要下载通道，yt-dlp 作为通用网站解析补充。
 
 ## 1.1.0 更新
 
