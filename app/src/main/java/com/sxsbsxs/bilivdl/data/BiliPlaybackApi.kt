@@ -340,7 +340,7 @@ object BiliPlaybackApi {
         val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&fnval=4048&fnver=0&fourk=1&high_quality=1&otype=json"
         val root = get(url, cookie)
         if (root.optInt("code", -1) != 0) {
-            error(root.optString("message").ifBlank { "B站清晰度解析失败（\${root.optInt("code")}）" })
+            error(root.optString("message").ifBlank { "B站清晰度解析失败（${root.optInt("code")}）" })
         }
         val data = root.optJSONObject("data") ?: error("B站没有返回播放资源")
         val support = data.optJSONArray("support_formats")
@@ -371,7 +371,7 @@ object BiliPlaybackApi {
                 DownloadStreamOption(
                     id = id,
                     codec = codec,
-                    label = "\${height}P$fps · $codec · \${bandwidth / 1000} kbps",
+                    label = "${height}P$fps · $codec · ${bandwidth / 1000} kbps",
                     bandwidth = bandwidth,
                     height = height,
                     frameRate = frameRate,
