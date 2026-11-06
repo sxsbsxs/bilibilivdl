@@ -676,6 +676,9 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.danmakuOverlay.setPlaybackPositionProvider { exo?.currentPosition ?: 0L }
                 b.danmakuOverlay.setDanmaku(items)
                 b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
+                // The player may already be playing when the network request finishes;
+                // re-sync the overlay or it can draw only one frame and appear empty.
+                b.danmakuOverlay.setPlaying(exo?.isPlaying == true)
                 b.danmakuButton.text = "弹幕：开（${items.size}）· 长按导出"
             } catch (e: Exception) {
                 b.danmakuButton.text = "弹幕加载失败"
