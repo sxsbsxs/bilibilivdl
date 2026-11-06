@@ -205,14 +205,17 @@ class BiliDownloadService : Service() {
                 val lastProgressWrite = AtomicLong(0L)
                 val result = BiliDownloadEngine.download(this@BiliDownloadService, playback, title, cookie, taskId) { done, total, stage ->
                     val progress = if (total > 0L) "$stage · ${(done * 100 / total).coerceIn(0, 100)}%" else "$stage · ${done / 1024} KB"
-                    task.put("completedBytes", done).put("totalBytes", total).put("progress", progress)
-                    // Network callbacks can fire for every chunk; persist detached snapshots at most once per second.
-                    val now = System.currentTimeMillis()
-                    val previous = lastProgressWrite.get()
-                    if (now - previous >= 1000L && lastProgressWrite.compareAndSet(previous, now)) {
-                        val snapshot = JSONObject(task.toString())
-                        scope.launch { runCatching { updateProgress(snapshot) } }
+                    // DASH video/audio callbacks run concurrently; JSONObject is not thread-safe.
+                    // Serialize mutations and snapshots so concurrent chunk callbacks cannot corrupt task state.
+                    val snapshot = synchronized(task) {
+                        task.put("completedBytes", done).put("totalBytes", total).put("progress", progress)
+                        val now = System.currentTimeMillis()
+                        val previous = lastProgressWrite.get()
+                        if (now - previous >= 1000L && lastProgressWrite.compareAndSet(previous, now)) {
+                            JSONObject(task.toString())
+                        } else null
                     }
+                    if (snapshot != null) scope.launch { runCatching { updateProgress(snapshot) } }
                     notificationManager.notify(NOTIFICATION_ID, notification(title, done, total.takeIf { it > 0L }))
                 }
                 task.put("path", result)
