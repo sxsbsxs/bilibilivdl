@@ -78,6 +78,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
     private var danmakuEnabled = true
+    private var danmakuLoadFailed = false
     private var loadedDanmaku: List<DanmakuItem> = emptyList()
     private var pendingDanmakuXml = ""
     private val danmakuExportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/xml")) { uri ->
@@ -141,9 +142,13 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.subtitleButton.setOnClickListener { showSubtitles() }
         b.ytdlpDownloadButton.setOnClickListener { promptYtDlpUrl() }
         b.danmakuButton.setOnClickListener {
-            danmakuEnabled = !danmakuEnabled
-            b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
-            b.danmakuButton.text = if (danmakuEnabled) "弹幕：开 · 长按导出" else "弹幕：关"
+            if (danmakuLoadFailed) {
+                info?.cid?.takeIf { it > 0L }?.let(::loadDanmaku)
+            } else {
+                danmakuEnabled = !danmakuEnabled
+                b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
+                b.danmakuButton.text = if (danmakuEnabled) "弹幕：开 · 长按导出" else "弹幕：关"
+            }
         }
         b.danmakuButton.setOnLongClickListener {
             exportDanmaku()
@@ -599,14 +604,16 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.downloadStatus.text = "正在读取可用清晰度…"
         lifecycleScope.launch {
             try {
-                val choices = withContext(Dispatchers.IO) {
+                val downloadedChoices = withContext(Dispatchers.IO) {
                     if (epId <= 0L && aid > 0L) {
-                        // 游客也必须请求官方播放接口读取真实可下载轨道；Cookie 为空不代表不能请求 720P。
+                        // Download probing can be capped independently from playback (BiliMiao/gRPC).
                         runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie) }.getOrDefault(emptyList())
                     } else emptyList()
-                }.ifEmpty {
-                    (if (p.qualities.isEmpty()) listOf(p.quality to p.name) else p.qualities)
-                }.distinctBy { it.first }.sortedByDescending { it.first }
+                }
+                // Merge verified playback tiers with download-endpoint tiers; never discard
+                // a 720P/1080P track that playback already proved is available.
+                val choices = (p.qualities + downloadedChoices)
+                    .distinctBy { it.first }.sortedByDescending { it.first }
                 if (choices.isEmpty()) error("B站没有返回可用清晰度")
                 var selected = 0
                 MaterialAlertDialogBuilder(this@VideoPlayerActivity).setTitle("选择下载清晰度")
@@ -636,18 +643,21 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val options = withContext(Dispatchers.IO) {
                     if (epId > 0L) BangumiApiBridge.downloadStreamChoices(epId, p.cid, qn) else BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn, cookie)
                 }
-                if (options.video.isEmpty()) {
+                // The selected quality is a hard ceiling and must not silently turn into
+                // a lower-resolution download just because this endpoint returned 480P/360P.
+                val matchingVideos = options.video.filter { it.id == qn }
+                if (matchingVideos.isEmpty()) {
                     startDownload(qn)
                     return@launch
                 }
-                val videoLabels = options.video.map { it.label + if (it.bandwidth == options.video.maxOf { v -> v.bandwidth }) " · 推荐" else "" }.toTypedArray()
+                val videoLabels = matchingVideos.map { it.label + if (it.bandwidth == matchingVideos.maxOf { v -> v.bandwidth }) " · 推荐" else "" }.toTypedArray()
                 var videoIndex = 0
                 MaterialAlertDialogBuilder(this@VideoPlayerActivity)
                     .setTitle("选择视频资源")
                     .setSingleChoiceItems(videoLabels, 0) { _, which -> videoIndex = which }
                     .setNegativeButton("取消", null)
                     .setPositiveButton("下一步") { _, _ ->
-                        val selectedVideo = options.video[videoIndex]
+                        val selectedVideo = matchingVideos[videoIndex]
                         if (options.audio.isEmpty()) {
                             startDownload(qn, selectedVideo.id.toString() + "|" + selectedVideo.codec, "")
                         } else {
@@ -718,6 +728,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadDanmaku(cid: Long) {
+        danmakuLoadFailed = false
+        b.danmakuButton.text = "弹幕加载中…"
         lifecycleScope.launch {
             try {
                 val items = withContext(Dispatchers.IO) { BiliInteractionApi.danmaku(cid, cookie) }
@@ -728,9 +740,11 @@ class VideoPlayerActivity : AppCompatActivity() {
                 // The player may already be playing when the network request finishes;
                 // re-sync the overlay or it can draw only one frame and appear empty.
                 b.danmakuOverlay.setPlaying(exo?.isPlaying == true)
-                b.danmakuButton.text = "弹幕：开（${items.size}）· 长按导出"
+                danmakuLoadFailed = false
+                b.danmakuButton.text = if (items.isEmpty()) "暂无弹幕" else "弹幕：开（${items.size}）· 长按导出"
             } catch (e: Exception) {
-                b.danmakuButton.text = "弹幕"
+                danmakuLoadFailed = true
+                b.danmakuButton.text = "弹幕加载失败 · 点击重试"
                 // A danmaku endpoint failure should not replace the playback status with a noisy warning.
             }
         }

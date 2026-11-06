@@ -2,6 +2,7 @@ package com.sxsbsxs.bilivdl.ui
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.AttributeSet
@@ -53,7 +54,13 @@ class DanmakuOverlayView @JvmOverloads constructor(
             val elapsed = now - item.timeMs
             val lane = ((item.timeMs / 1300L) % lanes).toInt()
             paint.textSize = (item.fontSize.coerceIn(18, 48) * resources.displayMetrics.scaledDensity).coerceAtLeast(22f)
-            paint.color = (0xFF shl 24) or (item.color and 0xFFFFFF)
+            val sourceColor = (0xFF shl 24) or (item.color and 0xFFFFFF)
+            val hsv = FloatArray(3)
+            Color.colorToHSV(sourceColor, hsv)
+            // Very dark authored danmaku colors disappear on dark video frames.
+            // Lift their brightness while preserving hue, then draw a dark outline.
+            hsv[2] = max(hsv[2], 0.76f)
+            val readableColor = Color.HSVToColor(0xFF, hsv)
             val textWidth = paint.measureText(item.text)
             val topY = lane * laneHeight + paint.textSize
             val y = when (item.mode) {
@@ -66,6 +73,14 @@ class DanmakuOverlayView @JvmOverloads constructor(
                 6 -> -textWidth + (width + textWidth) * progress
                 else -> width - (width + textWidth) * progress
             }
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 3.5f
+            paint.color = 0xD9000000.toInt()
+            paint.clearShadowLayer()
+            canvas.drawText(item.text, x, y, paint)
+            paint.style = Paint.Style.FILL
+            paint.color = readableColor
+            paint.setShadowLayer(3f, 1f, 2f, 0xCC000000.toInt())
             canvas.drawText(item.text, x, y, paint)
         }
         if (playing) postInvalidateDelayed(32L)
