@@ -198,7 +198,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 }
             }
         })
-        relatedAdapter = VideoAdapter { video ->
+        relatedAdapter = VideoAdapter({ video ->
             startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
                 putExtra(EXTRA_BVID, video.bvid)
                 putExtra(EXTRA_AID, video.aid)
@@ -206,7 +206,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 putExtra(EXTRA_COVER, video.cover)
                 putExtra(EXTRA_AUTHOR, video.author)
             })
-        }
+        })
         b.relatedVideosList.layoutManager = LinearLayoutManager(this)
         b.relatedVideosList.adapter = relatedAdapter
         b.playerInfoTab.setOnClickListener { showDetailTab(true) }
