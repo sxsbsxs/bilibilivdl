@@ -99,7 +99,15 @@ object BiliPlaybackApi {
             )
             val response = BiliGRPCHttp.request { PlayURLGRPC.playView(request) }.awaitCall()
             val videoInfo = response.videoInfo ?: return null
-            val streams = videoInfo.streamList.filter { it.content != null && (it.streamInfo?.quality ?: 0) > 0 }.sortedByDescending { it.streamInfo?.quality ?: 0 }
+            val streams = videoInfo.streamList
+                .filter {
+                    it.content != null &&
+                        (it.streamInfo?.quality ?: 0) in 1..requestedQuality
+                }
+                .sortedWith(
+                    compareByDescending<bilibili.app.playurl.v1.Stream> { it.streamInfo?.quality ?: 0 }
+                        .thenByDescending { it.streamInfo?.bandwidth ?: 0L }
+                )
             if (streams.isEmpty()) return null
             val selected = streams.firstOrNull { it.streamInfo?.quality == requestedQuality }
                 ?: streams.firstOrNull()
@@ -337,13 +345,13 @@ object BiliPlaybackApi {
             // 但 dash.video 里仍可能包含更高的真实可用轨道。不能优先照搬 data.quality，
             // 否则 qn=127 也会被应用固定选成 720P。
             // 按用户请求上限，从实际返回的 DASH 轨道中选最高档；手动选低档时不会越级。
-            val video = videos
-                .filter { it.optInt("id") > 0 && it.optInt("id") <= qn }
-                .maxByOrNull { it.optInt("id") }
-                ?: videos.firstOrNull { it.optInt("id") == reportedQuality }
-                ?: videos.maxByOrNull { it.optLong("bandwidth") }
-                ?: return null
-            val actual = video.optInt("id").takeIf { it > 0 } ?: reportedQuality.takeIf { it > 0 } ?: return null
+            // Never fall back to a track above the requested ceiling. The previous fallback
+            // could silently play a different quality when the requested tier was unavailable.
+            val eligibleVideos = videos.filter { it.optInt("id") in 1..qn }
+            val video = eligibleVideos.maxWithOrNull(
+                compareBy<JSONObject> { it.optInt("id") }.thenBy { it.optLong("bandwidth") }
+            ) ?: return null
+            val actual = video.optInt("id").takeIf { it in 1..qn } ?: return null
             val audio = audios.maxByOrNull { it.optLong("bandwidth") }
             fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
             val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
@@ -354,7 +362,7 @@ object BiliPlaybackApi {
             val labelsById = choices.toMap()
             val realQualities = videos.mapNotNull { track ->
                 val id = track.optInt("id")
-                id.takeIf { it > 0 }?.let { it to (labelsById[it] ?: qualityLabel(it)) }
+                id.takeIf { it in 1..qn }?.let { it to (labelsById[it] ?: qualityLabel(it)) }
             }.distinctBy { it.first }.sortedByDescending { it.first }
             return PlaybackInfo(cid, videoUrl, actual,
                 labelsById[actual] ?: qualityLabel(actual),
