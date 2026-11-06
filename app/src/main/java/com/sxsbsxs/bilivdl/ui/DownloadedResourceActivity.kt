@@ -86,8 +86,24 @@ class DownloadedResourceActivity : AppCompatActivity() {
         var size = -1L
         var date = ""
         var mime = "video/*"
-        val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE,
-            MediaStore.MediaColumns.DATE_ADDED, MediaStore.MediaColumns.MIME_TYPE)
+        var savedLocation = ""
+        val projection = if (Build.VERSION.SDK_INT >= 29) {
+            arrayOf(
+                MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.SIZE,
+                MediaStore.MediaColumns.DATE_ADDED,
+                MediaStore.MediaColumns.MIME_TYPE,
+                MediaStore.MediaColumns.RELATIVE_PATH
+            )
+        } else {
+            arrayOf(
+                MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.SIZE,
+                MediaStore.MediaColumns.DATE_ADDED,
+                MediaStore.MediaColumns.MIME_TYPE,
+                MediaStore.MediaColumns.DATA
+            )
+        }
         runCatching {
             contentResolver.query(resourceUri, projection, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -98,12 +114,17 @@ class DownloadedResourceActivity : AppCompatActivity() {
                             .format(java.util.Date(it * 1000))
                     }.orEmpty()
                     mime = cursor.string(MediaStore.MediaColumns.MIME_TYPE) ?: mime
+                    savedLocation = if (Build.VERSION.SDK_INT >= 29) {
+                        cursor.string(MediaStore.MediaColumns.RELATIVE_PATH).orEmpty().trimEnd('/')
+                    } else {
+                        cursor.string(MediaStore.MediaColumns.DATA)?.substringBeforeLast('/').orEmpty()
+                    }
                 }
             }
         }
         val sizeText = if (size >= 0) android.text.format.Formatter.formatFileSize(this, size) else "未知"
         return "文件名：$name\n清晰度：${quality.ifBlank { "未知" }}\n文件大小：$sizeText" +
-            "\n保存时间：${date.ifBlank { "未知" }}\n文件类型：$mime\n保存位置：系统视频库 · Movies/BiliVdl"
+            "\n保存时间：${date.ifBlank { "未知" }}\n文件类型：$mime\n保存位置：${savedLocation.ifBlank { "系统视频库" }}"
     }
 
     private fun playResource() {
