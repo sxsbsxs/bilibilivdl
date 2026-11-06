@@ -384,10 +384,31 @@ object BiliPlaybackApi {
                 }
             }
         }
+        // HTTP 线路可能静默降档。若最高档请求仍只得到 720P 或更低，
+        // 再逐档探测官方接口实际返回的 DASH 轨道，并用最高真实轨道重新请求播放地址。
+        // 这样播放清晰度列表不会只继承某一次被降档的响应。
+        var discoveredQualities: List<Pair<Int, String>> = emptyList()
+        if (qn >= 80 && (bestHttp?.quality ?: 0) <= 64) {
+            discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie) }
+                .getOrDefault(emptyList())
+                .filter { it.first <= qn }
+            val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
+            if (highestDiscovered != null && highestDiscovered.first > (bestHttp?.quality ?: 0)) {
+                val retried = runCatching {
+                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048)
+                }.getOrNull()
+                if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
+            }
+        }
         // HTTP 线路可能静默降档；与 gRPC 返回的真实轨道比较后再决定最终播放画质。
         val grpc = if (videoCodec.isBlank() && audioCodec.isBlank()) tryGrpcPlayback(resolvedAid, cid, qn) else null
         val best = listOfNotNull(bestHttp, grpc).maxByOrNull { it.quality }
-        best?.let { return enrich(it.copy(parts = parts, selectedPart = selectedIndex)) }
+        best?.let {
+            val mergedQualities = (it.qualities + discoveredQualities)
+                .distinctBy { quality -> quality.first }
+                .sortedByDescending { quality -> quality.first }
+            return enrich(it.copy(qualities = mergedQualities, parts = parts, selectedPart = selectedIndex))
+        }
 
         // Avoid the legacy parser: it converts localized numeric values (e.g. 万) and can throw. Only trust streams returned by official JSON or gRPC.
         error("B站公开播放接口（DASH/DURL）和 gRPC 均未返回可用视频流；已停止使用会触发本地化数字解析异常的旧线路，请稍后重试或切换网络")
