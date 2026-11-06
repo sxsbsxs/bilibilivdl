@@ -284,7 +284,7 @@
                     android:text="画质"
                     android:textColor="@color/text_primary"
                     android:textSize="13sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -300,7 +300,7 @@
                     android:text="倍速 1.0x"
                     android:textColor="@color/text_primary"
                     android:textSize="13sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_surface_card"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -314,9 +314,9 @@
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
                     android:text="下载"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/white"
                     android:textSize="13sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_pill_brand"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -340,7 +340,7 @@
                     android:text="分P"
                     android:textColor="@color/text_primary"
                     android:textSize="10sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_surface_card"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -356,7 +356,7 @@
                     android:text="弹幕"
                     android:textColor="@color/text_primary"
                     android:textSize="10sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_surface_card"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -372,11 +372,11 @@
                     android:text="字幕"
                     android:textColor="@color/text_primary"
                     android:textSize="10sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_surface_card"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
-            <TextView android:id="@+id/ytdlp_download_button" android:layout_width="0dp" android:layout_height="wrap_content" android:minHeight="54dp" android:layout_weight="1" android:gravity="center" android:text="其他网站下载" android:textColor="@color/text_secondary" android:textSize="10sp" android:background="?attr/selectableItemBackgroundBorderless"
+            <TextView android:id="@+id/ytdlp_download_button" android:layout_width="0dp" android:layout_height="wrap_content" android:minHeight="54dp" android:layout_weight="1" android:gravity="center" android:text="其他网站下载" android:textColor="@color/text_secondary" android:textSize="10sp" android:background="@drawable/bg_surface_card"
                     android:foreground="?attr/selectableItemBackground" android:clickable="true" android:focusable="true" />
             </LinearLayout>
 
@@ -414,7 +414,7 @@
                     android:maxLines="2"
                     android:ellipsize="end"
                     android:includeFontPadding="false"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -438,7 +438,7 @@
                     android:maxLines="2"
                     android:ellipsize="end"
                     android:includeFontPadding="false"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -462,7 +462,7 @@
                     android:maxLines="2"
                     android:ellipsize="end"
                     android:includeFontPadding="false"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" /><TextView
@@ -476,7 +476,7 @@
                     android:text="分享"
                     android:textColor="@color/text_primary"
                     android:textSize="11sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -492,7 +492,7 @@
                 android:text="发送弹幕"
                 android:textColor="@color/brand"
                 android:textSize="13sp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                 android:clickable="true"
                 android:focusable="true" />
@@ -568,7 +568,7 @@
                     android:text="按热度"
                     android:textColor="@color/brand"
                     android:textSize="13sp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -606,7 +606,7 @@
                     android:layout_height="wrap_content"
                     android:text="发送"
                     android:textAllCaps="false"
-                    app:cornerRadius="12dp" />
+                    app:cornerRadius="999dp" app:backgroundTint="@color/brand" />
             </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView

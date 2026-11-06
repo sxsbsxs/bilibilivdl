@@ -100,6 +100,9 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentPage = 1
     private var commentHasMore = true
     private var commentLoading = false
+    private var consecutiveEmptyCommentPages = 0
+    private var accountIsVip = false
+    private var accountIsLoggedIn = false
     private var commentSort = 2
     private var videoLiked = false
     private var currentOwnerMid = 0L
@@ -284,15 +287,37 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun load(qn: Int) {
-        b.playerStatus.visibility = View.GONE
-        b.playerStatus.text = ""
+        b.playerStatus.visibility = View.VISIBLE
+        b.playerStatus.text = "正在获取播放地址…"
         lifecycleScope.launch {
             try {
                 val previousQualities = info?.qualities.orEmpty()
-                val loadedPlayback = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
+                val accountProfile = if (cookie.isNotBlank()) withContext(Dispatchers.IO) {
+                    runCatching { BiliSession.profile(this@VideoPlayerActivity, cookie) }.getOrNull()
+                } else null
+                val isVip = (accountProfile?.optInt("vipType") ?: 0) > 0
+                val isLoggedIn = accountProfile?.optBoolean("isLogin") == true
+                accountIsVip = isVip
+                accountIsLoggedIn = isLoggedIn
+                val loadedPlayback = withContext(Dispatchers.IO) {
+                    if (epId > 0L) {
+                        b.playerStatus.post { b.playerStatus.text = "正在获取番剧播放地址…" }
+                        BangumiApiBridge.playback(epId, qn)
+                    } else BiliPlaybackApi.load(
+                        bvid, aid, qn, cookie, selectedPartIndex, isVip = isVip, isLoggedIn = isLoggedIn,
+                        onStage = { stage -> runOnUiThread {
+                            if (!isFinishing && ::b.isInitialized) {
+                                b.playerStatus.visibility = View.VISIBLE
+                                b.playerStatus.text = stage
+                            }
+                        } }
+                    )
+                }
                 // Keep the full quality menu from the original highest-quality response.
                 // A low-qn response is intentionally filtered by the API and must not erase higher choices.
+                val lockedQualityIds = loadedPlayback.restrictedQualities.map { it.id }.toSet()
                 val p = loadedPlayback.copy(qualities = (loadedPlayback.qualities + previousQualities)
+                    .filterNot { it.first in lockedQualityIds }
                     .distinctBy { it.first }.sortedByDescending { it.first })
                 info = p
                 if (p.title.isNotBlank()) b.playerTitle.text = p.title
@@ -803,12 +828,28 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun showQuality() {
         val p = info ?: return
-        if (p.qualities.isEmpty()) return
+        val locked = p.restrictedQualities.associateBy { it.id }
+        val options = (p.qualities.map { it.first to it.second } + locked.values.map { it.id to it.label })
+            .distinctBy { it.first }.sortedByDescending { it.first }
+        if (options.isEmpty()) return
         MaterialAlertDialogBuilder(this).setTitle("选择播放清晰度")
-            .setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, p.qualities.map { it.second }.toTypedArray())) { _, i ->
-                if (p.qualities[i].first != p.quality) {
+            .setItems(options.map { (id, label) ->
+                val gate = locked[id]
+                label + when {
+                    gate?.requiresVip == true -> "  🔒大会员专享"
+                    gate?.requiresLogin == true -> "  🔒登录后可用"
+                    else -> ""
+                }
+            }.toTypedArray()) { _, index ->
+                val selected = options[index]
+                val gate = locked[selected.first]
+                if (gate != null) {
+                    android.widget.Toast.makeText(this,
+                        if (gate.requiresVip) "该清晰度需要大会员" else "该清晰度需要登录",
+                        android.widget.Toast.LENGTH_SHORT).show()
+                } else if (selected.first != p.quality) {
                     pendingSeekPosition = exo?.currentPosition ?: 0L
-                    load(p.qualities[i].first)
+                    load(selected.first)
                 }
             }.show()
     }
@@ -824,21 +865,49 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val downloadedChoices = withContext(Dispatchers.IO) {
                     if (epId <= 0L && aid > 0L) {
                         // Download probing can be capped independently from playback (BiliMiao/gRPC).
-                        runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie) }.getOrDefault(emptyList())
+                        runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie, isVip = accountIsVip, isLoggedIn = accountIsLoggedIn) }.getOrDefault(emptyList())
                     } else emptyList()
                 }
                 // Merge verified playback tiers with download-endpoint tiers; never discard
                 // a 720P/1080P track that playback already proved is available.
                 val choices = (p.qualities + downloadedChoices)
                     .distinctBy { it.first }.sortedByDescending { it.first }
-                if (choices.isEmpty()) error("B站没有返回可用清晰度")
-                var selected = 0
+                val locked = p.restrictedQualities.associateBy { it.id }
+                val allOptions = (choices.map { it.first to it.second } + locked.values.map { it.id to it.label })
+                    .distinctBy { it.first }.sortedByDescending { it.first }
+                if (allOptions.isEmpty()) error("B站没有返回可用清晰度")
+                if (choices.isEmpty()) {
+                    MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                        .setTitle("当前账号暂无可下载画质")
+                        .setMessage(allOptions.joinToString("\n") { (id, label) ->
+                            label + if (locked[id]?.requiresVip == true) " · 需要大会员" else " · 需要登录"
+                        })
+                        .setPositiveButton("知道了", null)
+                        .show()
+                    b.downloadStatus.visibility = View.GONE
+                    return@launch
+                }
+                var selectedQuality = choices.first().first
+                val initialIndex = allOptions.indexOfFirst { it.first == selectedQuality }.coerceAtLeast(0)
                 MaterialAlertDialogBuilder(this@VideoPlayerActivity).setTitle("选择下载清晰度")
-                    .setSingleChoiceItems(choices.map { it.second + if (it.first == choices.first().first) " · 推荐" else "" }.toTypedArray(), 0) { _, which ->
-                        selected = which
+                    .setSingleChoiceItems(allOptions.map { (id, label) ->
+                        label + when {
+                            locked[id]?.requiresVip == true -> "  🔒大会员专享"
+                            locked[id]?.requiresLogin == true -> "  🔒登录后可用"
+                            id == choices.firstOrNull()?.first -> " · 推荐"
+                            else -> ""
+                        }
+                    }.toTypedArray(), initialIndex) { _, which ->
+                        val id = allOptions[which].first
+                        val gate = locked[id]
+                        if (gate != null) {
+                            android.widget.Toast.makeText(this@VideoPlayerActivity,
+                                if (gate.requiresVip) "该清晰度需要大会员" else "该清晰度需要登录",
+                                android.widget.Toast.LENGTH_SHORT).show()
+                        } else selectedQuality = id
                     }
                     .setNegativeButton("取消", null)
-                    .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(choices[selected].first) }
+                    .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(selectedQuality) }
                     .show()
                 b.downloadStatus.visibility = View.GONE
                 b.downloadStatus.text = ""
@@ -996,6 +1065,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun resetComments() {
         commentPage = 1
         commentHasMore = true
+        consecutiveEmptyCommentPages = 0
         (b.commentsList.adapter as CommentAdapter).submit(emptyList())
         loadComments(true)
     }
@@ -1010,10 +1080,16 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.commentsPage(aid, page, commentSort) }
                 (b.commentsList.adapter as CommentAdapter).submit(result.comments, append = !reset)
                 commentPage = page + 1
-                commentHasMore = result.hasMore && result.comments.isNotEmpty()
+                consecutiveEmptyCommentPages = if (result.comments.isEmpty() && result.hasMore) consecutiveEmptyCommentPages + 1 else 0
+                commentHasMore = result.hasMore && consecutiveEmptyCommentPages < 3
                 b.commentsTitle.text = "评论区 · " + formatCount(result.total.toLong())
-                b.commentsStatus.visibility = if (result.comments.isEmpty() && reset) View.VISIBLE else View.GONE
-                if (result.comments.isEmpty() && reset) b.commentsStatus.text = "暂无评论"
+                b.commentsStatus.visibility = if (result.comments.isEmpty()) View.VISIBLE else View.GONE
+                b.commentsStatus.text = when {
+                    result.comments.isEmpty() && reset && !result.hasMore -> "暂无评论"
+                    result.comments.isEmpty() && commentHasMore -> "这一页暂时没有评论，正在继续加载…"
+                    result.comments.isEmpty() -> "暂时没有更多可展示的评论"
+                    else -> ""
+                }
                 // RecyclerView 位于关闭嵌套滚动的 NestedScrollView 中，追加内容后主动检查是否仍接近底部。
                 if (commentHasMore) b.playerScroll.post {
                     val content = b.playerScroll.getChildAt(0)
@@ -1097,8 +1173,10 @@ class VideoPlayerActivity : AppCompatActivity() {
         var page = 1
         var hasMore = true
         var loading = false
+        var emptyPages = 0
         fun loadReplyPage(reset: Boolean) {
             if (loading || (!hasMore && !reset)) return
+            if (reset) emptyPages = 0
             loading = true
             val requestedPage = if (reset) 1 else page
             lifecycleScope.launch {
@@ -1109,9 +1187,16 @@ class VideoPlayerActivity : AppCompatActivity() {
                     if (reset) replyAdapter.submit(listOf(comment) + result.comments)
                     else replyAdapter.submit(result.comments, append = true)
                     page = requestedPage + 1
-                    hasMore = result.hasMore && result.comments.isNotEmpty()
-                    status.visibility = if (!hasMore) View.VISIBLE else View.GONE
-                    status.text = if (result.comments.isEmpty() && reset) "暂无回复" else if (!hasMore) "没有更多回复了" else ""
+                    emptyPages = if (result.comments.isEmpty() && result.hasMore) emptyPages + 1 else 0
+                    hasMore = result.hasMore && emptyPages < 3
+                    status.visibility = if (!hasMore || result.comments.isEmpty()) View.VISIBLE else View.GONE
+                    status.text = when {
+                        result.comments.isEmpty() && reset && !result.hasMore -> "暂无回复"
+                        result.comments.isEmpty() && hasMore -> "这一页暂无回复，继续加载…"
+                        !hasMore -> "没有更多回复了"
+                        else -> ""
+                    }
+                    if (result.comments.isEmpty() && hasMore) status.post { loadReplyPage(false) }
                 } catch (error: Exception) {
                     status.visibility = View.VISIBLE
                     status.text = "回复加载失败：${error.message ?: "网络异常"}"

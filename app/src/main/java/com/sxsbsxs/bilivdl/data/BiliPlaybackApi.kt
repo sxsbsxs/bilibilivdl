@@ -12,7 +12,8 @@ import java.net.URLEncoder
 data class VideoPart(val cid: Long, val page: Int, val title: String, val duration: Int)
 data class DownloadStreamOption(val id: Int, val codec: String, val label: String, val bandwidth: Long)
 data class DownloadStreamChoices(val video: List<DownloadStreamOption>, val audio: List<DownloadStreamOption>)
-data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "", val title: String = "")
+data class RestrictedQuality(val id: Int, val label: String, val requiresLogin: Boolean, val requiresVip: Boolean)
+data class PlaybackInfo(val cid: Long, val url: String, val quality: Int, val name: String, val qualities: List<Pair<Int, String>>, val isDash: Boolean = false, val videoUrl: String? = null, val audioUrl: String? = null, val segments: List<String> = emptyList(), val parts: List<VideoPart> = emptyList(), val selectedPart: Int = 0, val videoBackupUrls: List<String> = emptyList(), val audioBackupUrls: List<String> = emptyList(), val viewCount: Long = 0L, val danmakuCount: Long = 0L, val pubdate: Long = 0L, val description: String = "", val cover: String = "", val author: String = "", val likeCount: Long = 0L, val favoriteCount: Long = 0L, val coinCount: Long = 0L, val shareCount: Long = 0L, val replyCount: Long = 0L, val category: String = "", val duration: Int = 0, val ownerFace: String = "", val ownerMid: Long = 0L, val ownerSign: String = "", val title: String = "", val restrictedQualities: List<RestrictedQuality> = emptyList())
 
 object BiliPlaybackApi {
     private fun get(url: String, cookie: String): JSONObject {
@@ -206,7 +207,7 @@ object BiliPlaybackApi {
         }.getOrNull()
     }
 
-    suspend fun downloadQualities(aid: Long, cid: Long, cookie: String, videoCodec: String = ""): List<Pair<Int, String>> {
+    suspend fun downloadQualities(aid: Long, cid: Long, cookie: String, videoCodec: String = "", isVip: Boolean = false, isLoggedIn: Boolean = cookie.isNotBlank()): List<Pair<Int, String>> {
         // 不只依赖 qn=127 的一次响应：部分账号/视频在不同 qn 请求下返回的可用轨道集合不同。
         // 汇总每次接口真实返回的 DASH 视频轨道，绝不把 accept_quality 中未返回的档位伪造出来。
         val requested = listOf(127, 126, 125, 120, 116, 112, 80, 74, 64, 32, 16)
@@ -222,6 +223,15 @@ object BiliPlaybackApi {
             val data = root.optJSONObject("data") ?: continue
             val labels = data.optJSONArray("accept_description")
             val accepted = data.optJSONArray("accept_quality")
+            val support = data.optJSONArray("support_formats")
+            val hasAccepted = accepted != null
+            val hasSupport = support != null && support.length() > 0
+            val acceptedIds = (0 until (accepted?.length() ?: 0)).mapNotNull { accepted?.optInt(it)?.takeIf { id -> id > 0 } }.toSet()
+            val access = (0 until (support?.length() ?: 0)).mapNotNull { index ->
+                val item = support?.optJSONObject(index) ?: return@mapNotNull null
+                val id = item.optInt("quality")
+                if (id <= 0) null else id to (item.optInt("need_login") == 1 && !isLoggedIn || item.optInt("need_vip") == 1 && !isVip)
+            }.toMap()
             val dashVideo = data.optJSONObject("dash")?.optJSONArray("video")
             if (dashVideo == null && videoCodec.isNotBlank()) continue
             val actualIds = if (dashVideo != null) {
@@ -235,11 +245,11 @@ object BiliPlaybackApi {
             }
             for (i in 0 until (accepted?.length() ?: 0)) {
                 val id = accepted?.optInt(i) ?: 0
-                if (id > 0 && id in actualIds) {
+                if (id > 0 && id in actualIds && (!hasSupport || id in access.keys) && access[id] != true) {
                     found[id] = labels?.optString(i).orEmpty().ifBlank { "清晰度 $id" }
                 }
             }
-            actualIds.forEach { id -> found.putIfAbsent(id, qualityLabel(id)) }
+            actualIds.filter { (!hasAccepted || it in acceptedIds) && (!hasSupport || it in access.keys) && access[it] != true }.forEach { id -> found.putIfAbsent(id, qualityLabel(id)) }
         }
         return found.entries.sortedByDescending { it.key }.map { it.key to it.value }
     }
@@ -333,10 +343,15 @@ object BiliPlaybackApi {
     }
 
     private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048,
-        videoCodec: String = "", audioCodec: String = ""): PlaybackInfo? {
+        videoCodec: String = "", audioCodec: String = "", isVip: Boolean = false,
+        isLoggedIn: Boolean = cookie.isNotBlank(), onStage: (String) -> Unit = {},
+        onRestrictions: (List<RestrictedQuality>) -> Unit = {}): PlaybackInfo? {
+        onStage("正在请求 WBI 播放地址…")
         val wbiRoot = runCatching { get(wbiPlayUrl(aid, cid, qn, fnval, cookie), cookie) }.getOrNull()
-        val root = if (wbiRoot?.optInt("code", -1) == 0) wbiRoot else
+        val root = if (wbiRoot?.optInt("code", -1) == 0) wbiRoot else {
+            onStage("WBI 暂不可用，正在切换普通 HTTP 线路…")
             get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=" + fnval + "&fnver=0&force_host=2&fourk=1&high_quality=1&otype=json", cookie)
+        }
         if (root.optInt("code", -1) != 0) return null
         val data = root.optJSONObject("data") ?: return null
         val qa = data.optJSONArray("accept_quality")
@@ -346,6 +361,30 @@ object BiliPlaybackApi {
             if (id <= 0) null else id to (la?.optString(i).orEmpty().ifBlank { "清晰度 " + id })
         }.distinctBy { it.first }.sortedByDescending { it.first }
         val reportedQuality = data.optInt("quality", 0)
+        val supportArray = data.optJSONArray("support_formats")
+        val hasSupportFormats = supportArray != null && supportArray.length() > 0
+        val hasAcceptedQualityList = qa != null
+        val supportFormats = (0 until (supportArray?.length() ?: 0)).mapNotNull { index ->
+            val item = supportArray?.optJSONObject(index) ?: return@mapNotNull null
+            val id = item.optInt("quality")
+            if (id <= 0) null else RestrictedQuality(
+                id,
+                item.optString("new_description").ifBlank { item.optString("display_desc") }.ifBlank { qualityLabel(id) },
+                item.optInt("need_login") == 1,
+                item.optInt("need_vip") == 1
+            )
+        }
+        val restricted = supportFormats.filter { (it.requiresLogin && !isLoggedIn) || (it.requiresVip && !isVip) }
+        onRestrictions(restricted)
+        val supportIds = supportFormats.map { it.id }.toSet()
+        val acceptedIds = choices.map { it.first }.toSet()
+        val allowedIds = when {
+            hasSupportFormats && hasAcceptedQualityList -> supportIds.intersect(acceptedIds)
+                .filterNot { id -> restricted.any { it.id == id } }.toSet()
+            hasSupportFormats -> supportIds.filterNot { id -> restricted.any { it.id == id } }.toSet()
+            hasAcceptedQualityList -> acceptedIds
+            else -> emptySet()
+        }
         val dash = data.optJSONObject("dash")
         if (dash != null) {
             val va = dash.optJSONArray("video")
@@ -360,6 +399,7 @@ object BiliPlaybackApi {
             // could silently play a different quality when the requested tier was unavailable.
             val eligibleVideos = videos.filter {
                 it.optInt("id") in 1..qn &&
+                    (if (hasSupportFormats || hasAcceptedQualityList) it.optInt("id") in allowedIds else true) &&
                     (videoCodec.isBlank() || it.optString("codecs").equals(videoCodec, ignoreCase = true))
             }
             val video = eligibleVideos.maxWithOrNull(
@@ -385,19 +425,23 @@ object BiliPlaybackApi {
             return PlaybackInfo(cid, videoUrl, actual,
                 labelsById[actual] ?: qualityLabel(actual),
                 realQualities.ifEmpty { listOf(actual to qualityLabel(actual)) },
-                isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl)
+                isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl,
+                restrictedQualities = restricted)
         }
         val durl = data.optJSONArray("durl") ?: return null
         val urls = (0 until durl.length()).mapNotNull { durl.optJSONObject(it)?.optString("url")?.takeIf { u -> u.startsWith("http") } }
         if (urls.isEmpty()) return null
         val actual = reportedQuality.takeIf { it > 0 } ?: return null
         val actualLabel = choices.firstOrNull { it.first == actual }?.second ?: "清晰度 " + actual
+        val allowedDurl = if (hasSupportFormats || hasAcceptedQualityList) actual in allowedIds else true
+        if (!allowedDurl || restricted.any { it.id == actual }) return null
         return PlaybackInfo(cid, urls.first(), actual, actualLabel,
-            listOf(actual to actualLabel), segments = urls)
+            listOf(actual to actualLabel), segments = urls, restrictedQualities = restricted)
     }
 
     suspend fun load(bvid:String, aid:Long, qn:Int=127, cookie:String="", pageIndex:Int=0,
-        videoCodec: String = "", audioCodec: String = ""):PlaybackInfo {
+        videoCodec: String = "", audioCodec: String = "", isVip: Boolean = false,
+        isLoggedIn: Boolean = cookie.isNotBlank(), onStage: (String) -> Unit = {}):PlaybackInfo {
         require(bvid.isNotBlank()||aid>0){"缺少 BV/AV 视频编号"}
         // The player dialog stores "trackId|codec" for both regular videos and bangumi.
         // Regular video playback only needs the codec name; bangumi bridge parses both parts.
@@ -468,10 +512,12 @@ object BiliPlaybackApi {
         // serially retrying every lower qn only adds latency and often repeats the same 720P cap.
         val httpCandidates = listOf(qn)
         var bestHttp: PlaybackInfo? = null
+        var reportedRestrictions: List<RestrictedQuality> = emptyList()
         for (fnval in listOf(4048, 1)) {
             for (candidate in httpCandidates) {
+                onStage(if (fnval == 4048) "正在尝试 HTTP / WBI 线路…" else "正在尝试兼容 HTTP 线路…")
                 val resolved = runCatching {
-                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec)
+                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, requestedVideoCodec, requestedAudioCodec, isVip, isLoggedIn, onStage) { if (it.isNotEmpty()) reportedRestrictions = it }
                 }.getOrNull()
                     ?: continue
                 if (bestHttp == null || resolved.quality > bestHttp!!.quality) bestHttp = resolved
@@ -484,23 +530,30 @@ object BiliPlaybackApi {
         }
         // Try independent app/gRPC routes before the slow per-tier probe. The previous
         // order could issue many sequential requests before trying the BiliMiao route.
-        val miao = if ((bestHttp?.quality ?: 0) < qn)
+        onStage("HTTP 线路未达到请求画质，正在尝试 BiliMiao 备用线路…")
+        val miaoRaw = if ((bestHttp?.quality ?: 0) < qn)
             tryBilimiaoPlayback(resolvedAid, cid, qn, requestedVideoCodec, requestedAudioCodec) else null
+        val activeRestrictions = bestHttp?.restrictedQualities?.takeIf { it.isNotEmpty() } ?: reportedRestrictions
+        val lockedIds = activeRestrictions.map { it.id }.toSet()
+        val miao = miaoRaw?.takeUnless { it.quality in lockedIds }
         val currentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality).maxOrNull() ?: 0
-        val grpc = if (requestedVideoCodec.isBlank() && requestedAudioCodec.isBlank() && currentBestQuality < qn)
+        onStage("正在尝试 gRPC 播放线路…")
+        val grpcRaw = if (requestedVideoCodec.isBlank() && requestedAudioCodec.isBlank() && currentBestQuality < qn)
             tryGrpcPlayback(resolvedAid, cid, qn) else null
+        val grpc = grpcRaw?.takeUnless { it.quality in lockedIds }
 
         // Only probe individual tiers if every independent route is still at 720P or below.
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
         val independentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality, grpc?.quality).maxOrNull() ?: 0
         if (qn >= 80 && independentBestQuality <= 64) {
-            discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, requestedVideoCodec) }
+            onStage("正在核对视频实际可用画质…")
+            discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, requestedVideoCodec, isVip, isLoggedIn) }
                 .getOrDefault(emptyList())
                 .filter { it.first <= qn }
             val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
             if (highestDiscovered != null && highestDiscovered.first > independentBestQuality) {
                 val retried = runCatching {
-                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec)
+                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, requestedVideoCodec, requestedAudioCodec, isVip, isLoggedIn, onStage) { reportedRestrictions = it }
                 }.getOrNull()
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
@@ -509,9 +562,11 @@ object BiliPlaybackApi {
         val best = candidates.maxByOrNull { it.quality }
         best?.let {
             val mergedQualities = (candidates.flatMap { candidate -> candidate.qualities } + discoveredQualities)
+                .filterNot { quality -> quality.first in lockedIds }
                 .distinctBy { quality -> quality.first }
                 .sortedByDescending { quality -> quality.first }
-            return enrich(it.copy(qualities = mergedQualities, parts = parts, selectedPart = selectedIndex))
+            return enrich(it.copy(qualities = mergedQualities, parts = parts, selectedPart = selectedIndex,
+                restrictedQualities = activeRestrictions))
         }
 
         // Avoid the legacy parser: it converts localized numeric values (e.g. 万) and can throw. Only trust streams returned by official JSON or gRPC.

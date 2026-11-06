@@ -6,7 +6,7 @@ import android.view.View
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliPopularApi
 import com.sxsbsxs.bilivdl.data.BiliApi
@@ -75,11 +75,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
             })
         }
-        b.homeRecommendations.layoutManager = GridLayoutManager(requireContext(), 2).apply {
-            // A two-column cover feed, like the reference Bilibili discovery layout.
-            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
-                override fun getSpanSize(position: Int) = 1
-            }
+        b.homeRecommendations.layoutManager = StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL).apply {
+            gapStrategy = StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS
         }
         b.homeRecommendations.adapter = adapter
         b.homeSwipe.setOnRefreshListener { refresh() }

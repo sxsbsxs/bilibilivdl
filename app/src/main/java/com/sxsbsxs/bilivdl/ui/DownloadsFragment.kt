@@ -29,6 +29,9 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     private val dao by lazy { DownloadQueueDatabase.get(requireContext()).tasks() }
     private var currentTasks: List<DownloadTaskEntity> = emptyList()
     private var taskFilter: String = "all"
+    private data class SpeedSample(val bytes: Long, val atMs: Long)
+    private val speedSamples = mutableMapOf<String, SpeedSample>()
+    private val currentSpeeds = mutableMapOf<String, Long>()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -60,6 +63,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
 
     private fun refreshTasks(tasks: List<DownloadTaskEntity>) {
         currentTasks = tasks
+        updateSpeedSamples(tasks)
         b.downloadTaskControls.removeAllViews()
         if (tasks.isEmpty()) {
             b.downloadSummary.text = ""
@@ -230,9 +234,20 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             text = statusText(task)
             textSize = 12f
             includeFontPadding = false
-            setPadding(0, dp(8), 0, dp(7))
+            setPadding(0, dp(8), 0, dp(4))
             setTextColor(context.getColor(R.color.text_secondary))
         })
+        if (task.status == "downloading") {
+            val speed = currentSpeeds[task.taskId] ?: 0L
+            val remaining = if (speed > 0L && task.totalBytes > task.completedBytes)
+                formatEtaSeconds((task.totalBytes - task.completedBytes) / speed) else ""
+            card.addView(TextView(context).apply {
+                text = "下载速度  " + formatBytesPerSecond(speed) + if (remaining.isNotBlank()) "    预计剩余 " + remaining else ""
+                textSize = 11f
+                setPadding(0, 0, 0, dp(7))
+                setTextColor(context.getColor(R.color.brand_dark))
+            })
+        }
         if (task.status == "downloading" || task.status == "queued") {
             card.addView(ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
                 isIndeterminate = task.totalBytes <= 0L
@@ -314,6 +329,46 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 }
             }
             b.downloadSummary.text = if (tasks.isEmpty()) "没有可重试的失败任务" else "已重新加入 " + tasks.size + " 个失败任务"
+        }
+    }
+
+    private fun updateSpeedSamples(tasks: List<DownloadTaskEntity>) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val activeIds = tasks.filter { it.status == "downloading" }.map { it.taskId }.toSet()
+        speedSamples.keys.retainAll(activeIds)
+        currentSpeeds.keys.retainAll(activeIds)
+        tasks.filter { it.status == "downloading" }.forEach { task ->
+            val previous = speedSamples[task.taskId]
+            if (previous != null && now > previous.atMs && task.completedBytes >= previous.bytes) {
+                val elapsed = now - previous.atMs
+                if (elapsed >= 250L) currentSpeeds[task.taskId] =
+                    ((task.completedBytes - previous.bytes) * 1000L / elapsed).coerceAtLeast(0L)
+            }
+            speedSamples[task.taskId] = SpeedSample(task.completedBytes, now)
+        }
+    }
+
+    private fun formatBytesPerSecond(value: Long): String {
+        if (value <= 0L) return "计算中…"
+        val units = listOf("B/s", "KB/s", "MB/s", "GB/s")
+        var amount = value.toDouble()
+        var unit = 0
+        while (amount >= 1024.0 && unit < units.lastIndex) {
+            amount /= 1024.0
+            unit++
+        }
+        return String.format(java.util.Locale.getDefault(), if (unit == 0) "%.0f %s" else "%.1f %s", amount, units[unit])
+    }
+
+    private fun formatEtaSeconds(value: Long): String {
+        if (value <= 0L) return "即将完成"
+        val hours = value / 3600L
+        val minutes = value / 60L % 60L
+        val seconds = value % 60L
+        return when {
+            hours > 0L -> hours.toString() + "小时" + minutes + "分"
+            minutes > 0L -> minutes.toString() + "分" + seconds + "秒"
+            else -> seconds.toString() + "秒"
         }
     }
 

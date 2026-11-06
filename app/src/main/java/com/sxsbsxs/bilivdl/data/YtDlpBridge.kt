@@ -17,6 +17,8 @@ import java.io.File
  * Bilibili's native API/downloader remains the preferred path for DASH quality.
  */
 object YtDlpBridge {
+    private val pythonRuntimeLock = Any()
+
     suspend fun download(
         context: Context,
         url: String,
@@ -25,8 +27,31 @@ object YtDlpBridge {
         require(url.startsWith("https://") || url.startsWith("http://")) {
             "请输入有效的视频网址"
         }
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(context.applicationContext))
+
+        // Bilibili URLs use the native resolver/downloader so 403 recovery can refresh
+        // playurl through the same application-layer API as ordinary download tasks.
+        val biliId = BiliApi.resolveVideoId(url)
+        if (biliId != null) {
+            val cookieValue = BiliSession.cookie(context)
+            val aidValue = biliId.removePrefix("av").toLongOrNull() ?: 0L
+            val bvidValue = if (biliId.startsWith("BV", ignoreCase = true)) biliId else ""
+            val accountProfile = if (cookieValue.isNotBlank()) {
+                runCatching { BiliSession.profile(context, cookieValue) }.getOrNull()
+            } else null
+            val vip = (accountProfile?.optInt("vipType") ?: 0) > 0
+            val loggedIn = accountProfile?.optBoolean("isLogin") == true
+            suspend fun resolveBiliPlayback(): PlaybackInfo =
+                BiliPlaybackApi.load(bvidValue, aidValue, 127, cookieValue, isVip = vip, isLoggedIn = loggedIn)
+            val playback = resolveBiliPlayback()
+            return@withContext BiliDownloadEngine.download(
+                context, playback, playback.title.ifBlank { "B站视频" }, cookieValue,
+                taskId = "ytdlp-bili-" + biliId.hashCode(),
+                refreshPlayback = { resolveBiliPlayback() }
+            ) { _, _, _ -> }
+        }
+
+        synchronized(pythonRuntimeLock) {
+            if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
         }
         val outputDir = File(
             context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir,
@@ -34,7 +59,12 @@ object YtDlpBridge {
         ).apply { mkdirs() }
         val module = Python.getInstance().getModule("ytdlp_bridge")
         val path = module.callAttr("download", url, outputDir.absolutePath, cookie).toString()
-        val downloaded = File(path)
+        val downloaded = File(path).canonicalFile
+        val safeRoot = outputDir.canonicalFile
+        val safePrefix = safeRoot.absolutePath.trimEnd(File.separatorChar) + File.separator
+        require(downloaded.absolutePath == safeRoot.absolutePath || downloaded.absolutePath.startsWith(safePrefix)) {
+            "yt-dlp 返回的文件路径超出了应用下载目录"
+        }
         require(downloaded.isFile && downloaded.length() > 0L) {
             "yt-dlp 没有生成有效的视频文件"
         }

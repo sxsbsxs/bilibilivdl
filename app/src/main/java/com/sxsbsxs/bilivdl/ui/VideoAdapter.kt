@@ -35,6 +35,16 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
     }
     inner class Holder(val binding: ItemVideoBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(v: BiliVideo) {
+            // Slightly varied cover heights let the two-column feed flow as a masonry layout.
+            val coverHeightDp = when (bindingAdapterPosition.mod(4)) {
+                0 -> 136
+                1 -> 116
+                2 -> 128
+                else -> 120
+            }
+            binding.videoCover.layoutParams = binding.videoCover.layoutParams.apply {
+                height = (coverHeightDp * binding.root.resources.displayMetrics.density).toInt()
+            }
             binding.videoTitle.text = v.title
             binding.videoAuthor.text = v.author
             binding.videoDurationBadge.text = v.duration

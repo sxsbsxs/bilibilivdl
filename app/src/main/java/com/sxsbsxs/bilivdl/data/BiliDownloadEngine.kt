@@ -30,6 +30,7 @@ object BiliDownloadEngine {
 
     suspend fun download(context: Context, playback: PlaybackInfo, title: String, cookie: String,
         taskId: String = title.hashCode().toString(),
+        refreshPlayback: suspend () -> PlaybackInfo = { playback },
         onProgress: (Long, Long, String) -> Unit): String = withContext(Dispatchers.IO) {
         val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(70).ifBlank { "bilibili_video" }
         val taskKey = taskId.replace(Regex("[^A-Za-z0-9_-]"), "_").take(48)
@@ -49,14 +50,17 @@ object BiliDownloadEngine {
                 val vf = File(dir, "$fileStem.video.m4s")
                 val af = File(dir, "$fileStem.audio.m4s")
                 coroutineScope {
-                    val v = async { transferCandidates(listOf(video) + playback.videoBackupUrls, vf, headers) { n, _ -> onProgress(n + af.length(), -1, "下载视频轨道") } }
-                    val a = async { transferCandidates(listOf(audio) + playback.audioBackupUrls, af, headers) { n, _ -> onProgress(n + vf.length(), -1, "下载音频轨道") } }
+                    val v = async { transferCandidates(listOf(video) + playback.videoBackupUrls, vf, headers,
+                        refreshCandidates = { val fresh = refreshPlayback(); listOfNotNull(fresh.videoUrl ?: fresh.url) + fresh.videoBackupUrls }) { n, _ -> onProgress(n + af.length(), -1, "下载视频轨道") } }
+                    val a = async { transferCandidates(listOf(audio) + playback.audioBackupUrls, af, headers,
+                        refreshCandidates = { val fresh = refreshPlayback(); listOfNotNull(fresh.audioUrl) + fresh.audioBackupUrls }) { n, _ -> onProgress(n + vf.length(), -1, "下载音频轨道") } }
                     v.await(); a.await()
                 }
                 onProgress(0, 0, "正在合并音视频")
                 muxDashTracks(vf, af, merged)
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 if (!merged.isFile || merged.length() == 0L) error("音视频合并失败：输出文件为空")
+                validateMuxedOutput(merged, requireAudio = true)
                 vf.delete(); af.delete()
             } else if (playback.segments.size > 1) {
                 // DURL 多段视频需要按接口返回顺序全部下载并顺序拼接。
@@ -64,7 +68,11 @@ object BiliDownloadEngine {
                     File(dir, "$fileStem.segment$index.tmp")
                 }
                 segmentFiles.forEachIndexed { index, segmentFile ->
-                    transfer(playback.segments[index], segmentFile, headers) { n, _ ->
+                    transferCandidates(listOf(playback.segments[index]), segmentFile, headers,
+                        refreshCandidates = {
+                            val fresh = refreshPlayback()
+                            listOfNotNull(fresh.segments.getOrNull(index), fresh.url)
+                        }) { n, _ ->
                         val completed = segmentFiles.take(index).sumOf { it.length() } + n
                         onProgress(completed, -1, "下载视频分段 ${index + 1}/${segmentFiles.size}")
                     }
@@ -72,9 +80,14 @@ object BiliDownloadEngine {
                 muxDurlSegments(segmentFiles, merged)
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 // Keep partial segments when cancelled; remove only after a successful mux.
+                validateMuxedOutput(merged, requireAudio = false)
                 segmentFiles.forEach { it.delete() }
             } else {
-                transferCandidates(listOf(playback.url), merged, headers) { n, total -> onProgress(n, total, "下载视频") }
+                transferCandidates(listOf(playback.url), merged, headers,
+                    refreshCandidates = {
+                        val fresh = refreshPlayback()
+                        listOfNotNull(fresh.videoUrl ?: fresh.url) + fresh.videoBackupUrls + fresh.segments
+                    }) { n, total -> onProgress(n, total, "下载视频") }
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             publish(context, merged, safe)
@@ -97,11 +110,15 @@ object BiliDownloadEngine {
 
     /** 按 BVD 的候选源轮换策略处理 CDN 403；切换源时丢弃不可信的跨源临时前缀。 */
     private suspend fun transferCandidates(urls: List<String>, file: File, headers: Map<String, String>,
+        refreshCandidates: (suspend () -> List<String>)? = null,
         progress: (Long, Long) -> Unit) {
-        val candidates = urls.filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
+        val candidates = urls.filter { it.startsWith("https://") || it.startsWith("http://") }.distinct().toMutableList()
         require(candidates.isNotEmpty()) { "B站没有返回可用的 CDN 地址" }
         var last: Exception? = null
-        for ((index, url) in candidates.withIndex()) {
+        var index = 0
+        var refreshed = false
+        while (index < candidates.size) {
+            val url = candidates[index]
             try {
                 transfer(url, file, headers, progress)
                 return
@@ -109,11 +126,32 @@ object BiliDownloadEngine {
                 throw cancelled
             } catch (error: Exception) {
                 last = error
+                if (error is CdnHttpException && (error.status == 403 || error.status == 412) &&
+                    !refreshed && refreshCandidates != null) {
+                    refreshed = true
+                    val refreshedUrls = try {
+                        refreshCandidates.invoke()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    val fresh = refreshedUrls.filter { it.startsWith("https://") || it.startsWith("http://") }
+                        .filterNot { it in candidates }
+                    candidates.addAll(fresh)
+                    if (fresh.isNotEmpty()) {
+                        progress(file.length(), -1L)
+                        index++
+                        continue
+                    }
+                }
                 if (index < candidates.lastIndex) {
                     file.delete()
+                    File(file.parentFile, file.name + ".resume.json").delete()
                     progress(0L, -1L)
                 }
             }
+            index++
         }
         throw last ?: IllegalStateException("所有 CDN 地址均不可用")
     }
@@ -137,7 +175,9 @@ object BiliDownloadEngine {
         val urlKey = URL(url).let { "${it.protocol}://${it.host}${it.path}" }
         val savedMeta = runCatching { JSONObject(metaFile.readText()) }.getOrNull()
         var offset = if (file.exists()) file.length() else 0L
-        if (offset > 0L && savedMeta?.optString("urlKey") != urlKey) {
+        val hasResumeValidator = !savedMeta?.optString("etag").isNullOrBlank() ||
+            !savedMeta?.optString("lastModified").isNullOrBlank()
+        if (offset > 0L && (!hasResumeValidator || savedMeta?.optString("urlKey") != urlKey)) {
             RandomAccessFile(file, "rw").use { it.setLength(0) }
             metaFile.delete()
             offset = 0L
@@ -176,8 +216,9 @@ object BiliDownloadEngine {
                 val responseModified = c.getHeaderField("Last-Modified").orEmpty()
                 val previousEtag = savedMeta?.optString("etag").orEmpty()
                 val previousModified = savedMeta?.optString("lastModified").orEmpty()
-                if ((previousEtag.isNotBlank() && responseEtag.isNotBlank() && previousEtag != responseEtag) ||
-                    (previousEtag.isBlank() && previousModified.isNotBlank() && responseModified.isNotBlank() && previousModified != responseModified)) {
+                if ((previousEtag.isNotBlank() && responseEtag != previousEtag) ||
+                    (previousEtag.isBlank() && previousModified.isNotBlank() && responseModified != previousModified) ||
+                    (previousEtag.isBlank() && previousModified.isBlank())) {
                     RandomAccessFile(file, "rw").use { it.setLength(0) }
                     metaFile.delete()
                     error("资源校验标识发生变化，已清除旧分段并准备重新下载")
@@ -285,6 +326,12 @@ object BiliDownloadEngine {
             }
             if (!started) error("所有 DURL 分段均无法解析")
             muxer.stop()
+        } catch (cancelled: CancellationException) {
+            output.delete()
+            throw cancelled
+        } catch (error: Exception) {
+            output.delete()
+            throw IllegalStateException("DURL 分段合并失败：" + (error.message ?: "媒体轨道异常"), error)
         } finally {
             runCatching { muxer.release() }
         }
@@ -335,10 +382,58 @@ object BiliDownloadEngine {
                 if (takeVideo) videoTime = extractor.sampleTime else audioTime = extractor.sampleTime
             }
             activeMuxer.stop()
+        } catch (cancelled: CancellationException) {
+            output.delete()
+            throw cancelled
+        } catch (error: Exception) {
+            output.delete()
+            throw IllegalStateException("DASH 音视频合并失败：" + (error.message ?: "媒体轨道异常"), error)
         } finally {
             runCatching { muxer?.release() }
             videoExtractor.release()
             audioExtractor.release()
+        }
+    }
+
+    /** 检查合并产物可重新解析，且音视频轨道的起点和时长没有明显错位。 */
+    private fun validateMuxedOutput(file: File, requireAudio: Boolean) {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(file.absolutePath)
+            var videoDuration = -1L
+            var audioDuration = -1L
+            var videoStart = -1L
+            var audioStart = -1L
+            for (index in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(index)
+                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+                val duration = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else -1L
+                extractor.selectTrack(index)
+                val firstSample = extractor.sampleTime
+                if (mime.startsWith("video/")) {
+                    videoDuration = duration
+                    videoStart = firstSample
+                } else if (mime.startsWith("audio/")) {
+                    audioDuration = duration
+                    audioStart = firstSample
+                }
+                extractor.unselectTrack(index)
+            }
+            if (videoDuration <= 0L || videoStart < 0L) error("合并文件缺少有效视频样本或时长")
+            if (requireAudio && (audioDuration <= 0L || audioStart < 0L)) error("合并文件缺少有效音频样本或时长")
+            if (audioStart >= 0L) {
+                val startDelta = kotlin.math.abs(videoStart - audioStart)
+                if (startDelta > 750_000L) error("音视频起始时间偏差过大：" + (startDelta / 1000) + " ms")
+                if (videoDuration > 0L && audioDuration > 0L) {
+                    val durationDelta = kotlin.math.abs(videoDuration - audioDuration)
+                    val tolerance = maxOf(2_000_000L, minOf(videoDuration, audioDuration) / 30L)
+                    if (durationDelta > tolerance) error("音视频时长不匹配：" + (videoDuration / 1000) + " ms / " + (audioDuration / 1000) + " ms")
+                }
+            }
+        } catch (error: Exception) {
+            throw IllegalStateException("合并后媒体校验失败：" + (error.message ?: "无法读取输出文件"), error)
+        } finally {
+            extractor.release()
         }
     }
 

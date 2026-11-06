@@ -198,12 +198,24 @@ class BiliDownloadService : Service() {
                 task.put("status", "downloading").put("progress", "正在获取视频信息")
                 updateTask(task)
                 val cookie = BiliSession.cookie(this@BiliDownloadService)
-                val playback = if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn, videoCodec, audioCodec) else BiliPlaybackApi.load(bvid, aid, qn, cookie, pageIndex, videoCodec, audioCodec)
+                val accountProfile = if (cookie.isNotBlank()) {
+                    runCatching { BiliSession.profile(this@BiliDownloadService, cookie) }.getOrNull()
+                } else null
+                val accountIsVip = (accountProfile?.optInt("vipType") ?: 0) > 0
+                val accountIsLoggedIn = accountProfile?.optBoolean("isLogin") == true
+                suspend fun resolvePlayback(): PlaybackInfo =
+                    if (episodeId > 0L) BangumiApiBridge.playback(episodeId, qn, videoCodec, audioCodec)
+                    else BiliPlaybackApi.load(bvid, aid, qn, cookie, pageIndex, videoCodec, audioCodec,
+                        isVip = accountIsVip, isLoggedIn = accountIsLoggedIn)
+                val playback = resolvePlayback()
                 task.put("cid", playback.cid).put("quality", playback.name)
                 task.put("progress", "准备下载")
                 updateTask(task)
                 val lastProgressWrite = AtomicLong(0L)
-                val result = BiliDownloadEngine.download(this@BiliDownloadService, playback, title, cookie, taskId) { done, total, stage ->
+                val result = BiliDownloadEngine.download(
+                    this@BiliDownloadService, playback, title, cookie, taskId,
+                    refreshPlayback = { resolvePlayback() }
+                ) { done, total, stage ->
                     val progress = if (total > 0L) "$stage · ${(done * 100 / total).coerceIn(0, 100)}%" else "$stage · ${done / 1024} KB"
                     // DASH video/audio callbacks run concurrently; JSONObject is not thread-safe.
                     // Serialize mutations and snapshots so concurrent chunk callbacks cannot corrupt task state.
