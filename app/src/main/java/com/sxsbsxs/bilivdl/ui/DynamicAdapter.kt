@@ -128,6 +128,22 @@ class DynamicAdapter(
                         .centerCrop()
                         .into(imageView)
                 }
+                // Use the measured card width rather than a fixed 104dp height: B站图文宫格
+                // should remain square on narrow phones, tablets and split-screen layouts.
+                b.dynamicImageGrid.post {
+                    if (b.dynamicImageGrid.childCount != imageUrls.size) return@post
+                    val availableWidth = b.dynamicImageGrid.width -
+                        b.dynamicImageGrid.paddingLeft - b.dynamicImageGrid.paddingRight
+                    val cellHeight = ((availableWidth - dp(4 * columns)) / columns).coerceAtLeast(dp(64))
+                    for (childIndex in 0 until b.dynamicImageGrid.childCount) {
+                        val child = b.dynamicImageGrid.getChildAt(childIndex)
+                        val params = child.layoutParams as? android.widget.GridLayout.LayoutParams ?: continue
+                        if (params.height != cellHeight) {
+                            params.height = cellHeight
+                            child.layoutParams = params
+                        }
+                    }
+                }
             } else {
                 for (index in 0 until b.dynamicImageGrid.childCount) {
                     (b.dynamicImageGrid.getChildAt(index) as? android.widget.ImageView)?.let { old ->
