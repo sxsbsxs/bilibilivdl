@@ -146,7 +146,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
         authorRow.addView(author, LinearLayout.LayoutParams(0, -2, 1f))
         summaryContent.addView(authorRow)
         val dynamicText = intent.getStringExtra(EXTRA_TEXT).orEmpty()
-        val text = TextView(this).apply {
+        val dynamicBody = TextView(this).apply {
             this.text = dynamicText
             textSize = 13f
             setTextColor(ink)
@@ -154,7 +154,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
             visibility = if (dynamicText.isNotBlank()) View.VISIBLE else View.GONE
             setPadding(0, dp(9), 0, 0)
         }
-        summaryContent.addView(text)
+        summaryContent.addView(dynamicBody)
         val dynamicCover = intent.getStringExtra(EXTRA_COVER).orEmpty()
         if (dynamicCover.isNotBlank()) {
             val coverView = ImageView(this).apply {

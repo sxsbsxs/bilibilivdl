@@ -112,7 +112,7 @@ class CommentAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val comment = data[position]
-        holder.bind(comment, pendingLikeIds.contains(comment.id))
+        holder.bind(comment, pendingLikeIds.contains(comment.id), ownerMid)
     }
 
     class Holder(
@@ -123,7 +123,7 @@ class CommentAdapter(
         private val onLongPress: (VideoComment) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(comment: VideoComment, likePending: Boolean) {
+        fun bind(comment: VideoComment, likePending: Boolean, ownerMid: Long) {
             val isOwner = comment.isUp || (ownerMid > 0L && comment.mid == ownerMid)
             binding.commentUser.text = comment.user + if (isOwner) "  UP主" else ""
             binding.commentBadge.visibility = if (comment.likedByUp) View.VISIBLE else View.GONE
