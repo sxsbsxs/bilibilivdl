@@ -10,7 +10,8 @@ import org.json.JSONObject
 
 data class AccountCenterItem(
     val kind: String, val title: String, val subtitle: String = "", val cover: String = "",
-    val aid: Long = 0L, val bvid: String = "", val mid: Long = 0L, val mediaId: String = ""
+    val aid: Long = 0L, val bvid: String = "", val mid: Long = 0L, val mediaId: String = "",
+    val url: String = "", val targetId: Long = 0L, val rootId: Long = 0L
 )
 data class AccountCenterPage(val items: List<AccountCenterItem>, val hasMore: Boolean, val nextCursor: String = "")
 
@@ -176,11 +177,77 @@ object BiliAccountApi {
 
     suspend fun unreadMessages(): List<AccountCenterItem> {
         val payload = data(root(messageApi.unread()))
-        return listOf("私信" to "chat", "回复我的" to "reply", "@我的" to "at", "收到的赞" to "like")
+        return listOf("收到的赞" to "like", "回复我的" to "reply", "@我的" to "at")
             .map { (label, key) ->
                 val count = payload.optInt(key)
-                AccountCenterItem("message", label, if (count > 0) count.toString() + " 条未读" else "暂无未读消息")
+                AccountCenterItem("message_category", label,
+                    if (count > 0) count.toString() + " 条未读" else "暂无未读消息",
+                    mediaId = key)
             }
+    }
+
+    suspend fun messages(category: String, cursorId: Long = 0L, cursorTime: Long = 0L): AccountCenterPage {
+        require(category in setOf("like", "reply", "at")) { "消息类型无效" }
+        val response = root(when (category) {
+            "like" -> messageApi.like(cursorId, cursorTime)
+            "reply" -> messageApi.reply(cursorId, cursorTime)
+            else -> messageApi.at(cursorId, cursorTime)
+        })
+        val payload = data(response)
+        val total = payload.optJSONObject("total") ?: payload
+        val values = total.optJSONArray("items") ?: payload.optJSONArray("items") ?: JSONArray()
+        val items = (0 until values.length()).mapNotNull { index ->
+            val item = values.optJSONObject(index) ?: return@mapNotNull null
+            val content = item.optJSONObject("item") ?: JSONObject()
+            val user = item.optJSONObject("user") ?: JSONObject()
+            val users = item.optJSONArray("users")
+            val firstUser = users?.optJSONObject(0) ?: user
+            val mid = firstUser.optLong("mid")
+            val nickname = text(firstUser, "nickname", "uname").ifBlank { "B站用户" }
+            val face = text(firstUser, "avatar", "face").let { if (it.startsWith("//")) "https:" + it else it }
+            val kindLabel = when (category) {
+                "like" -> "赞了你的内容"
+                "at" -> "在内容中提到了你"
+                else -> "回复了你的内容"
+            }
+            val aid = content.optLong("subject_id").takeIf { it > 0L }
+                ?: content.optLong("item_id").takeIf { it > 0L }
+                ?: 0L
+            val rootId = content.optLong("root_id")
+            val targetId = content.optLong("target_id").takeIf { it > 0L }
+                ?: content.optLong("source_id")
+            val title = text(content, "title").ifBlank { "互动消息" }
+            val sourceText = text(content, "source_content", "desc")
+            val atTime = item.optLong("at_time")
+            val replyTime = item.optLong("reply_time")
+            val likeTime = item.optLong("like_time")
+            val time = maxOf(atTime, replyTime, likeTime)
+            val count = item.optInt("counts")
+            val subtitle = buildList {
+                add(nickname + " · " + kindLabel)
+                if (count > 1) add(count.toString() + " 人")
+                if (sourceText.isNotBlank()) add(sourceText)
+                if (time > 0L) add(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",
+                    java.util.Locale.getDefault()).format(java.util.Date(time * 1000L)))
+            }.joinToString(" · ")
+            AccountCenterItem(
+                kind = "message",
+                title = title,
+                subtitle = subtitle,
+                cover = text(content, "image"),
+                aid = aid,
+                mid = mid,
+                mediaId = category,
+                url = text(content, "uri"),
+                targetId = targetId,
+                rootId = rootId
+            )
+        }
+        val cursor = total.optJSONObject("cursor") ?: payload.optJSONObject("cursor")
+        val nextId = cursor?.optLong("id") ?: 0L
+        val nextTime = cursor?.optLong("time") ?: 0L
+        val ended = cursor?.optBoolean("isEnd") ?: cursor?.optBoolean("is_end") ?: items.isEmpty()
+        return AccountCenterPage(items, !ended && items.isNotEmpty(), nextId.toString() + "|" + nextTime)
     }
 
 

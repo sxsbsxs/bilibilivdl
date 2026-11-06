@@ -40,6 +40,9 @@ class AccountLibraryActivity : AppCompatActivity() {
         const val TYPE_MESSAGES = "messages"
         const val TYPE_BANGUMI = "bangumi"
         const val TYPE_CINEMA = "cinema"
+        const val TYPE_MESSAGE_LIKE = "message_like"
+        const val TYPE_MESSAGE_AT = "message_at"
+        const val TYPE_MESSAGE_REPLY = "message_reply"
     }
 
     private lateinit var titleView: TextView
@@ -52,6 +55,8 @@ class AccountLibraryActivity : AppCompatActivity() {
     private var mediaId = ""
     private var watchLaterCursor = ""
     private var selectedBangumiStatus = 0
+    private var messageCursorId = 0L
+    private var messageCursorTime = 0L
     private lateinit var bangumiFilterRow: LinearLayout
     private var page = 1
     private var loading = false
@@ -199,6 +204,9 @@ class AccountLibraryActivity : AppCompatActivity() {
         TYPE_MESSAGES -> "消息概览"
         TYPE_BANGUMI -> "我的追番"
         TYPE_CINEMA -> "我的追剧"
+        TYPE_MESSAGE_LIKE -> "收到的赞"
+        TYPE_MESSAGE_AT -> "@我的"
+        TYPE_MESSAGE_REPLY -> "回复我的"
         else -> "账号内容"
     }
 
@@ -209,6 +217,8 @@ class AccountLibraryActivity : AppCompatActivity() {
             hasMore = true
             seenKeys.clear()
             watchLaterCursor = ""
+            messageCursorId = 0L
+            messageCursorTime = 0L
             listContainer.removeAllViews()
         }
         loading = true
@@ -226,6 +236,9 @@ class AccountLibraryActivity : AppCompatActivity() {
                         TYPE_FOLLOWING -> BiliAccountApi.followings(accountMid, page)
                         TYPE_LIKED -> BiliAccountApi.likedVideos(accountMid, page)
                         TYPE_MESSAGES -> null
+                        TYPE_MESSAGE_LIKE -> BiliAccountApi.messages("like", messageCursorId, messageCursorTime)
+                        TYPE_MESSAGE_AT -> BiliAccountApi.messages("at", messageCursorId, messageCursorTime)
+                        TYPE_MESSAGE_REPLY -> BiliAccountApi.messages("reply", messageCursorId, messageCursorTime)
                         TYPE_BANGUMI -> BiliAccountApi.bangumi("bangumi", selectedBangumiStatus, page)
                         TYPE_CINEMA -> BiliAccountApi.bangumi("cinema", selectedBangumiStatus, page)
                         else -> error("未知的账号页面")
@@ -244,12 +257,18 @@ class AccountLibraryActivity : AppCompatActivity() {
                             "folder" -> item.mediaId
                             "user" -> item.mid.toString()
                             "bangumi" -> item.mediaId
+                            "message_category" -> item.mediaId
                             else -> item.title
                         }
                         if (key.isNotBlank() && seenKeys.add(key)) addRow(item)
                     }
                     hasMore = payload?.hasMore == true
                     if (type == TYPE_WATCH_LATER) watchLaterCursor = payload?.nextCursor.orEmpty()
+                    if (type == TYPE_MESSAGE_LIKE || type == TYPE_MESSAGE_AT || type == TYPE_MESSAGE_REPLY) {
+                        val parts = payload?.nextCursor.orEmpty().split("|")
+                        messageCursorId = parts.getOrNull(0)?.toLongOrNull() ?: 0L
+                        messageCursorTime = parts.getOrNull(1)?.toLongOrNull() ?: 0L
+                    }
                     statusView.text = when {
                         seenKeys.isEmpty() -> emptyText()
                         hasMore -> "已加载 " + seenKeys.size + " 项"
@@ -282,6 +301,9 @@ class AccountLibraryActivity : AppCompatActivity() {
         TYPE_LIKED -> "还没有点赞过的视频"
         TYPE_BANGUMI -> "还没有追番记录"
         TYPE_CINEMA -> "还没有追剧记录"
+        TYPE_MESSAGE_LIKE -> "暂时没有收到的赞"
+        TYPE_MESSAGE_AT -> "暂时没有 @ 消息"
+        TYPE_MESSAGE_REPLY -> "暂时没有回复消息"
         else -> "暂无内容"
     }
 
@@ -368,6 +390,26 @@ class AccountLibraryActivity : AppCompatActivity() {
                 putExtra(BangumiSeasonActivity.EXTRA_TITLE, item.title)
                 putExtra(BangumiSeasonActivity.EXTRA_COVER, item.cover)
             })
+            "message_category" -> {
+                val targetType = when (item.mediaId) {
+                    "like" -> TYPE_MESSAGE_LIKE
+                    "at" -> TYPE_MESSAGE_AT
+                    else -> TYPE_MESSAGE_REPLY
+                }
+                startActivity(Intent(this, AccountLibraryActivity::class.java)
+                    .putExtra(EXTRA_TYPE, targetType).putExtra(EXTRA_MID, accountMid))
+            }
+            "message" -> {
+                if (item.aid > 0L) {
+                    startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                        putExtra(VideoPlayerActivity.EXTRA_AID, item.aid)
+                        putExtra(VideoPlayerActivity.EXTRA_TITLE, item.title)
+                        putExtra(VideoPlayerActivity.EXTRA_AUTHOR, item.subtitle.substringBefore(" · "))
+                    })
+                } else if (item.url.isNotBlank()) {
+                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(item.url))) }
+                }
+            }
         }
     }
 
