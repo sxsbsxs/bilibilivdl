@@ -43,13 +43,13 @@ class SearchResultsActivity : AppCompatActivity() {
         b.searchResultsTitle.text = if (bangumi) "番剧搜索结果" else "视频搜索结果"
         b.searchResultsQuery.text = "“$query”"
         b.searchResultsBack.setOnClickListener { finish() }
-        b.searchResultsList.layoutManager = GridLayoutManager(this, 2)
-
         if (bangumi) {
+            b.searchResultsList.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
             val results = readExtra<ArrayList<BangumiSearchResult>>(EXTRA_BANGUMI_RESULTS).orEmpty()
             b.searchResultsCount.text = "找到 ${results.size} 部番剧"
             b.searchResultsList.adapter = BangumiResultAdapter(::openBangumi).also { it.submit(results) }
         } else {
+            b.searchResultsList.layoutManager = GridLayoutManager(this, 2)
             val results = readExtra<ArrayList<BiliVideo>>(EXTRA_VIDEO_RESULTS).orEmpty()
             b.searchResultsCount.text = "找到 ${results.size} 个视频"
             b.searchResultsList.adapter = VideoAdapter { video ->
