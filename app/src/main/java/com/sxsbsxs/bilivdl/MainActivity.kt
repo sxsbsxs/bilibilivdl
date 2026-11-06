@@ -54,6 +54,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun showPage(itemId: Int) {
         val manager = supportFragmentManager
+        // Settle a pending tab change before deciding which existing fragments to hide.
+        manager.executePendingTransactions()
         val (tag, create) = when (itemId) {
             R.id.nav_downloads -> TAG_DOWNLOADS to { DownloadsFragment() }
             R.id.nav_profile -> TAG_PROFILE to { ProfileFragment() }
