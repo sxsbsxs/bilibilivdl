@@ -26,10 +26,6 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         status = view.findViewById(R.id.account_status)
         accountName = view.findViewById(R.id.account_name)
         accountAvatar = view.findViewById(R.id.account_avatar)
-        accountAvatar?.setOnClickListener {
-            val mid = BiliSession.profile(requireContext()).optLong("mid")
-            if (mid > 0L) startActivity(android.content.Intent(requireContext(), UserSpaceActivity::class.java).putExtra(UserSpaceActivity.EXTRA_MID, mid))
-        }
         view.findViewById<MaterialButton>(R.id.account_qr_login).setOnClickListener {
             startActivity(android.content.Intent(requireContext(), QrLoginActivity::class.java))
         }
@@ -60,6 +56,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                     .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
                     .placeholder(R.drawable.bg_comment_avatar).error(R.drawable.bg_comment_avatar).circleCrop()
                     .into(accountAvatar ?: return@launch)
+                else accountAvatar?.setImageResource(R.drawable.bg_comment_avatar)
                 accountAvatar?.setOnClickListener {
                     val mid = data.optLong("mid")
                     if (mid > 0L) startActivity(android.content.Intent(requireContext(), UserSpaceActivity::class.java).putExtra(UserSpaceActivity.EXTRA_MID, mid))
