@@ -20,9 +20,6 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         super.onViewCreated(view, savedInstanceState)
         status = view.findViewById(R.id.account_status)
         accountName = view.findViewById(R.id.account_name)
-        view.findViewById<MaterialButton>(R.id.account_login).setOnClickListener {
-            startActivity(android.content.Intent(requireContext(), WebLoginActivity::class.java))
-        }
         view.findViewById<MaterialButton>(R.id.account_qr_login).setOnClickListener {
             startActivity(android.content.Intent(requireContext(), QrLoginActivity::class.java))
         }
@@ -49,7 +46,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 val logged = data.optBoolean("isLogin")
                 accountName?.text = if (logged) data.optString("uname", "已登录") else "未登录"
                 status?.text = if (logged) "账号已连接 · UID ${data.optLong("mid")}"
-                    else "未检测到有效登录。点击下方按钮选择 BVD 网页登录或 APP 扫码登录。"
+                    else "未检测到有效登录。点击下方按钮使用哔哩哔哩 APP 扫码登录。"
             } catch (e: Exception) {
                 accountName?.text = if (BiliSession.cookie(requireContext()).isBlank()) "未登录" else "待验证"
                 status?.text = "账号状态获取失败：${e.message ?: "网络异常"}"
