@@ -12,6 +12,7 @@ import com.sxsbsxs.bilivdl.data.BangumiApiBridge
 import com.sxsbsxs.bilivdl.data.BangumiSearchResult
 import com.sxsbsxs.bilivdl.data.BiliApi
 import com.sxsbsxs.bilivdl.data.BiliVideo
+import com.sxsbsxs.bilivdl.data.BiliVideoLookup
 import com.sxsbsxs.bilivdl.databinding.ActivitySearchResultsBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,6 +32,8 @@ class SearchResultsActivity : AppCompatActivity() {
     private var page = 1
     private var loadingMore = false
     private var hasMore = true
+    private var isBangumi = false
+    private var isDirectVideoId = false
     private var videoAdapter: VideoAdapter? = null
     private val seenIds = hashSetOf<String>()
 
@@ -48,23 +51,26 @@ class SearchResultsActivity : AppCompatActivity() {
         b = ActivitySearchResultsBinding.inflate(layoutInflater)
         setContentView(b.root)
         query = intent.getStringExtra(EXTRA_QUERY).orEmpty()
-        val bangumi = intent.getBooleanExtra(EXTRA_BANGUMI, false)
-        b.searchResultsTitle.text = if (bangumi) "番剧搜索结果" else "视频搜索结果"
+        isBangumi = intent.getBooleanExtra(EXTRA_BANGUMI, false)
+        isDirectVideoId = BiliApi.resolveVideoId(query) != null
+        b.searchResultsTitle.text = if (isBangumi) "番剧搜索结果" else "视频搜索结果"
         b.searchResultsQuery.text = "“$query”"
         b.searchResultsBack.setOnClickListener { finish() }
-        if (bangumi) {
+        if (isBangumi) {
             b.searchResultsList.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
             val results = readExtra<ArrayList<BangumiSearchResult>>(EXTRA_BANGUMI_RESULTS).orEmpty()
             b.searchResultsCount.text = "找到 ${results.size} 部番剧"
             b.searchResultsList.adapter = BangumiResultAdapter(::openBangumi).also { it.submit(results) }
+            b.searchResultsRefresh.isEnabled = false
         } else {
             b.searchResultsList.layoutManager = GridLayoutManager(this, 2)
             val results = readExtra<ArrayList<BiliVideo>>(EXTRA_VIDEO_RESULTS).orEmpty()
-            seenIds.addAll(results.map { it.bvid.ifBlank { it.aid.toString() } })
-            hasMore = results.size >= PAGE_SIZE
-            b.searchResultsCount.text = "找到 ${results.size} 个视频"
+            seenIds.addAll(results.map { videoKey(it) })
+            hasMore = !isDirectVideoId && results.size >= PAGE_SIZE
+            b.searchResultsCount.text = if (isDirectVideoId) "精确匹配 · 1 个视频" else "找到 ${results.size} 个视频"
             videoAdapter = VideoAdapter(::openVideo).also { it.submitList(results) }
             b.searchResultsList.adapter = videoAdapter
+            b.searchResultsRefresh.setOnRefreshListener { refreshSearch() }
             b.searchResultsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     super.onScrolled(recyclerView, dx, dy)
@@ -78,6 +84,8 @@ class SearchResultsActivity : AppCompatActivity() {
         }
     }
 
+    private fun videoKey(video: BiliVideo) = video.bvid.ifBlank { video.aid.toString() }
+
     private fun openVideo(video: BiliVideo) {
         startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
             putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
@@ -88,22 +96,54 @@ class SearchResultsActivity : AppCompatActivity() {
         })
     }
 
+    private fun refreshSearch() {
+        if (loadingMore || isBangumi) {
+            b.searchResultsRefresh.isRefreshing = false
+            return
+        }
+        loadingMore = true
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    if (isDirectVideoId) listOf(BiliVideoLookup.get(query))
+                    else BiliApi.searchVideos(query, 1, PAGE_SIZE)
+                }
+                seenIds.clear()
+                seenIds.addAll(result.map { videoKey(it) })
+                videoAdapter?.submitList(result)
+                page = 1
+                hasMore = !isDirectVideoId && result.size >= PAGE_SIZE
+                b.searchResultsCount.text = if (isDirectVideoId) {
+                    "精确匹配 · 1 个视频"
+                } else {
+                    if (hasMore) "已加载 ${result.size} 个视频 · 下拉可刷新" else "共找到 ${result.size} 个视频"
+                }
+            } catch (error: Exception) {
+                b.searchResultsCount.text = "刷新失败：${error.message ?: "网络异常"}"
+            } finally {
+                loadingMore = false
+                b.searchResultsRefresh.isRefreshing = false
+            }
+        }
+    }
+
     private fun loadNextPage() {
-        if (loadingMore || !hasMore || query.isBlank()) return
+        if (loadingMore || !hasMore || query.isBlank() || isDirectVideoId) return
         loadingMore = true
         val nextPage = page + 1
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) { BiliApi.searchVideos(query, nextPage, PAGE_SIZE) }
-                val fresh = result.filter { seenIds.add(it.bvid.ifBlank { it.aid.toString() }) }
-                if (fresh.isNotEmpty()) {
-                    page = nextPage
-                    val adapter = videoAdapter ?: return@launch
-                    adapter.appendList(fresh)
-                }
-                hasMore = result.size >= PAGE_SIZE && fresh.isNotEmpty()
+                val fresh = result.filter { seenIds.add(videoKey(it)) }
+                page = nextPage
+                if (fresh.isNotEmpty()) videoAdapter?.appendList(fresh)
+                hasMore = result.size >= PAGE_SIZE
                 val count = videoAdapter?.itemCount ?: 0
-                b.searchResultsCount.text = if (hasMore) "已加载 $count 个视频" else "共找到 $count 个视频"
+                b.searchResultsCount.text = if (hasMore) {
+                    "已加载 $count 个视频 · 下拉可刷新"
+                } else {
+                    "共找到 $count 个视频"
+                }
             } catch (error: Exception) {
                 b.searchResultsCount.text = "已加载 ${videoAdapter?.itemCount ?: 0} 个视频 · 加载更多失败"
             } finally {
