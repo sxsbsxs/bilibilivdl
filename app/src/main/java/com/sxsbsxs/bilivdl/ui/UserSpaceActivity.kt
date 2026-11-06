@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -26,6 +27,11 @@ import java.net.URL
 class UserSpaceActivity : AppCompatActivity() {
     companion object { const val EXTRA_MID = "user_mid" }
     private lateinit var videosAdapter: VideoAdapter
+    private var videosLoading = false
+    private var videosHasMore = true
+    private var nextVideoAid = 0L
+    private var videosPage = 0
+    private val loadedVideoKeys = hashSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,8 +53,16 @@ class UserSpaceActivity : AppCompatActivity() {
             adapter = videosAdapter
             isNestedScrollingEnabled = false
         }
+        findViewById<ScrollView>(R.id.space_scroll).setOnScrollChangeListener(
+            ScrollView.OnScrollChangeListener { scroll, _, y, _, _ ->
+                val content = scroll.getChildAt(0) ?: return@OnScrollChangeListener
+                if (!videosLoading && videosHasMore && y + scroll.height >= content.measuredHeight - 500) {
+                    loadCreatorVideos(mid, reset = false)
+                }
+            }
+        )
         loadProfile(mid)
-        loadCreatorVideos(mid)
+        loadCreatorVideos(mid, reset = true)
     }
 
     private fun request(url: String): JSONObject {
@@ -116,15 +130,29 @@ class UserSpaceActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadCreatorVideos(mid: Long) {
+    private fun loadCreatorVideos(mid: Long, reset: Boolean) {
+        if (videosLoading || (!reset && !videosHasMore)) return
+        if (reset) {
+            videosHasMore = true
+            nextVideoAid = 0L
+            videosPage = 0
+            loadedVideoKeys.clear()
+            videosAdapter.submitList(emptyList())
+        }
+        videosLoading = true
         val status = findViewById<TextView>(R.id.space_video_status)
+        status.visibility = View.VISIBLE
+        status.text = if (reset) "正在加载投稿…" else "正在加载更多…"
+        val cursor = nextVideoAid
+        val page = videosPage + 1
         lifecycleScope.launch {
             try {
-                val videos = withContext(Dispatchers.IO) {
-                    runCatching { BilimiaoApiBridge.userVideos(mid, pageSize = 30) }.getOrElse {
-                        // Fallback keeps the creator page usable if the upstream app endpoint is rate-limited.
-                        val root = request("https://api.bilibili.com/x/space/wbi/arc/search?mid=$mid&ps=30&pn=1&order=pubdate")
-                        if (root.optInt("code", -1) != 0) throw it
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        BilimiaoApiBridge.userVideos(mid, cursorAid = cursor, pageSize = 30)
+                    }.getOrElse { upstreamError ->
+                        val root = request("https://api.bilibili.com/x/space/wbi/arc/search?mid=$mid&ps=30&pn=$page&order=pubdate")
+                        if (root.optInt("code", -1) != 0) throw upstreamError
                         val vlist = root.optJSONObject("data")?.optJSONObject("list")?.optJSONArray("vlist")
                         (0 until (vlist?.length() ?: 0)).mapNotNull { index ->
                             val item = vlist?.optJSONObject(index) ?: return@mapNotNull null
@@ -139,12 +167,25 @@ class UserSpaceActivity : AppCompatActivity() {
                         }
                     }
                 }
-                videosAdapter.submitList(videos)
-                status.text = if (videos.isEmpty()) "这个 UP 主还没有公开投稿" else "共加载 ${videos.size} 个视频"
-                status.visibility = View.VISIBLE
+                val fresh = result.filter { video ->
+                    val key = video.bvid.ifBlank { video.aid.toString() }
+                    key.isNotBlank() && loadedVideoKeys.add(key)
+                }
+                videosAdapter.appendList(fresh)
+                if (fresh.isNotEmpty()) {
+                    nextVideoAid = fresh.last().aid
+                    videosPage = page
+                }
+                videosHasMore = result.size >= 30 && fresh.isNotEmpty()
+                status.text = when {
+                    loadedVideoKeys.isEmpty() -> "这个 UP 主还没有公开投稿"
+                    videosHasMore -> "已加载 ${loadedVideoKeys.size} 个视频 · 继续下滑加载"
+                    else -> "已加载全部 ${loadedVideoKeys.size} 个视频"
+                }
             } catch (error: Exception) {
                 status.text = "投稿加载失败：${error.message ?: "网络异常"}"
-                status.visibility = View.VISIBLE
+            } finally {
+                videosLoading = false
             }
         }
     }
