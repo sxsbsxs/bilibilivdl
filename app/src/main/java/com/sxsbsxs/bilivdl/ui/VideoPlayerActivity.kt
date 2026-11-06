@@ -122,7 +122,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         override fun run() {
             if (!isFinishing && ::b.isInitialized) {
                 val player = exo
-                val seek = findViewById<SeekBar?>(R.id.player_seek)
+                val seek = findViewById<SeekBar>(R.id.player_seek)
                 if (player != null && seek != null && !updatingSeek && player.duration > 0L) {
                     seek.max = 1000
                     seek.progress = ((player.currentPosition.toDouble() / player.duration).coerceIn(0.0, 1.0) * 1000).toInt()
@@ -384,6 +384,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                         }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             b.danmakuOverlay.setPlaying(isPlaying)
+                            updatePlayerControlLabels()
                         }
                     })
                     player.prepare()
@@ -760,10 +761,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun scheduleControlsHide() {
         controlsHideRunnable?.let(playerUiHandler::removeCallbacks)
         controlsHideRunnable = Runnable {
-            if (exo?.isPlaying == true && !fullscreen) {
-                findViewById<View>(R.id.player_controls)?.visibility = View.GONE
-            } else if (exo?.isPlaying == true) {
-                findViewById<View?>(R.id.player_controls)?.visibility = View.GONE
+            if (exo?.isPlaying == true) {
+                findViewById<View>(R.id.player_controls).visibility = View.GONE
             }
         }.also { playerUiHandler.postDelayed(it, 3500L) }
     }
