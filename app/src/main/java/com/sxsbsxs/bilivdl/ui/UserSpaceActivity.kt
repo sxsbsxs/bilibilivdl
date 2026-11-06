@@ -17,9 +17,12 @@ import com.bumptech.glide.load.model.LazyHeaders
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideo
+import com.sxsbsxs.bilivdl.data.BiliDynamicApi
+import com.sxsbsxs.bilivdl.data.BiliDynamicItem
 import com.sxsbsxs.bilivdl.data.BiliAccountApi
 import com.sxsbsxs.bilivdl.data.BiliSession
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +36,16 @@ class UserSpaceActivity : AppCompatActivity() {
         const val EXTRA_GUEST_MODE = "guest_mode"
     }
     private lateinit var videosAdapter: VideoAdapter
+    private lateinit var homeVideosAdapter: VideoAdapter
+    private lateinit var dynamicsAdapter: DynamicAdapter
+    private val creatorVideos = mutableListOf<BiliVideo>()
+    private val dynamicLikeJobs = mutableSetOf<String>()
+    private var currentSpaceTab = 0
+    private var dynamicHistoryOffset = ""
+    private var dynamicPage = 1
+    private var dynamicHasMore = true
+    private var dynamicLoading = false
+    private val loadedDynamicIds = hashSetOf<String>()
     private var videosLoading = false
     private var videosHasMore = true
     private var nextVideoAid = 0L
@@ -51,19 +64,47 @@ class UserSpaceActivity : AppCompatActivity() {
         }
         val mid = intent.getLongExtra(EXTRA_MID, 0L)
         if (mid <= 0L) { finish(); return }
-        videosAdapter = VideoAdapter { video ->
-            startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
-                putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
-                putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
-                putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
-                putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
-                putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
-            })
-        }
+        videosAdapter = VideoAdapter(::openCreatorVideo)
+        homeVideosAdapter = VideoAdapter(::openCreatorVideo)
+        dynamicsAdapter = DynamicAdapter(
+            onOpen = ::openSpaceDynamic,
+            onUser = ::openSpaceDynamicUser,
+            onLike = ::toggleSpaceDynamicLike,
+            onReply = ::openSpaceDynamicReplies,
+            onShare = ::shareSpaceDynamic
+        )
         findViewById<RecyclerView>(R.id.space_videos).apply {
             layoutManager = LinearLayoutManager(this@UserSpaceActivity)
             adapter = videosAdapter
             isNestedScrollingEnabled = false
+        }
+        findViewById<RecyclerView>(R.id.space_home_videos).apply {
+            layoutManager = LinearLayoutManager(this@UserSpaceActivity)
+            adapter = homeVideosAdapter
+            isNestedScrollingEnabled = false
+        }
+        findViewById<RecyclerView>(R.id.space_dynamics).apply {
+            layoutManager = LinearLayoutManager(this@UserSpaceActivity)
+            adapter = dynamicsAdapter
+            isNestedScrollingEnabled = false
+        }
+        val spaceTabs = findViewById<TabLayout>(R.id.space_tabs)
+        listOf("主页", "动态", "投稿").forEach { spaceTabs.addTab(spaceTabs.newTab().setText(it)) }
+        spaceTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                showSpaceTab(tab.position, mid)
+            }
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+            override fun onTabReselected(tab: TabLayout.Tab) {
+                when (tab.position) {
+                    1 -> loadSpaceDynamics(mid, reset = true)
+                    2 -> findViewById<ScrollView>(R.id.space_scroll).smoothScrollTo(0, 0)
+                }
+            }
+        })
+        showSpaceTab(0, mid)
+        findViewById<TextView>(R.id.space_home_all).setOnClickListener {
+            spaceTabs.getTabAt(2)?.select()
         }
         findViewById<TextView>(R.id.space_video_tab).apply {
             text = videoSortLabel()
@@ -73,8 +114,10 @@ class UserSpaceActivity : AppCompatActivity() {
             View.OnScrollChangeListener { changedView, _, y, _, _ ->
                 val scroll = changedView as ScrollView
                 val content = scroll.getChildAt(0) ?: return@OnScrollChangeListener
-                if (!videosLoading && videosHasMore && y + scroll.height >= content.measuredHeight - 500) {
-                    loadCreatorVideos(mid, reset = false)
+                if (y + scroll.height < content.measuredHeight - 500) return@OnScrollChangeListener
+                when (currentSpaceTab) {
+                    1 -> if (!dynamicLoading && dynamicHasMore) loadSpaceDynamics(mid, reset = false)
+                    2 -> if (!videosLoading && videosHasMore) loadCreatorVideos(mid, reset = false)
                 }
             }
         )
@@ -99,11 +142,10 @@ class UserSpaceActivity : AppCompatActivity() {
             setImageResource(R.drawable.bili_akari_img)
             setOnClickListener { startActivity(Intent(this@UserSpaceActivity, QrLoginActivity::class.java)) }
         }
-        findViewById<View>(R.id.space_own_shortcuts).visibility = View.GONE
-        findViewById<TextView>(R.id.space_video_heading).visibility = View.GONE
-        findViewById<View>(R.id.space_video_tab).visibility = View.GONE
-        findViewById<TextView>(R.id.space_video_status).visibility = View.GONE
-        findViewById<RecyclerView>(R.id.space_videos).visibility = View.GONE
+        findViewById<View>(R.id.space_tabs).visibility = View.GONE
+        findViewById<View>(R.id.space_home_panel).visibility = View.GONE
+        findViewById<View>(R.id.space_dynamics_panel).visibility = View.GONE
+        findViewById<View>(R.id.space_posts_panel).visibility = View.GONE
         findViewById<TextView>(R.id.space_status).text = "游客模式"
         findViewById<MaterialButton>(R.id.space_follow_button).apply {
             text = "B站 APP 扫码登录"
@@ -350,6 +392,152 @@ class UserSpaceActivity : AppCompatActivity() {
         else -> value.toString()
     }
 
+    private fun openCreatorVideo(video: BiliVideo) {
+        startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+            putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
+            putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
+            putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
+            putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
+            putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
+        })
+    }
+
+    private fun showSpaceTab(index: Int, mid: Long) {
+        currentSpaceTab = index
+        findViewById<View>(R.id.space_home_panel).visibility = if (index == 0) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.space_dynamics_panel).visibility = if (index == 1) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.space_posts_panel).visibility = if (index == 2) View.VISIBLE else View.GONE
+        if (index == 1 && dynamicsAdapter.count() == 0 && !dynamicLoading) {
+            loadSpaceDynamics(mid, reset = true)
+        }
+    }
+
+    private fun loadSpaceDynamics(mid: Long, reset: Boolean) {
+        if (dynamicLoading || (!reset && !dynamicHasMore)) return
+        if (reset) {
+            dynamicHistoryOffset = ""
+            dynamicPage = 1
+            dynamicHasMore = true
+            loadedDynamicIds.clear()
+            dynamicsAdapter.submit(emptyList())
+        }
+        dynamicLoading = true
+        val requestOffset = dynamicHistoryOffset
+        val requestPage = dynamicPage
+        val status = findViewById<TextView>(R.id.space_dynamics_status)
+        status.text = if (reset) "正在加载 UP 主动态…" else "正在加载更多动态…"
+        status.setOnClickListener { loadSpaceDynamics(mid, reset = true) }
+        status.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val page = withContext(Dispatchers.IO) {
+                    BilimiaoApiBridge.userDynamics(mid, requestOffset, requestPage)
+                }
+                val fresh = page.items.filter { it.id.isNotBlank() && loadedDynamicIds.add(it.id) }
+                dynamicsAdapter.submit(fresh, append = !reset)
+                dynamicHistoryOffset = page.offset
+                dynamicPage = requestPage + 1
+                dynamicHasMore = page.hasMore && fresh.isNotEmpty()
+                status.text = when {
+                    loadedDynamicIds.isEmpty() -> "这个 UP 主还没有公开动态"
+                    dynamicHasMore -> "已加载 ${loadedDynamicIds.size} 条动态 · 继续下滑"
+                    else -> "已加载全部 ${loadedDynamicIds.size} 条动态"
+                }
+                status.setOnClickListener(null)
+            } catch (error: Exception) {
+                status.text = (error.message ?: "动态加载失败") + " · 点击重试"
+                status.setOnClickListener { loadSpaceDynamics(mid, reset = true) }
+                dynamicHasMore = false
+            } finally {
+                dynamicLoading = false
+            }
+        }
+    }
+
+    private fun openSpaceDynamic(item: BiliDynamicItem) {
+        when {
+            item.episodeId > 0L -> startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                putExtra(VideoPlayerActivity.EXTRA_EP_ID, item.episodeId)
+                putExtra(VideoPlayerActivity.EXTRA_SEASON_ID, item.seasonId)
+                putExtra(VideoPlayerActivity.EXTRA_TITLE, item.title)
+                putExtra(VideoPlayerActivity.EXTRA_COVER, item.cover)
+                putExtra(VideoPlayerActivity.EXTRA_AUTHOR, item.ownerName)
+            })
+            item.aid > 0L || item.bvid.isNotBlank() -> startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                putExtra(VideoPlayerActivity.EXTRA_AID, item.aid)
+                putExtra(VideoPlayerActivity.EXTRA_BVID, item.bvid)
+                putExtra(VideoPlayerActivity.EXTRA_TITLE, item.title)
+                putExtra(VideoPlayerActivity.EXTRA_COVER, item.cover)
+                putExtra(VideoPlayerActivity.EXTRA_AUTHOR, item.ownerName)
+            })
+            item.url.isNotBlank() -> openSpaceUrl(item.url)
+            else -> Unit
+        }
+    }
+
+    private fun openSpaceDynamicUser(mid: Long) {
+        if (mid > 0L) startActivity(Intent(this, UserSpaceActivity::class.java)
+            .putExtra(EXTRA_MID, mid))
+    }
+
+    private fun toggleSpaceDynamicLike(item: BiliDynamicItem) {
+        if (dynamicLikeJobs.contains(item.id)) return
+        val activeCookie = BiliSession.cookie(this)
+        if (activeCookie.isBlank()) {
+            findViewById<TextView>(R.id.space_dynamics_status).apply {
+                text = "动态点赞需要先使用 B站 APP 扫码登录"
+                setOnClickListener { startActivity(Intent(this@UserSpaceActivity, QrLoginActivity::class.java)) }
+            }
+            return
+        }
+        dynamicLikeJobs += item.id
+        val next = !item.liked
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { BiliDynamicApi.toggleLike(activeCookie, item.id, next) }
+                dynamicsAdapter.updateLike(item.id, next)
+            } catch (error: Exception) {
+                findViewById<TextView>(R.id.space_dynamics_status).text =
+                    error.message ?: "动态点赞失败"
+            } finally {
+                dynamicLikeJobs.remove(item.id)
+            }
+        }
+    }
+
+    private fun openSpaceDynamicReplies(item: BiliDynamicItem) {
+        startActivity(Intent(this, DynamicCommentsActivity::class.java).apply {
+            putExtra(DynamicCommentsActivity.EXTRA_DYNAMIC_ID, item.id)
+            putExtra(DynamicCommentsActivity.EXTRA_TITLE, item.title)
+            putExtra(DynamicCommentsActivity.EXTRA_TEXT, item.text)
+            putExtra(DynamicCommentsActivity.EXTRA_AUTHOR, item.ownerName)
+            putExtra(DynamicCommentsActivity.EXTRA_OWNER_MID, item.ownerMid)
+            putExtra(DynamicCommentsActivity.EXTRA_FACE, item.ownerFace)
+            putExtra(DynamicCommentsActivity.EXTRA_COVER, item.cover)
+        })
+    }
+
+    private fun shareSpaceDynamic(item: BiliDynamicItem) {
+        val url = item.url.ifBlank { "https://t.bilibili.com/${item.id}" }
+        val content = buildString {
+            if (item.text.isNotBlank()) append(item.text.take(160)).append("\n")
+            if (item.title.isNotBlank()) append(item.title).append("\n")
+            append(url)
+        }
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, content)
+        }, "分享动态"))
+    }
+
+    private fun openSpaceUrl(url: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        }.onFailure {
+            findViewById<TextView>(R.id.space_dynamics_status).text = "无法打开动态链接"
+        }
+    }
+
     private fun videoSortLabel(): String =
         if (videoSortOrder == "pubdate") "最新发布 ▾" else "最多播放 ▾"
 
@@ -382,6 +570,9 @@ class UserSpaceActivity : AppCompatActivity() {
             videosPage = 0
             loadedVideoKeys.clear()
             videosAdapter.submitList(emptyList())
+            creatorVideos.clear()
+            homeVideosAdapter.submitList(emptyList())
+            findViewById<TextView>(R.id.space_home_status).text = "正在加载最近投稿…"
         }
         videosLoading = true
         val status = findViewById<TextView>(R.id.space_video_status)
@@ -418,6 +609,12 @@ class UserSpaceActivity : AppCompatActivity() {
                     key.isNotBlank() && loadedVideoKeys.add(key)
                 }
                 videosAdapter.appendList(fresh)
+                creatorVideos.addAll(fresh)
+                homeVideosAdapter.submitList(creatorVideos.take(3))
+                findViewById<TextView>(R.id.space_home_status).text = when {
+                    creatorVideos.isEmpty() -> "这个 UP 主还没有公开投稿"
+                    else -> "最近更新 ${creatorVideos.size.coerceAtMost(3)} 个视频"
+                }
                 if (fresh.isNotEmpty()) {
                     nextVideoAid = fresh.last().aid
                     videosPage = page

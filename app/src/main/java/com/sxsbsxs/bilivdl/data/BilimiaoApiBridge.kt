@@ -5,6 +5,12 @@ import com.a10miaomiao.bilimiao.comm.apis.VideoAPI
 import com.a10miaomiao.bilimiao.comm.apis.UserApi
 import com.a10miaomiao.bilimiao.comm.network.MiaoHttp
 import org.json.JSONObject
+import bilibili.app.dynamic.v2.DynamicGRPC
+import bilibili.app.dynamic.v2.DynSpaceReq
+import bilibili.app.dynamic.v2.DynamicItem
+import bilibili.app.dynamic.v2.Module
+import bilibili.app.dynamic.v2.ModuleDynamic
+import com.a10miaomiao.bilimiao.comm.network.BiliGRPCHttp
 
 /**
  * Routes BiliVdl's existing screens through the imported bilimiao API client.
@@ -38,6 +44,106 @@ object BilimiaoApiBridge {
      * Creator profile and archive pages routed through bilimiao2's maintained API client.
      * Raw JSON is returned so the Android UI can tolerate Bilibili response schema changes.
      */
+    /**
+     * 公共 UP 主空间动态，使用 bilimiao2 与 B站 APP 相同的 gRPC 接口。
+     * 不要求登录 Cookie；公开动态在游客状态下也可读取。
+     */
+    suspend fun userDynamics(
+        mid: Long,
+        historyOffset: String = "",
+        page: Int = 1
+    ): BiliDynamicPage {
+        require(mid > 0L) { "UP主 UID 无效" }
+        val request = DynSpaceReq(
+            hostUid = mid,
+            historyOffset = historyOffset,
+            localTime = 8,
+            page = page.coerceAtLeast(1).toLong(),
+            from = "space"
+        )
+        val response = BiliGRPCHttp.request {
+            DynamicGRPC.dynSpace(request)
+        }.awaitCall()
+        return BiliDynamicPage(
+            items = response.list.mapNotNull(::parseSpaceDynamic),
+            offset = response.historyOffset,
+            updateBaseline = "",
+            hasMore = response.hasMore
+        )
+    }
+
+    private fun parseSpaceDynamic(item: DynamicItem): BiliDynamicItem? {
+        var authorModule: bilibili.app.dynamic.v2.ModuleAuthor? = null
+        var description = ""
+        var dynamicModule: ModuleDynamic? = null
+        var statModule: bilibili.app.dynamic.v2.ModuleStat? = null
+        item.modules.forEach { module ->
+            when (val part = module.moduleItem) {
+                is Module.ModuleItem.ModuleAuthor -> authorModule = part.value
+                is Module.ModuleItem.ModuleDesc -> description = part.value.text
+                is Module.ModuleItem.ModuleDynamic -> dynamicModule = part.value
+                is Module.ModuleItem.ModuleStat -> statModule = part.value
+                else -> Unit
+            }
+        }
+        val author = authorModule?.author
+        val payload = dynamicModule?.moduleItem
+        val archive = (payload as? ModuleDynamic.ModuleItem.DynArchive)?.value
+        val pgc = (payload as? ModuleDynamic.ModuleItem.DynPgc)?.value
+        val draw = (payload as? ModuleDynamic.ModuleItem.DynDraw)?.value
+        val article = (payload as? ModuleDynamic.ModuleItem.DynArticle)?.value
+
+        val aid = archive?.avid?.takeIf { it > 0L }
+            ?: pgc?.aid?.takeIf { it > 0L }
+            ?: 0L
+        val bvid = archive?.bvid.orEmpty()
+        val episodeId = pgc?.epid ?: 0L
+        val seasonId = pgc?.seasonId ?: 0L
+        val title = archive?.title.orEmpty().ifBlank {
+            pgc?.title.orEmpty().ifBlank { article?.title.orEmpty() }
+        }
+        val cover = archive?.cover.orEmpty().ifBlank {
+            pgc?.cover.orEmpty().ifBlank { draw?.items?.firstOrNull()?.src.orEmpty() }
+        }.let { value -> if (value.startsWith("//")) "https:$value" else value }
+        val images = buildList {
+            draw?.items?.mapNotNull { it.src.takeIf(String::isNotBlank) }?.let(::addAll)
+            article?.covers?.filter(String::isNotBlank)?.let(::addAll)
+        }.map { if (it.startsWith("//")) "https:$it" else it }.distinct().take(9)
+        val extend = item.extend
+        val id = extend?.dynIdStr.orEmpty().ifBlank { extend?.businessId.orEmpty() }
+        if (id.isBlank()) return null
+        val url = extend?.cardUrl.orEmpty().ifBlank {
+            when {
+                bvid.isNotBlank() -> "https://www.bilibili.com/video/$bvid"
+                episodeId > 0L -> "https://www.bilibili.com/bangumi/play/ep$episodeId"
+                else -> "https://t.bilibili.com/$id"
+            }
+        }
+        val stats = statModule
+        return BiliDynamicItem(
+            id = id,
+            type = item.cardType.toString(),
+            ownerMid = author?.mid?.takeIf { it > 0L } ?: authorModule?.mid ?: 0L,
+            ownerName = author?.name.orEmpty().ifBlank { "B站用户" },
+            ownerFace = author?.face.orEmpty().let { if (it.startsWith("//")) "https:$it" else it },
+            timeLabel = authorModule?.ptimeLabelText.orEmpty(),
+            text = description,
+            title = title,
+            cover = cover,
+            images = if (images.isEmpty() && cover.isNotBlank()) listOf(cover) else images,
+            aid = aid,
+            bvid = bvid,
+            episodeId = episodeId,
+            seasonId = seasonId,
+            url = url,
+            repostCount = stats?.repost ?: 0L,
+            replyCount = stats?.reply ?: 0L,
+            likeCount = stats?.like ?: 0L,
+            liked = stats?.likeInfo?.isLike == true,
+            pinned = authorModule?.isTop == true
+        )
+    }
+
     suspend fun userSpace(mid: Long): JSONObject {
         require(mid > 0L) { "UP主 UID 无效" }
         return execute(userApi.space(mid.toString()))
