@@ -182,7 +182,25 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeSearchSubmit.isEnabled = false
         searchJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
-                if (bangumiSearchMode) {
+                val episodeId = Regex("(?i)EP\\s*(\\d+)").find(keyword)?.groupValues?.getOrNull(1)?.toLongOrNull()
+                val seasonId = Regex("(?i)SS\\s*(\\d+)").find(keyword)?.groupValues?.getOrNull(1)?.toLongOrNull()
+                if (episodeId != null && episodeId > 0L) {
+                    val episode = withContext(Dispatchers.IO) { BangumiApiBridge.episode(episodeId) }
+                    b.homeSearchStatus.visibility = View.GONE
+                    startActivity(Intent(requireContext(), VideoPlayerActivity::class.java).apply {
+                        putExtra(VideoPlayerActivity.EXTRA_EP_ID, episode.id)
+                        putExtra(VideoPlayerActivity.EXTRA_AID, episode.aid)
+                        putExtra(VideoPlayerActivity.EXTRA_BVID, episode.bvid)
+                        putExtra(VideoPlayerActivity.EXTRA_COVER, episode.cover)
+                        putExtra(VideoPlayerActivity.EXTRA_AUTHOR, "番剧")
+                        putExtra(VideoPlayerActivity.EXTRA_TITLE, listOf(episode.title, episode.longTitle)
+                            .filter { it.isNotBlank() }.joinToString(" · "))
+                    })
+                } else if (seasonId != null && seasonId > 0L) {
+                    val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(seasonId) }
+                    if (season.episodes.isEmpty()) error("该番剧暂时没有可用剧集")
+                    openBangumiFromHome(BangumiSearchResult(season.seasonId, season.title, season.cover, season.description))
+                } else if (bangumiSearchMode) {
                     val result = withContext(Dispatchers.IO) { BangumiApiBridge.search(keyword) }
                     if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关番剧"
                     else {
