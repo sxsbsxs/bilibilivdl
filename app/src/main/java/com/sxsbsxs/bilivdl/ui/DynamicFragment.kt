@@ -217,22 +217,14 @@ class DynamicFragment : Fragment(R.layout.fragment_dynamic) {
     }
 
     private fun openReplies(item: BiliDynamicItem) {
-        when {
-            item.aid > 0L || item.bvid.isNotBlank() || item.episodeId > 0L -> {
-                val intent = Intent(requireContext(), VideoPlayerActivity::class.java).apply {
-                    putExtra(VideoPlayerActivity.EXTRA_AID, item.aid)
-                    putExtra(VideoPlayerActivity.EXTRA_BVID, item.bvid)
-                    putExtra(VideoPlayerActivity.EXTRA_EP_ID, item.episodeId)
-                    putExtra(VideoPlayerActivity.EXTRA_SEASON_ID, item.seasonId)
-                    putExtra(VideoPlayerActivity.EXTRA_TITLE, item.title)
-                    putExtra(VideoPlayerActivity.EXTRA_COVER, item.cover)
-                    putExtra(VideoPlayerActivity.EXTRA_AUTHOR, item.ownerName)
-                    putExtra(VideoPlayerActivity.EXTRA_OPEN_COMMENTS, true)
-                }
-                startActivity(intent)
-            }
-            item.url.isNotBlank() -> openUrl(item.url)
-        }
+        startActivity(Intent(requireContext(), DynamicCommentsActivity::class.java).apply {
+            putExtra(DynamicCommentsActivity.EXTRA_DYNAMIC_ID, item.id)
+            putExtra(DynamicCommentsActivity.EXTRA_TITLE, item.title)
+            putExtra(DynamicCommentsActivity.EXTRA_TEXT, item.text)
+            putExtra(DynamicCommentsActivity.EXTRA_AUTHOR, item.ownerName)
+            putExtra(DynamicCommentsActivity.EXTRA_FACE, item.ownerFace)
+            putExtra(DynamicCommentsActivity.EXTRA_COVER, item.cover)
+        })
     }
 
     private fun openUser(mid: Long) {

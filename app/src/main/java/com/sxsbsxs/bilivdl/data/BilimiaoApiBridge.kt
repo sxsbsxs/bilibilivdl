@@ -106,8 +106,8 @@ object BilimiaoApiBridge {
         execute(videoApi.triple(aid.toString()))
     }
 
-    suspend fun commentsPage(aid: Long, page: Int, sort: Int): CommentPage {
-        val root = execute(commentApi.mainList(aid.toString(), sort, 1, page, 20))
+    suspend fun commentsPage(aid: Long, page: Int, sort: Int, type: Int = 1): CommentPage {
+        val root = execute(commentApi.mainList(aid.toString(), sort, type, page, 20))
         val data = root.optJSONObject("data") ?: return CommentPage(emptyList(), false, 0)
         val replies = data.optJSONArray("replies")
         val result = ArrayList<VideoComment>()
@@ -149,8 +149,8 @@ object BilimiaoApiBridge {
         return CommentPage(result, hasMore, total)
     }
 
-    suspend fun replies(aid: Long, rootId: Long, page: Int = 1): CommentPage {
-        val root = execute(commentApi.replyList(aid.toString(), rootId.toString(), 1, page.coerceAtLeast(1), 20))
+    suspend fun replies(aid: Long, rootId: Long, page: Int = 1, type: Int = 1): CommentPage {
+        val root = execute(commentApi.replyList(aid.toString(), rootId.toString(), type, page.coerceAtLeast(1), 20))
         val data = root.optJSONObject("data") ?: return CommentPage(emptyList(), false, 0)
         val replies = data.optJSONArray("replies")
         val result = ArrayList<VideoComment>()
@@ -184,18 +184,18 @@ object BilimiaoApiBridge {
         return CommentPage(result, hasMore, total)
     }
 
-    suspend fun sendReply(aid: Long, rootId: Long, parentId: Long, message: String): String {
+    suspend fun sendReply(aid: Long, rootId: Long, parentId: Long, message: String, type: Int = 1): String {
         require(message.isNotBlank()) { "回复内容不能为空" }
-        val root = execute(commentApi.add(message.trim(), 1, aid.toString(), rootId.toString(), parentId.toString()))
+        val root = execute(commentApi.add(message.trim(), type, aid.toString(), rootId.toString(), parentId.toString()))
         return root.optString("message").ifBlank { "回复发送成功" }
     }
-    suspend fun likeComment(aid: Long, rpid: Long, liked: Boolean): String {
-        val root = execute(commentApi.action(1, aid.toString(), rpid.toString(), if (liked) 1 else 0))
+    suspend fun likeComment(aid: Long, rpid: Long, liked: Boolean, type: Int = 1): String {
+        val root = execute(commentApi.action(type, aid.toString(), rpid.toString(), if (liked) 1 else 0))
         return root.optString("message").ifBlank { "评论点赞操作成功" }
     }
 
-    suspend fun sendComment(aid: Long, message: String): String {
-        val root = execute(commentApi.add(message, 1, aid.toString()))
+    suspend fun sendComment(aid: Long, message: String, type: Int = 1): String {
+        val root = execute(commentApi.add(message, type, aid.toString()))
         return root.optString("message").ifBlank { "评论发送成功" }
     }
 
@@ -215,9 +215,9 @@ object BilimiaoApiBridge {
         execute(videoApi.favoriteDeal(aid.toString(), listOf(folderId), emptyList()))
     }
     
-    suspend fun deleteComment(aid: Long, rpid: Long): String {
+    suspend fun deleteComment(aid: Long, rpid: Long, type: Int = 1): String {
         require(aid > 0L && rpid > 0L) { "评论编号无效" }
-        val root = execute(commentApi.del(1, aid.toString(), rpid.toString()))
+        val root = execute(commentApi.del(type, aid.toString(), rpid.toString()))
         return root.optString("message").ifBlank { "评论已删除" }
     }
 }
