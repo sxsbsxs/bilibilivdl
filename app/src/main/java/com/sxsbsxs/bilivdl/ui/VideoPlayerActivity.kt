@@ -253,15 +253,30 @@ class VideoPlayerActivity : AppCompatActivity() {
         loadComments(true)
     }
 
+    /** Keeps video information and comments in one continuous BiliMiao-style detail page.
+     * The two tabs are navigation anchors rather than mutually exclusive content panels.
+     */
     private fun showDetailTab(showInfo: Boolean) {
-        b.playerInfoPanel.visibility = if (showInfo) View.VISIBLE else View.GONE
-        b.playerCommentsPanel.visibility = if (showInfo) View.GONE else View.VISIBLE
+        b.playerInfoPanel.visibility = View.VISIBLE
+        b.playerCommentsPanel.visibility = View.VISIBLE
         b.playerInfoTab.isSelected = showInfo
         b.playerCommentsTab.isSelected = !showInfo
         b.playerInfoTab.alpha = if (showInfo) 1f else 0.68f
         b.playerCommentsTab.alpha = if (showInfo) 0.68f else 1f
         b.playerInfoTab.setTextColor(getColor(if (showInfo) R.color.brand else R.color.text_secondary))
         b.playerCommentsTab.setTextColor(getColor(if (showInfo) R.color.text_secondary else R.color.brand))
+        if (showInfo) {
+            b.playerScroll.post { b.playerScroll.smoothScrollTo(0, 0) }
+        } else {
+            b.playerCommentsPanel.post {
+                val scrollLocation = IntArray(2)
+                val commentsLocation = IntArray(2)
+                b.playerScroll.getLocationOnScreen(scrollLocation)
+                b.playerCommentsPanel.getLocationOnScreen(commentsLocation)
+                val targetY = b.playerScroll.scrollY + commentsLocation[1] - scrollLocation[1]
+                b.playerScroll.smoothScrollTo(0, targetY.coerceAtLeast(0))
+            }
+        }
     }
 
     private fun loadRelatedVideos() {
