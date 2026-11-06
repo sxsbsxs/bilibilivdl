@@ -185,25 +185,34 @@ object BiliDownloadEngine {
 
     private suspend fun transferOnce(url: String, file: File, headers: Map<String, String>,
         progress: (Long, Long) -> Unit) {
+        // BiliDownload's checkpoint rule: never append bytes across an unverified source.
+        // Hash the complete signed URL so secrets are not written to disk.
         val metaFile = File(file.parentFile, file.name + ".resume.json")
-        val urlKey = URL(url).let { "${it.protocol}://${it.host}${it.path}" }
+        val sourceKey = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(url.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
         val savedMeta = runCatching { JSONObject(metaFile.readText()) }.getOrNull()
+        fun strongEtag(value: String?): String? = value?.takeIf {
+            it.length >= 2 && it.startsWith("\"") && it.endsWith("\"") &&
+                !it.startsWith("W/", ignoreCase = true)
+        }
         var offset = if (file.exists()) file.length() else 0L
-        val hasResumeValidator = !savedMeta?.optString("etag").isNullOrBlank() ||
-            !savedMeta?.optString("lastModified").isNullOrBlank()
-        if (offset > 0L && (!hasResumeValidator || savedMeta?.optString("urlKey") != urlKey)) {
-            RandomAccessFile(file, "rw").use { it.setLength(0) }
+        val savedEtag = strongEtag(savedMeta?.optString("etag"))
+        if (offset > 0L &&
+            (savedMeta?.optString("source") != sourceKey || savedEtag == null)) {
+            RandomAccessFile(file, "rw").use { it.setLength(0L) }
             metaFile.delete()
             offset = 0L
         }
         val c = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20000; readTimeout = 30000; instanceFollowRedirects = true
-            headers.forEach { (k,v) -> setRequestProperty(k,v) }
+            connectTimeout = 20000
+            readTimeout = 30000
+            instanceFollowRedirects = true
+            headers.forEach { (k, v) -> setRequestProperty(k, v) }
             setRequestProperty("Accept-Encoding", "identity")
-            if (offset > 0) {
+            if (offset > 0L) {
                 setRequestProperty("Range", "bytes=$offset-")
-                savedMeta?.optString("etag")?.takeIf { it.isNotBlank() }?.let { setRequestProperty("If-Range", it) }
-                    ?: savedMeta?.optString("lastModified")?.takeIf { it.isNotBlank() }?.let { setRequestProperty("If-Range", it) }
+                setRequestProperty("If-Range", savedEtag!!)
             }
         }
         // Disconnect the blocking socket immediately when the owning coroutine is cancelled.
@@ -223,21 +232,17 @@ object BiliDownloadEngine {
                 }
             }
             if (code != 200 && code != 206) throw CdnHttpException(code, c.getHeaderField("Retry-After"))
-            val append = offset > 0 && code == 206
+            val append = offset > 0L && code == 206
             var rangeTotal = -1L
             if (append) {
-                val responseEtag = c.getHeaderField("ETag").orEmpty()
-                val responseModified = c.getHeaderField("Last-Modified").orEmpty()
-                val previousEtag = savedMeta?.optString("etag").orEmpty()
-                val previousModified = savedMeta?.optString("lastModified").orEmpty()
-                if ((previousEtag.isNotBlank() && responseEtag != previousEtag) ||
-                    (previousEtag.isBlank() && previousModified.isNotBlank() && responseModified != previousModified) ||
-                    (previousEtag.isBlank() && previousModified.isBlank())) {
-                    RandomAccessFile(file, "rw").use { it.setLength(0) }
+                val responseEtag = strongEtag(c.getHeaderField("ETag"))
+                if (responseEtag == null || responseEtag != savedEtag) {
+                    RandomAccessFile(file, "rw").use { it.setLength(0L) }
                     metaFile.delete()
-                    error("资源校验标识发生变化，已清除旧分段并准备重新下载")
+                    error("CDN 未提供匹配的强 ETag，已清除旧分段以防止文件损坏")
                 }
-                val range = Regex("bytes (\\d+)-(\\d+)/(\\d+|\\*)").matchEntire(c.getHeaderField("Content-Range").orEmpty())
+                val range = Regex("bytes (\\d+)-(\\d+)/(\\d+|\\*)")
+                    .matchEntire(c.getHeaderField("Content-Range").orEmpty())
                 val rangeStart = range?.groupValues?.get(1)?.toLongOrNull()
                 val rangeEnd = range?.groupValues?.get(2)?.toLongOrNull()
                 rangeTotal = range?.groupValues?.get(3)?.takeIf { it != "*" }?.toLongOrNull() ?: -1L
@@ -246,20 +251,24 @@ object BiliDownloadEngine {
                 if (rangeStart != offset || rangeEnd == null || rangeEnd < offset ||
                     (rangeTotal >= 0L && rangeEnd >= rangeTotal) ||
                     (length >= 0L && rangeLength != length)) {
-                    RandomAccessFile(file,"rw").use { it.setLength(0) }
+                    RandomAccessFile(file, "rw").use { it.setLength(0L) }
+                    metaFile.delete()
                     error("服务器返回的续传范围与本地文件不匹配，已清除不可信临时片段")
                 }
             }
             val start = if (append) offset else 0L
+            val responseEtag = strongEtag(c.getHeaderField("ETag"))
             val len = c.getHeaderFieldLong("Content-Length", -1L)
-            val total = if (rangeTotal > 0L) rangeTotal else if (len >= 0) start + len else -1L
-            JSONObject().put("urlKey", urlKey)
-                .put("etag", c.getHeaderField("ETag").orEmpty())
-                .put("lastModified", c.getHeaderField("Last-Modified").orEmpty())
-                .put("total", total).put("savedAt", System.currentTimeMillis())
+            val total = if (rangeTotal > 0L) rangeTotal else if (len >= 0L) start + len else -1L
+            // Metadata is written before body bytes. Weak/missing ETags intentionally disable
+            // future append; a later retry safely restarts instead of joining unrelated CDN data.
+            JSONObject().put("source", sourceKey)
+                .put("etag", responseEtag ?: "")
+                .put("total", total)
+                .put("savedAt", System.currentTimeMillis())
                 .let { metaFile.writeText(it.toString()) }
-            RandomAccessFile(file,"rw").use { out ->
-                if (!append) out.setLength(0)
+            RandomAccessFile(file, "rw").use { out ->
+                if (!append) out.setLength(0L)
                 out.seek(start)
                 var done = start
                 val input = c.inputStream
@@ -268,14 +277,19 @@ object BiliDownloadEngine {
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     val n = input.read(buffer)
                     if (n < 0) break
-                    out.write(buffer,0,n); done += n; progress(done,total)
+                    out.write(buffer, 0, n)
+                    done += n
+                    progress(done, total)
                 }
-                if (done == 0L || (total >= 0 && done != total)) error("资源长度校验失败：$done/$total")
+                if (done == 0L || (total >= 0L && done != total)) {
+                    error("资源长度校验失败：$done/$total")
+                }
                 metaFile.delete()
             }
-        } finally { c.disconnect() }
+        } finally {
+            c.disconnect()
+        }
     }
-
 
 
     /**
