@@ -39,7 +39,7 @@ object BilimiaoDeepLinks {
     /**
      * 所有声明式深链接 matcher。顺序不重要，首个匹配生效。
      */
-    val matchers: List<DeepLinkMatcher<out NavKey>> = listOf(
+    val matchers: List<DeepLinkMatcher<*, *>> = listOf(
         // 视频
         UriDeepLinkMatcher(
             uriPattern = DeepLinkUri("bilimiao://video/{id}"),
@@ -150,9 +150,9 @@ object BilimiaoDeepLinks {
      * 复杂规则（BV/av/ss/ep/md 号）不在此处理，由 [BilibiliNavigation.resolveUri] fallback。
      */
     fun match(url: String): NavKey? {
-        val request = DeepLinkRequest.fromUriString(url)
+        val request = DeepLinkRequest(uri = url)
         return matchers.firstNotNullOfOrNull { matcher ->
-            matcher.match(request)?.key
+            matcher.match(request)?.key as? NavKey
         }
     }
 }

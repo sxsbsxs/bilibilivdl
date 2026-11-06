@@ -9,11 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
-import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -91,7 +89,7 @@ internal fun rememberAutoSheetDialogState(): AutoSheetDialogState =
  * @param onPreDismiss 关闭前的拦截回调，返回 true 表示已被调用方消费（例如先收起表情面板、
  *                     先回退弹层内部页面栈），此时弹层保持打开
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AutoSheetDialog(
     modifier: Modifier = Modifier,
@@ -107,30 +105,6 @@ internal fun AutoSheetDialog(
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     // 控制器请求的关闭：调用方已明确要关，直接放行，不再询问 onPreDismiss
     var forceClosing by remember { mutableStateOf(false) }
-
-    // 只替换收起动画用的 fastEffectsSpec，其余动效沿用应用主题
-    val contentMotionScheme = MaterialTheme.motionScheme
-    val sheetMotionScheme = remember(contentMotionScheme) {
-        object : MotionScheme {
-            override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> =
-                contentMotionScheme.defaultSpatialSpec()
-
-            override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> =
-                contentMotionScheme.fastSpatialSpec()
-
-            override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> =
-                contentMotionScheme.slowSpatialSpec()
-
-            override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> =
-                contentMotionScheme.defaultEffectsSpec()
-
-            override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> =
-                contentMotionScheme.defaultSpatialSpec()
-
-            override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> =
-                contentMotionScheme.slowEffectsSpec()
-        }
-    }
 
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
@@ -160,8 +134,7 @@ internal fun AutoSheetDialog(
         }
     }
 
-    MaterialTheme(motionScheme = sheetMotionScheme) {
-        ModalBottomSheet(
+    ModalBottomSheet(
             // 关闭动画结束（弹层已移除）后由官方组件回调
             onDismissRequest = onDismiss,
             sheetState = sheetState,
@@ -189,20 +162,16 @@ internal fun AutoSheetDialog(
             // BackHandler 必须放在弹层内容里（即 Dialog 内部），这样才会先于弹层自身的返回处理被调用
             BackHandler { requestDismiss() }
 
-            // 弹层内容恢复应用自身的动效曲线
-            MaterialTheme(motionScheme = contentMotionScheme) {
-                if (isCompact) {
-                    SheetContentAtBottom(modifier = modifier, content = content)
-                } else {
-                    SheetContentAtCenter(
-                        modifier = modifier,
-                        requestDismiss = requestDismiss,
-                        content = content,
-                    )
-                }
+            if (isCompact) {
+                SheetContentAtBottom(modifier = modifier, content = content)
+            } else {
+                SheetContentAtCenter(
+                    modifier = modifier,
+                    requestDismiss = requestDismiss,
+                    content = content,
+                )
             }
         }
-    }
 }
 
 /**
