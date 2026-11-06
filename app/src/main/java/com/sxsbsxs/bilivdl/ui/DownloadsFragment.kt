@@ -56,15 +56,16 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     private fun refreshTasks(tasks: List<DownloadTaskEntity>) {
         b.downloadTaskControls.removeAllViews()
         if (tasks.isEmpty()) {
-            b.downloadSummary.text = "还没有下载记录"
-            b.downloadTasks.text = "打开视频，点击下载即可添加任务"
+            b.downloadSummary.text = ""
+            b.downloadTasks.visibility = View.VISIBLE
+            b.downloadTasks.text = "暂无下载任务"
             return
         }
         val active = tasks.count { it.status == "queued" || it.status == "downloading" || it.status == "paused" }
         val completed = tasks.count { it.status == "completed" }
         val failed = tasks.count { it.status == "failed" }
         b.downloadSummary.text = "全部 " + tasks.size + "    下载中 " + active + "    已完成 " + completed + "    失败 " + failed
-        b.downloadTasks.text = "点击已完成的文件可查看详情、播放、分享或删除；其他任务可管理下载状态。"
+        b.downloadTasks.visibility = View.GONE
         addBatchControls(tasks)
         tasks.forEach { addTaskCard(it) }
     }
@@ -85,6 +86,11 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 isAllCaps = false
                 isEnabled = enabled
                 minHeight = dp(40)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
+                strokeWidth = 0
+                elevation = 0f
+                setTextColor(context.getColor(R.color.brand))
+                textSize = 12f
                 setOnClickListener { action() }
                 layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f).apply {
                     marginEnd = dp(5)
@@ -152,14 +158,15 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         details.addView(TextView(context).apply {
             text = task.title
             textSize = 14f
-            maxLines = 3
+            includeFontPadding = false
+            maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
             setTextColor(context.getColor(R.color.text_primary))
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         })
         details.addView(TextView(context).apply {
             text = listOf(task.author.ifBlank { "哔哩哔哩视频" }, task.quality.ifBlank { "视频" }).joinToString(" · ")
-            textSize = 11f
+            textSize = 12f
             maxLines = 1
             setPadding(0, dp(5), 0, 0)
             setTextColor(context.getColor(R.color.text_secondary))
@@ -169,6 +176,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         card.addView(TextView(context).apply {
             text = statusText(task)
             textSize = 12f
+            includeFontPadding = false
             setPadding(0, dp(8), 0, dp(7))
             setTextColor(context.getColor(R.color.text_secondary))
         })
@@ -190,6 +198,11 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 text = label
                 isAllCaps = false
                 minHeight = dp(38)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
+                strokeWidth = 0
+                elevation = 0f
+                setTextColor(context.getColor(R.color.brand))
+                textSize = 12f
                 setOnClickListener { click() }
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)
