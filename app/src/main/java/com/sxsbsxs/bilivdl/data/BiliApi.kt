@@ -6,9 +6,11 @@ import java.net.URLEncoder
 import java.net.URL
 
 object BiliApi {
-    fun searchVideos(keyword: String): List<BiliVideo> {
+    fun searchVideos(keyword: String, page: Int = 1, pageSize: Int = 20): List<BiliVideo> {
         val encoded = URLEncoder.encode(keyword, "UTF-8")
-        val url = URL("https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=$encoded&page=1")
+        val safePage = page.coerceAtLeast(1)
+        val safePageSize = pageSize.coerceIn(1, 50)
+        val url = URL("https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=$encoded&page=$safePage&page_size=$safePageSize")
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 12000
@@ -18,7 +20,9 @@ object BiliApi {
             setRequestProperty("Accept", "application/json")
         }
         try {
-            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            val response = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+            val body = response?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (body.isBlank()) throw IllegalStateException("搜索接口没有返回内容（HTTP ${connection.responseCode}）")
             val root = JSONObject(body)
             if (root.optInt("code", -1) != 0) {
                 throw IllegalStateException(root.optString("message", "搜索接口暂不可用"))
