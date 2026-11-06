@@ -540,6 +540,9 @@ object BiliPlaybackApi {
             fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
             val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
             val audioUrl = audio?.let { primary(it).ifBlank { it.optJSONArray("backupUrl")?.optString(0).orEmpty() } }
+            fun backupUrls(item: JSONObject): List<String> =
+                (0 until (item.optJSONArray("backupUrl")?.length() ?: 0))
+                    .mapNotNull { index -> item.optJSONArray("backupUrl")?.optString(index)?.takeIf { it.isNotBlank() } }
             if (videoUrl.isBlank() || audioUrl.isNullOrBlank()) return null
             // accept_quality 是能力声明/排序提示，不是 DASH 实际轨道清单。
             // 以 dash.video 中真实存在的 id 为准，避免 accept_quality 缺项时把高画质过滤掉。
@@ -552,6 +555,8 @@ object BiliPlaybackApi {
                 labelsById[actual] ?: qualityLabel(actual),
                 realQualities.ifEmpty { listOf(actual to qualityLabel(actual)) },
                 isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl,
+                videoBackupUrls = backupUrls(video).filterNot { it == videoUrl },
+                audioBackupUrls = audio?.let(::backupUrls).orEmpty().filterNot { it == audioUrl },
                 restrictedQualities = restricted)
         }
         val durl = data.optJSONArray("durl") ?: return null
