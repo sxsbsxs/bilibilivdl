@@ -5,13 +5,13 @@
     android:background="@color/background_dark"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="28dp">
     <TextView
         android:id="@+id/page_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="@color/text_primary"
-        android:textSize="22sp"
+        android:textSize="23sp"
         android:textStyle="bold"/>
     <TextView
         android:id="@+id/page_description"
