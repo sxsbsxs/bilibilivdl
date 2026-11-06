@@ -799,22 +799,28 @@ class VideoPlayerActivity : AppCompatActivity() {
                 if (cookie.isBlank()) error("评论点赞需要先使用 B站 APP 扫码登录")
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.likeComment(aid, comment.id, !comment.liked) }
                 (b.commentsList.adapter as CommentAdapter).updateLike(comment.id, !comment.liked)
-                b.commentsStatus.text = result
-            } catch (e: Exception) { b.commentsStatus.text = e.message ?: "点赞失败" }
+                b.commentsStatus.visibility = View.GONE
+            } catch (e: Exception) {
+                b.commentsStatus.visibility = View.VISIBLE
+                b.commentsStatus.text = e.message ?: "点赞失败"
+            }
         }
     }
 
     private fun sendComment() {
         val text = b.commentInput.text?.toString()?.trim().orEmpty()
-        if (text.isBlank()) { b.commentsStatus.text = "先输入评论内容"; return }
+        if (text.isBlank()) { b.commentsStatus.visibility = View.VISIBLE; b.commentsStatus.text = "先输入评论内容"; return }
         lifecycleScope.launch {
             try {
                 if (cookie.isBlank()) error("发表评论需要先使用 B站 APP 扫码登录")
                 val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.sendComment(aid, text) }
                 b.commentInput.text?.clear()
-                b.commentsStatus.text = result
+                b.commentsStatus.visibility = View.GONE
                 resetComments()
-            } catch (e: Exception) { b.commentsStatus.text = e.message ?: "发送失败" }
+            } catch (e: Exception) {
+                b.commentsStatus.visibility = View.VISIBLE
+                b.commentsStatus.text = e.message ?: "发送失败"
+            }
         }
     }
 
