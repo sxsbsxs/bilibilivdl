@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/background_dark">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="52dp"
+        android:gravity="center_vertical" android:paddingHorizontal="16dp">
+        <TextView android:id="@+id/login_back" android:layout_width="48dp"
+            android:layout_height="match_parent" android:gravity="center" android:text="返回"
+            android:textColor="@color/text_primary" android:textSize="14sp"
+            android:background="?attr/selectableItemBackgroundBorderless" android:clickable="true" android:focusable="true"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="哔哩哔哩网页登录" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold"/>
+    </LinearLayout>
+    <ProgressBar android:id="@+id/login_progress" style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent" android:layout_height="3dp" android:max="100"/>
+    <TextView android:id="@+id/login_status" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp" android:paddingVertical="8dp"
+        android:text="请在哔哩哔哩官方页面完成登录" android:textColor="@color/text_secondary" android:textSize="12sp"/>
+    <WebView android:id="@+id/login_web" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1"/>
+</LinearLayout>
