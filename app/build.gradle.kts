@@ -1,4 +1,5 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose"); id("com.chaquo.python"); alias(libs.plugins.ksp) }
+// Compose-first UI shell; business logic remains in the existing Kotlin layers.
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
  defaultConfig {
