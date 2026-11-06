@@ -261,25 +261,32 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
         }
-        fun action(label: String, click: () -> Unit) {
+        fun action(label: String, primary: Boolean = false, click: () -> Unit) {
             actions.addView(MaterialButton(context).apply {
                 text = label
                 isAllCaps = false
-                minHeight = dp(38)
-                backgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(R.color.brand_soft))
+                minWidth = 0
+                minHeight = dp(30)
+                insetTop = 0
+                insetBottom = 0
+                cornerRadius = dp(16)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    context.getColor(if (primary) R.color.brand else android.R.color.transparent)
+                )
                 strokeWidth = 0
                 elevation = 0f
-                setTextColor(context.getColor(R.color.brand_dark))
-                textSize = 12f
+                setTextColor(context.getColor(if (primary) android.R.color.white else R.color.text_secondary))
+                textSize = 11f
+                setPadding(dp(10), 0, dp(10), 0)
                 setOnClickListener { click() }
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)
-                ).apply { marginStart = dp(6) }
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(32)
+                ).apply { marginStart = dp(4) }
             })
         }
         when (task.status) {
-            "downloading" -> action("暂停") { BiliDownloadService.pause(context, task.taskId) }
-            "paused", "failed", "queued" -> action(if (task.status == "failed") "重试" else "继续") {
+            "downloading" -> action("暂停", primary = true) { BiliDownloadService.pause(context, task.taskId) }
+            "paused", "failed", "queued" -> action(if (task.status == "failed") "重试" else "继续", primary = true) {
                 BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec, task.pageIndex, task.cover, task.author)
             }
         }

@@ -147,6 +147,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         super.onCreate(saved)
         b = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(b.root)
+        b.playerFrame.post { fitPlayerFrame() }
         setupPlayerControls()
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         b.playerAuthor.text = intent.getStringExtra(EXTRA_AUTHOR).orEmpty().ifBlank { "哔哩哔哩视频" }
@@ -808,11 +809,19 @@ class VideoPlayerActivity : AppCompatActivity() {
         } else {
             details.visibility = View.VISIBLE
             content.layoutParams = content.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
-            frame.layoutParams = frame.layoutParams.apply { height = dp(220) }
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            frame.post { frame.post { fitPlayerFrame() } }
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
             findViewById<TextView>(R.id.player_fullscreen).text = "全屏"
+        }
+    }
+
+    private fun fitPlayerFrame() {
+        if (!::b.isInitialized || fullscreen) return
+        val width = b.playerFrame.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        b.playerFrame.layoutParams = b.playerFrame.layoutParams.apply {
+            height = (width * 9f / 16f).toInt().coerceAtLeast(dp(180))
         }
     }
 
