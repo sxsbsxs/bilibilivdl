@@ -40,9 +40,29 @@ jobs:
           gradle-version: '8.13'
       - name: Build Debug APK
         run: gradle --no-daemon clean assembleDebug
+      - name: Verify APK ABI and report package size
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, zipfile
+          apk = "app/build/outputs/apk/debug/app-debug.apk"
+          if not os.path.isfile(apk):
+              raise SystemExit("APK output missing")
+          with zipfile.ZipFile(apk) as archive:
+              abis = sorted({
+                  name.split("/")[1]
+                  for name in archive.namelist()
+                  if name.startswith("lib/") and name.count("/") >= 2
+              })
+          print(f"APK size: {os.path.getsize(apk) / 1024 / 1024:.1f} MiB")
+          print(f"Native ABIs: {', '.join(abis) if abis else 'none'}")
+          unexpected = set(abis) - {"arm64-v8a"}
+          if unexpected:
+              raise SystemExit(f"Unexpected native ABIs found: {sorted(unexpected)}")
+          PY
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BiliVdl-v2.0.4-${{ github.run_number }}-${{ github.sha }}
+          name: BiliVdl-v2.0.5-${{ github.run_number }}-${{ github.sha }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
