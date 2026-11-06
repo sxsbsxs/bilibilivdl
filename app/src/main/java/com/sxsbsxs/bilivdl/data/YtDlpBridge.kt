@@ -10,6 +10,7 @@ import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -28,8 +29,6 @@ object YtDlpBridge {
             "请输入有效的视频网址"
         }
 
-        // Bilibili URLs use the native resolver/downloader so 403 recovery can refresh
-        // playurl through the same application-layer API as ordinary download tasks.
         val biliId = BiliApi.resolveVideoId(url)
         if (biliId != null) {
             val cookieValue = BiliSession.cookie(context)
@@ -54,27 +53,45 @@ object YtDlpBridge {
             context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir,
             "BiliVdl"
         ).apply { mkdirs() }
-        val path = synchronized(pythonRuntimeLock) {
+        val response = synchronized(pythonRuntimeLock) {
             if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
             Python.getInstance().getModule("ytdlp_bridge")
                 .callAttr("download", url, outputDir.absolutePath, cookie).toString()
         }
-        val downloaded = File(path).canonicalFile
+        val payload = JSONObject(response)
         val safeRoot = outputDir.canonicalFile
         val safePrefix = safeRoot.absolutePath.trimEnd(File.separatorChar) + File.separator
-        require(downloaded.absolutePath == safeRoot.absolutePath || downloaded.absolutePath.startsWith(safePrefix)) {
-            "yt-dlp 返回的文件路径超出了应用下载目录"
+        fun safeFile(path: String): File {
+            val file = File(path).canonicalFile
+            require(file.absolutePath.startsWith(safePrefix)) {
+                "yt-dlp 返回的文件路径超出了应用下载目录"
+            }
+            require(file.isFile && file.length() > 0L) {
+                "yt-dlp 没有生成有效的视频文件"
+            }
+            return file
+        }
+
+        val downloaded = if (payload.optString("kind") == "separate") {
+            val video = safeFile(payload.getString("video"))
+            val audio = safeFile(payload.getString("audio"))
+            val stem = video.name.substringBeforeLast(".video", video.nameWithoutExtension)
+            val merged = File(safeRoot, "$stem.mp4")
+            FfmpegMediaProcessor.mergeDashTracks(video, audio, merged)
+            video.delete()
+            audio.delete()
+            merged.canonicalFile
+        } else {
+            safeFile(payload.getString("path"))
         }
         require(downloaded.isFile && downloaded.length() > 0L) {
-            "yt-dlp 没有生成有效的视频文件"
+            "yt-dlp/FFmpeg 没有生成有效的视频文件"
         }
         publish(context.applicationContext, downloaded)
     }
 
     private fun publish(context: Context, file: File): String {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return file.absolutePath
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return file.absolutePath
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
             put(MediaStore.Video.Media.MIME_TYPE, MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "video/mp4")
