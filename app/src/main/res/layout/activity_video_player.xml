@@ -231,69 +231,69 @@
                 android:clickable="true"
                 android:focusable="true" />
 
-            <TextView
-                    android:visibility="gone"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center">
+                <TextView
                     android:id="@+id/share_video_button"
-                    android:layout_marginTop="8dp"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
                     android:gravity="center"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp"
-                    android:text="分享视频链接"
+                    android:drawableTop="@drawable/ic_action_share"
+                    android:drawablePadding="5dp"
+                    android:text="分享"
                     android:textColor="@color/text_primary"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true" />
-
-            <TextView
-                    android:visibility="gone"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
+                <TextView
                     android:id="@+id/part_button"
-                    android:layout_marginTop="8dp"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
                     android:gravity="center"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp"
-                    android:text="选择分P"
+                    android:drawableTop="@drawable/ic_action_part"
+                    android:drawablePadding="5dp"
+                    android:text="分P"
                     android:textColor="@color/text_primary"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true" />
-
-            <TextView
-                    android:visibility="gone"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
+                <TextView
                     android:id="@+id/danmaku_button"
-                    android:layout_marginTop="8dp"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
                     android:gravity="center"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp"
-                    android:text="弹幕：开"
+                    android:drawableTop="@drawable/ic_action_danmaku"
+                    android:drawablePadding="5dp"
+                    android:text="弹幕"
                     android:textColor="@color/text_primary"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true" />
-
-            <TextView
-                    android:visibility="gone"
-                    android:layout_width="match_parent"
-                    android:layout_height="42dp"
+                <TextView
                     android:id="@+id/subtitle_button"
-                    android:layout_marginTop="8dp"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
                     android:gravity="center"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp"
-                    android:text="字幕：关闭"
+                    android:drawableTop="@drawable/ic_action_subtitle"
+                    android:drawablePadding="5dp"
+                    android:text="字幕"
                     android:textColor="@color/text_primary"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true" />
+            </LinearLayout>
 
             <TextView
                 android:layout_width="match_parent"
