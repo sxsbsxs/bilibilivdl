@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,25 +37,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * QR login screen adapted from the Compose QR layout in KafuuNeko/BiliDownload.
- * Upstream source and GPL-3.0 notice are retained in upstream/BiliDownload/.
+ * QR login presentation adapted from KafuuNeko/BiliDownload's QrLoginLayout.
+ * The upstream GPL-3.0 source is retained under upstream/BiliDownload/.
  */
 @Composable
 fun BiliQrLoginScreen(
     qrBitmap: Bitmap?,
+    qrUrl: String?,
     statusMessage: String,
     loading: Boolean,
+    scanned: Boolean,
     onRefresh: () -> Unit,
+    onOpenQrUrl: () -> Unit,
     onBack: () -> Unit
 ) {
     val brand = Color(0xFFFB7299)
+    val ink = Color(0xFF25262B)
+    val muted = Color(0xFF858B96)
     MaterialTheme(
         colorScheme = lightColorScheme(
             primary = brand,
             onPrimary = Color.White,
             background = Color(0xFFF6F7F9),
             surface = Color.White,
-            onSurface = Color(0xFF25262B),
+            onSurface = ink,
             secondaryContainer = Color(0xFFFFF0F4)
         )
     ) {
@@ -71,7 +79,7 @@ fun BiliQrLoginScreen(
             ) {
                 Text(
                     text = "‹",
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = ink,
                     fontSize = 34.sp,
                     modifier = Modifier
                         .clickable(onClick = onBack)
@@ -79,7 +87,7 @@ fun BiliQrLoginScreen(
                 )
                 Text(
                     text = "扫码登录",
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = ink,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -88,35 +96,71 @@ fun BiliQrLoginScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = "哔哩哔哩",
                     color = brand,
-                    fontSize = 28.sp,
+                    fontSize = 27.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(7.dp))
                 Text(
-                    text = "使用 B站 APP 扫描二维码，确认后即可登录",
-                    color = Color(0xFF858B96),
+                    text = "使用哔哩哔哩 APP 扫码，安全授权登录",
+                    color = muted,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(26.dp))
+                Spacer(Modifier.height(22.dp))
 
                 Surface(
-                    modifier = Modifier.size(264.dp),
-                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFFFF0F4)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(34.dp),
+                            shape = CircleShape,
+                            color = brand
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("B", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Column(modifier = Modifier.padding(start = 11.dp)) {
+                            Text(
+                                text = if (scanned) "已检测到扫码" else "打开 B站 APP",
+                                color = ink,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (scanned) "在手机上选择账号并确认授权" else "点击首页右上角扫一扫，扫描下方二维码",
+                                color = muted,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(22.dp))
+                Surface(
+                    modifier = Modifier.size(256.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = Color.White,
                     shadowElevation = 3.dp
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clickable(enabled = qrBitmap != null, onClick = onRefresh)
+                            .clickable(enabled = qrBitmap != null && !loading, onClick = onRefresh)
                             .padding(12.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -126,41 +170,71 @@ fun BiliQrLoginScreen(
                                 contentDescription = "B站登录二维码",
                                 modifier = Modifier.fillMaxSize()
                             )
+                            if (scanned) {
+                                Surface(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = Color.White.copy(alpha = 0.94f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text("✓", color = brand, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+                                        Text("已扫码", color = ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("请在 B站 APP 中确认", color = muted, fontSize = 12.sp)
+                                    }
+                                }
+                            }
                         } else {
-                            CircularProgressIndicator(color = brand)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = brand)
+                                Spacer(Modifier.height(12.dp))
+                                Text("正在获取二维码…", color = muted, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(17.dp))
                 Text(
                     text = statusMessage,
-                    color = Color(0xFF34363C),
+                    color = ink,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(18.dp))
+                if (qrUrl != null) {
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        text = "无法扫码？点此打开登录链接",
+                        color = brand,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable(onClick = onOpenQrUrl)
+                    )
+                }
+                Spacer(Modifier.height(15.dp))
                 Button(
                     onClick = onRefresh,
                     enabled = !loading,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp),
-                    shape = RoundedCornerShape(24.dp),
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = brand,
-                        disabledContainerColor = brand.copy(alpha = 0.45f)
+                        disabledContainerColor = brand.copy(alpha = 0.42f)
                     )
                 ) {
-                    Text(if (loading) "正在获取二维码…" else "刷新二维码", fontSize = 14.sp)
+                    Text(if (loading) "正在获取二维码…" else "重新获取二维码", fontSize = 14.sp)
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(13.dp))
                 Text(
-                    text = "请勿将登录二维码转发给他人",
-                    color = Color(0xFF9296A0),
-                    fontSize = 12.sp
+                    text = "登录成功后将安全保存账号凭据；请勿将二维码转发给他人",
+                    color = muted,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
                 )
             }
         }
