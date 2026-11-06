@@ -255,11 +255,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 duplicatePages = if (added == 0 && result.size >= 20) duplicatePages + 1 else 0
                 hasMore = result.size >= 20 && duplicatePages < 3
                 adapter.submitList(videos.toList())
-                current.homeFeedStatus.text = when {
-                    videos.isEmpty() -> "暂时没有推荐视频 · 下拉重试"
-                    hasMore -> "已加载 ${videos.size} 条 · 下滑继续加载"
-                    else -> "已加载全部推荐 · 下拉刷新换一批"
-                }
+                current.homeFeedStatus.visibility = View.GONE
 
                 // NestedScrollView does not emit a scroll callback when the first
                 // page is shorter than the viewport. Fill the screen by requesting
@@ -273,8 +269,10 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _binding?.homeFeedStatus?.text =
-                    "加载失败：${e.message ?: "网络异常"} · 下拉重试"
+                _binding?.homeFeedStatus?.apply {
+                    text = "推荐暂时无法加载，下拉重试"
+                    visibility = View.VISIBLE
+                }
             } finally {
                 _binding?.let {
                     it.homeProgress.visibility = View.GONE
