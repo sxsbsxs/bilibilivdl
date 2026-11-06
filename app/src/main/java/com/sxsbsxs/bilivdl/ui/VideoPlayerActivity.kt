@@ -1014,7 +1014,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 throw cancelled
             } catch (error: Exception) {
                 b.downloadStatus.visibility = View.VISIBLE
-                b.downloadStatus.text = "读取下载资源失败：\${error.message ?: "网络异常"}"
+                b.downloadStatus.text = "读取下载资源失败：${error.message ?: "网络异常"}"
             }
         }
     }
@@ -1430,7 +1430,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         var selected = choices.first().first
         MaterialAlertDialogBuilder(this)
             .setTitle("批量下载全部分P")
-            .setMessage("共 \${playback.parts.size} 个分P。每个分P将独立加入后台队列，可单独暂停和重试。")
+            .setMessage("共 ${playback.parts.size} 个分P。每个分P将独立加入后台队列，可单独暂停和重试。")
             .setSingleChoiceItems(choices.map { it.second }.toTypedArray(), 0) { _, which ->
                 selected = choices[which].first
             }
@@ -1442,7 +1442,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     if (enqueueDownloadForPart(selected, "", "", part.page - 1, part.title)) added++
                 }
                 b.downloadStatus.visibility = View.VISIBLE
-                b.downloadStatus.text = "已将 \${added}/\${parts.size} 个分P加入下载队列"
+                b.downloadStatus.text = "已将 ${added}/${parts.size} 个分P加入下载队列"
             }
             .show()
     }
