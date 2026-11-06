@@ -151,6 +151,48 @@ object BiliPlaybackApi {
         }
     }
 
+    /**
+     * BiliMiao 使用独立的请求头和官方 playurl 解析器。
+     * 当公开 JSON 线路静默降档时，用它做第二条独立 HTTP 路线核对真实轨道。
+     */
+    private suspend fun tryBilimiaoPlayback(aid: Long, cid: Long, qn: Int): PlaybackInfo? {
+        return runCatching {
+            val data = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
+                .getVideoPalyUrl(aid.toString(), cid.toString(), qn, 4048)
+            val dash = data.dash
+            if (dash != null && dash.video.isNotEmpty()) {
+                val selected = dash.video.filter { it.id > 0 && it.id <= qn }
+                    .maxByOrNull { it.id } ?: dash.video.maxByOrNull { it.bandwidth }
+                    ?: return@runCatching null
+                val audio = dash.audio.orEmpty().maxByOrNull { it.bandwidth }
+                val labels = data.accept_quality.zip(data.accept_description).toMap()
+                val qualities = dash.video.map { it.id }.filter { it > 0 }.distinct()
+                    .sortedDescending().map { it to (labels[it] ?: qualityLabel(it)) }
+                val videoUrl = selected.base_url.ifBlank { selected.backup_url?.firstOrNull().orEmpty() }
+                val audioUrl = audio?.base_url?.ifBlank { audio.backup_url?.firstOrNull().orEmpty() }
+                if (videoUrl.isBlank()) return@runCatching null
+                PlaybackInfo(
+                    cid = cid,
+                    url = videoUrl,
+                    quality = selected.id,
+                    name = labels[selected.id] ?: qualityLabel(selected.id),
+                    qualities = qualities,
+                    isDash = !audioUrl.isNullOrBlank(),
+                    videoUrl = videoUrl,
+                    audioUrl = audioUrl?.takeIf { it.isNotBlank() },
+                    videoBackupUrls = selected.backup_url.orEmpty().filter { it.isNotBlank() && it != videoUrl },
+                    audioBackupUrls = audio?.backup_url.orEmpty().filter { it.isNotBlank() && it != audioUrl }
+                )
+            } else {
+                val actual = data.quality.takeIf { it > 0 } ?: return@runCatching null
+                val urls = data.durl.orEmpty().map { it.url }.filter { it.startsWith("http") }
+                if (urls.isEmpty()) return@runCatching null
+                val label = data.accept_quality.zip(data.accept_description).toMap()[actual] ?: qualityLabel(actual)
+                PlaybackInfo(cid, urls.first(), actual, label, listOf(actual to label), segments = urls)
+            }
+        }.getOrNull()
+    }
+
     suspend fun downloadQualities(aid: Long, cid: Long, cookie: String): List<Pair<Int, String>> {
         // 不只依赖 qn=127 的一次响应：部分账号/视频在不同 qn 请求下返回的可用轨道集合不同。
         // 汇总每次接口真实返回的 DASH 视频轨道，绝不把 accept_quality 中未返回的档位伪造出来。
@@ -422,11 +464,15 @@ object BiliPlaybackApi {
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
         }
-        // HTTP 线路可能静默降档；与 gRPC 返回的真实轨道比较后再决定最终播放画质。
-        val grpc = if (videoCodec.isBlank() && audioCodec.isBlank()) tryGrpcPlayback(resolvedAid, cid, qn) else null
-        val best = listOfNotNull(bestHttp, grpc).maxByOrNull { it.quality }
+        // HTTP 主线路若低于用户请求档位，再通过 BiliMiao 的独立请求头/解析器核对一次；
+        // 最后再与 gRPC 真实轨道比较，避免所有线路都被同一条 HTTP 响应限制在 720P。
+        val miao = if ((bestHttp?.quality ?: 0) < qn) tryBilimiaoPlayback(resolvedAid, cid, qn) else null
+        val grpc = if (videoCodec.isBlank() && audioCodec.isBlank() && (bestHttp?.quality ?: 0) < qn)
+            tryGrpcPlayback(resolvedAid, cid, qn) else null
+        val candidates = listOfNotNull(bestHttp, miao, grpc)
+        val best = candidates.maxByOrNull { it.quality }
         best?.let {
-            val mergedQualities = (it.qualities + discoveredQualities)
+            val mergedQualities = (candidates.flatMap { candidate -> candidate.qualities } + discoveredQualities)
                 .distinctBy { quality -> quality.first }
                 .sortedByDescending { quality -> quality.first }
             return enrich(it.copy(qualities = mergedQualities, parts = parts, selectedPart = selectedIndex))
