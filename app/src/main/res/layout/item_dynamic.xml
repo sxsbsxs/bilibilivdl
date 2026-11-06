@@ -87,6 +87,26 @@
             android:textSize="13sp"
             android:visibility="gone" />
 
+        <TextView
+            android:id="@+id/dynamic_gallery_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <GridLayout
+            android:id="@+id/dynamic_image_grid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:columnCount="3"
+            android:alignmentMode="alignMargins"
+            android:useDefaultMargins="false"
+            android:visibility="gone" />
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/dynamic_media_card"
             android:layout_width="match_parent"

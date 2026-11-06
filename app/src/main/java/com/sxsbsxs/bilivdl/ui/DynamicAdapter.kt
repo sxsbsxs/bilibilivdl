@@ -84,8 +84,61 @@ class DynamicAdapter(
             b.dynamicAvatar.setOnClickListener { onUser(item.ownerMid) }
             b.dynamicAuthor.setOnClickListener { onUser(item.ownerMid) }
 
-            val image = item.cover.ifBlank { item.images.firstOrNull().orEmpty() }
-            val showMedia = image.isNotBlank() || item.title.isNotBlank()
+            // 多图动态使用三列宫格；单图视频/番剧仍用紧凑封面卡。
+            val imageUrls = item.images.map(String::trim).filter { it.isNotBlank() }.distinct().take(9)
+            val showGallery = imageUrls.size > 1
+            b.dynamicGalleryTitle.visibility =
+                if (showGallery && item.title.isNotBlank()) View.VISIBLE else View.GONE
+            b.dynamicGalleryTitle.text = item.title
+            b.dynamicImageGrid.visibility = if (showGallery) View.VISIBLE else View.GONE
+            if (showGallery) {
+                for (index in 0 until b.dynamicImageGrid.childCount) {
+                    (b.dynamicImageGrid.getChildAt(index) as? android.widget.ImageView)?.let { old ->
+                        Glide.with(old).clear(old)
+                    }
+                }
+                b.dynamicImageGrid.removeAllViews()
+                val columns = if (imageUrls.size == 2 || imageUrls.size == 4) 2 else 3
+                b.dynamicImageGrid.columnCount = columns
+                val density = b.root.resources.displayMetrics.density
+                val cellSize = (104f * density).toInt()
+                fun dp(value: Int) = (value * density).toInt()
+                imageUrls.forEachIndexed { index, imageUrl ->
+                    val imageView = android.widget.ImageView(b.root.context).apply {
+                        scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                        contentDescription = "动态图片"
+                        clipToOutline = true
+                        background = b.root.context.getDrawable(R.drawable.bg_surface_card)
+                        layoutParams = android.widget.GridLayout.LayoutParams(
+                            android.widget.GridLayout.spec(index / columns),
+                            android.widget.GridLayout.spec(index % columns, 1f)
+                        ).apply {
+                            width = 0
+                            height = cellSize
+                            setMargins(dp(2), dp(2), dp(2), dp(2))
+                        }
+                        setOnClickListener { onOpen(item) }
+                    }
+                    b.dynamicImageGrid.addView(imageView)
+                    Glide.with(imageView)
+                        .load(GlideUrl(imageUrl, LazyHeaders.Builder()
+                            .addHeader("Referer", "https://www.bilibili.com/").build()))
+                        .placeholder(R.drawable.bg_surface_card)
+                        .error(R.drawable.bg_surface_card)
+                        .centerCrop()
+                        .into(imageView)
+                }
+            } else {
+                for (index in 0 until b.dynamicImageGrid.childCount) {
+                    (b.dynamicImageGrid.getChildAt(index) as? android.widget.ImageView)?.let { old ->
+                        Glide.with(old).clear(old)
+                    }
+                }
+                b.dynamicImageGrid.removeAllViews()
+            }
+
+            val image = item.cover.ifBlank { imageUrls.firstOrNull().orEmpty() }
+            val showMedia = !showGallery && (image.isNotBlank() || item.title.isNotBlank())
             b.dynamicMediaCard.visibility = if (showMedia) View.VISIBLE else View.GONE
             if (showMedia) {
                 if (image.isNotBlank()) {
@@ -97,11 +150,11 @@ class DynamicAdapter(
                         .centerCrop()
                         .into(b.dynamicMediaCover)
                 } else {
+                    Glide.with(b.dynamicMediaCover).clear(b.dynamicMediaCover)
                     b.dynamicMediaCover.setImageResource(R.drawable.bg_surface_card)
                 }
                 b.dynamicMediaTitle.text = item.title.ifBlank {
                     when {
-                        item.images.size > 1 -> "图文动态 · ${item.images.size} 张图片"
                         item.episodeId > 0L -> "番剧动态"
                         else -> "查看动态内容"
                     }
@@ -111,7 +164,7 @@ class DynamicAdapter(
                     item.aid > 0L || item.bvid.isNotBlank() ->
                         listOf("视频", item.replyCount.takeIf { it > 0L }?.let { "${it} 条评论" }.orEmpty())
                             .filter { it.isNotBlank() }.joinToString(" · ")
-                    item.images.isNotEmpty() -> "${item.images.size} 张图片"
+                    imageUrls.isNotEmpty() -> "${imageUrls.size} 张图片"
                     else -> item.type.removePrefix("DYNAMIC_TYPE_").lowercase().replace('_', ' ')
                 }
                 b.dynamicMediaCard.setOnClickListener { onOpen(item) }
