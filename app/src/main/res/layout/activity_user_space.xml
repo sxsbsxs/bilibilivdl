@@ -25,6 +25,17 @@
         app:cornerRadius="10dp"/>
    </LinearLayout>
   </com.google.android.material.card.MaterialCardView>
+  <LinearLayout android:id="@+id/space_own_shortcuts" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:orientation="vertical" android:visibility="gone">
+   <TextView android:id="@+id/space_own_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="2dp" android:paddingBottom="8dp" android:text="我的内容" android:textColor="@color/text_primary" android:textSize="16sp" android:textStyle="bold"/>
+   <GridLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:columnCount="3" android:rowCount="2">
+    <TextView android:id="@+id/space_own_favorites" android:layout_width="0dp" android:layout_height="58dp" android:layout_columnWeight="1" android:gravity="center" android:text="☆&#10;我的收藏" android:textColor="@color/text_primary" android:textSize="13sp" android:background="?attr/selectableItemBackground"/>
+    <TextView android:id="@+id/space_own_bangumi" android:layout_width="0dp" android:layout_height="58dp" android:layout_columnWeight="1" android:gravity="center" android:text="▣&#10;我的追番" android:textColor="@color/text_primary" android:textSize="13sp" android:background="?attr/selectableItemBackground"/>
+    <TextView android:id="@+id/space_own_cinema" android:layout_width="0dp" android:layout_height="58dp" android:layout_columnWeight="1" android:gravity="center" android:text="▣&#10;我的追剧" android:textColor="@color/text_primary" android:textSize="13sp" android:background="?attr/selectableItemBackground"/>
+    <TextView android:id="@+id/space_own_history" android:layout_width="0dp" android:layout_height="58dp" android:layout_columnWeight="1" android:gravity="center" android:text="◷&#10;历史记录" android:textColor="@color/text_primary" android:textSize="13sp" android:background="?attr/selectableItemBackground"/>
+    <TextView android:id="@+id/space_own_watch_later" android:layout_width="0dp" android:layout_height="58dp" android:layout_columnWeight="1" android:gravity="center" android:text="▤&#10;稍后再看" android:textColor="@color/text_primary" android:textSize="13sp" android:background="?attr/selectableItemBackground"/>
+    <TextView android:id="@+id/space_own_liked" android:layout_width="0dp" android:layout_height="58dp" android:layout_columnWeight="1" android:gravity="center" android:text="♡&#10;我赞过的" android:textColor="@color/text_primary" android:textSize="13sp" android:background="?attr/selectableItemBackground"/>
+   </GridLayout>
+  </LinearLayout>
   <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:paddingStart="2dp" android:text="TA 的投稿" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold"/>
   <TextView android:id="@+id/space_video_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center" android:text="正在加载投稿…" android:textColor="@color/text_secondary" android:textSize="12sp"/>
   <androidx.recyclerview.widget.RecyclerView android:id="@+id/space_videos" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:nestedScrollingEnabled="false" android:clipToPadding="false" android:paddingBottom="12dp"/>
