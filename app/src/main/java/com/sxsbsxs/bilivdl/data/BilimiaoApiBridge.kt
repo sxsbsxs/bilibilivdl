@@ -72,7 +72,8 @@ object BilimiaoApiBridge {
         )
     }
 
-    private fun parseSpaceDynamic(item: DynamicItem): BiliDynamicItem? {
+    private fun parseSpaceDynamic(item: DynamicItem, depth: Int = 0): BiliDynamicItem? {
+        if (depth > 1) return null
         var authorModule: bilibili.app.dynamic.v2.ModuleAuthor? = null
         var description = ""
         var dynamicModule: ModuleDynamic? = null
@@ -83,6 +84,7 @@ object BilimiaoApiBridge {
                 is Module.ModuleItem.ModuleDesc -> description = part.value.text
                 is Module.ModuleItem.ModuleDynamic -> dynamicModule = part.value
                 is Module.ModuleItem.ModuleStat -> statModule = part.value
+                is Module.ModuleItem.ModuleStatForward -> statModule = part.value
                 else -> Unit
             }
         }
@@ -92,47 +94,61 @@ object BilimiaoApiBridge {
         val pgc = (payload as? ModuleDynamic.ModuleItem.DynPgc)?.value
         val draw = (payload as? ModuleDynamic.ModuleItem.DynDraw)?.value
         val article = (payload as? ModuleDynamic.ModuleItem.DynArticle)?.value
+        // 转发动态的正文属于外层，媒体卡属于被转发的内层动态。
+        val forwarded = (payload as? ModuleDynamic.ModuleItem.DynForward)
+            ?.value?.item?.let { parseSpaceDynamic(it, depth + 1) }
 
         val aid = archive?.avid?.takeIf { it > 0L }
             ?: pgc?.aid?.takeIf { it > 0L }
+            ?: forwarded?.aid?.takeIf { it > 0L }
             ?: 0L
-        val bvid = archive?.bvid.orEmpty()
+        val bvid = archive?.bvid.orEmpty().ifBlank { forwarded?.bvid.orEmpty() }
         // 有些 PGC 动态会以 Archive 模块呈现，EP/SS 信息也可能放在 Archive 中。
         val episodeId = pgc?.epid?.takeIf { it > 0L }
             ?: archive?.episodeId?.takeIf { it > 0L }
+            ?: forwarded?.episodeId?.takeIf { it > 0L }
             ?: 0L
         val seasonId = pgc?.seasonId?.takeIf { it > 0L }
             ?: archive?.pgcSeasonId?.takeIf { it > 0L }
+            ?: forwarded?.seasonId?.takeIf { it > 0L }
             ?: 0L
         val title = archive?.title.orEmpty().ifBlank {
-            pgc?.title.orEmpty().ifBlank { article?.title.orEmpty() }
+            pgc?.title.orEmpty().ifBlank {
+                article?.title.orEmpty().ifBlank { forwarded?.title.orEmpty() }
+            }
         }
         val cover = archive?.cover.orEmpty().ifBlank {
-            pgc?.cover.orEmpty().ifBlank { draw?.items?.firstOrNull()?.src.orEmpty() }
+            pgc?.cover.orEmpty().ifBlank {
+                draw?.items?.firstOrNull()?.src.orEmpty().ifBlank { forwarded?.cover.orEmpty() }
+            }
         }.let { value -> if (value.startsWith("//")) "https:$value" else value }
         val images = buildList {
             draw?.items?.mapNotNull { it.src.takeIf(String::isNotBlank) }?.let(::addAll)
             article?.covers?.filter(String::isNotBlank)?.let(::addAll)
+            if (isEmpty()) forwarded?.images?.let(::addAll)
         }.map { if (it.startsWith("//")) "https:$it" else it }.distinct().take(9)
         val extend = item.extend
         val id = extend?.dynIdStr.orEmpty().ifBlank { extend?.businessId.orEmpty() }
         if (id.isBlank()) return null
         val url = extend?.cardUrl.orEmpty().ifBlank {
-            when {
-                bvid.isNotBlank() -> "https://www.bilibili.com/video/$bvid"
-                episodeId > 0L -> "https://www.bilibili.com/bangumi/play/ep$episodeId"
-                else -> "https://t.bilibili.com/$id"
+            forwarded?.url.orEmpty().ifBlank {
+                when {
+                    bvid.isNotBlank() -> "https://www.bilibili.com/video/$bvid"
+                    episodeId > 0L -> "https://www.bilibili.com/bangumi/play/ep$episodeId"
+                    else -> "https://t.bilibili.com/$id"
+                }
             }
         }
         val stats = statModule
         return BiliDynamicItem(
             id = id,
             type = item.cardType.toString(),
-            ownerMid = author?.mid?.takeIf { it > 0L } ?: authorModule?.mid ?: 0L,
-            ownerName = author?.name.orEmpty().ifBlank { "B站用户" },
-            ownerFace = author?.face.orEmpty().let { if (it.startsWith("//")) "https:$it" else it },
-            timeLabel = authorModule?.ptimeLabelText.orEmpty(),
-            text = description,
+            ownerMid = author?.mid?.takeIf { it > 0L } ?: authorModule?.mid ?: forwarded?.ownerMid ?: 0L,
+            ownerName = author?.name.orEmpty().ifBlank { forwarded?.ownerName ?: "B站用户" },
+            ownerFace = author?.face.orEmpty().ifBlank { forwarded?.ownerFace.orEmpty() }
+                .let { if (it.startsWith("//")) "https:$it" else it },
+            timeLabel = authorModule?.ptimeLabelText.orEmpty().ifBlank { forwarded?.timeLabel.orEmpty() },
+            text = description.ifBlank { forwarded?.text.orEmpty() },
             title = title,
             cover = cover,
             images = if (images.isEmpty() && cover.isNotBlank()) listOf(cover) else images,
@@ -141,10 +157,10 @@ object BilimiaoApiBridge {
             episodeId = episodeId,
             seasonId = seasonId,
             url = url,
-            repostCount = stats?.repost ?: 0L,
-            replyCount = stats?.reply ?: 0L,
-            likeCount = stats?.like ?: 0L,
-            liked = stats?.likeInfo?.isLike == true,
+            repostCount = stats?.repost ?: forwarded?.repostCount ?: 0L,
+            replyCount = stats?.reply ?: forwarded?.replyCount ?: 0L,
+            likeCount = stats?.like ?: forwarded?.likeCount ?: 0L,
+            liked = stats?.likeInfo?.isLike ?: forwarded?.liked ?: false,
             pinned = authorModule?.isTop == true
         )
     }
