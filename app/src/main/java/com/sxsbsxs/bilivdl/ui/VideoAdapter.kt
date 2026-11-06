@@ -30,11 +30,20 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
     inner class Holder(val binding: ItemVideoBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(v: BiliVideo) {
             binding.videoTitle.text = v.title
-            binding.videoAuthor.text = "UP主 · " + v.author
+            binding.videoAuthor.text = v.author
+            binding.videoDurationBadge.text = v.duration
+            val face = v.authorFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
+            if (face.isNotBlank()) Glide.with(binding.videoAuthorAvatar)
+                .load(GlideUrl(face, headers))
+                .placeholder(R.drawable.bg_comment_avatar)
+                .error(R.drawable.bg_comment_avatar)
+                .circleCrop()
+                .into(binding.videoAuthorAvatar)
+            else binding.videoAuthorAvatar.setImageResource(R.drawable.bg_comment_avatar)
             binding.videoMeta.text = listOf(
                 "播放 " + v.play,
                 if (v.danmaku != null) "弹幕 " + formatCount(v.danmaku) else "",
-                v.duration.takeIf { it.isNotBlank() } ?: ""
+                ""
             ).filter { it.isNotBlank() }.joinToString("  ·  ")
             binding.videoExtraMeta.text = listOf(
                 v.likes?.let { "点赞 " + formatCount(it) }.orEmpty(),
