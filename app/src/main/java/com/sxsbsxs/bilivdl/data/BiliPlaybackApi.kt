@@ -177,7 +177,7 @@ object BiliPlaybackApi {
                 val qualities = dash.video.map { it.id }.filter { it > 0 }.distinct()
                     .sortedDescending().map { it to (labels[it] ?: qualityLabel(it)) }
                 val videoUrl = selected.base_url.ifBlank { selected.backup_url?.firstOrNull().orEmpty() }
-                val audioUrl = audio?.base_url?.ifBlank { audio.backup_url?.firstOrNull().orEmpty() }
+                val audioUrl = audio?.let { track -> track.base_url.ifBlank { track.backup_url?.firstOrNull().orEmpty() } }
                 if (videoUrl.isBlank()) return@runCatching null
                 PlaybackInfo(
                     cid = cid,
@@ -460,7 +460,7 @@ object BiliPlaybackApi {
         // 再逐档探测官方接口实际返回的 DASH 轨道，并用最高真实轨道重新请求播放地址。
         // 这样播放清晰度列表不会只继承某一次被降档的响应。
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
-        if (qn >= 80 && (bestHttp?.quality ?: 0) <= 64) {
+        if (qn >= 80 && (bestHttp?.quality ?: 0) < qn) {
             discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie) }
                 .getOrDefault(emptyList())
                 .filter { it.first <= qn }
