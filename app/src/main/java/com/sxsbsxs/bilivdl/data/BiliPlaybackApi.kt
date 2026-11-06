@@ -515,6 +515,10 @@ object BiliPlaybackApi {
         }
 
         // Avoid the legacy parser: it converts localized numeric values (e.g. 万) and can throw. Only trust streams returned by official JSON or gRPC.
-        error("B站公开播放接口（DASH/DURL）和 gRPC 均未返回可用视频流；已停止使用会触发本地化数字解析异常的旧线路，请稍后重试或切换网络")
+        error(
+            if (requestedVideoCodec.isNotBlank() || requestedAudioCodec.isNotBlank())
+                "当前清晰度没有匹配所选视频/音频编码的可用轨道，请更换编码或清晰度"
+            else "B站公开播放接口（DASH/DURL）和 gRPC 均未返回可用视频流；请稍后重试或切换网络"
+        )
     }
 }
