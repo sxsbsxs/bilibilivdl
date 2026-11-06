@@ -181,6 +181,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             onUser = ::openUserSpace,
             onLongPress = ::handleCommentLongPress
         )
+        (b.commentsList.adapter as? CommentAdapter)?.setOwnerMid(currentOwnerMid)
         b.commentsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
@@ -369,6 +370,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     if (p.duration > 0) "${p.duration / 60}:${(p.duration % 60).toString().padStart(2, '0')}" else ""
                 ).filter { it.isNotBlank() }.joinToString("  ·  ")
                 currentOwnerMid = p.ownerMid
+                (b.commentsList.adapter as? CommentAdapter)?.setOwnerMid(currentOwnerMid)
                 refreshOwnerFollowAction()
                 val authorText = p.author.ifBlank { intent.getStringExtra(EXTRA_AUTHOR).orEmpty() }
                 if (authorText.isNotBlank()) b.playerAuthor.text = authorText
@@ -1247,6 +1249,7 @@ class VideoPlayerActivity : AppCompatActivity() {
             onUser = ::openUserSpace,
             onLongPress = ::handleCommentLongPress
         )
+        replyAdapter.setOwnerMid(currentOwnerMid)
         list.adapter = replyAdapter
         var page = 1
         var hasMore = true
