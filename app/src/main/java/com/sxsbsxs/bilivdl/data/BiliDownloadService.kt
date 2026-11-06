@@ -137,6 +137,8 @@ class BiliDownloadService : Service() {
         val taskId = intent?.getStringExtra(EXTRA_ID) ?: return START_NOT_STICKY
         val action = intent.getStringExtra(EXTRA_ACTION)
         if (action == ACTION_PAUSE || action == ACTION_CANCEL) {
+            // A later pause/cancel supersedes any queued resume request.
+            pendingRestarts.remove(taskId)
             requestedActions[taskId] = action
             val job = running[taskId]
             if (job != null) {
