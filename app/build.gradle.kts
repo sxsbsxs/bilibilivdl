@@ -1,9 +1,18 @@
-plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); alias(libs.plugins.ksp) }
+plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("com.chaquo.python"); alias(libs.plugins.ksp) }
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
- defaultConfig { applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=22; versionName="2.0.2" }
+ defaultConfig {
+  applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=23; versionName="2.0.3"
+  ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+ }
  buildFeatures { viewBinding=true }
  compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
+}
+chaquopy {
+ defaultConfig {
+  version = "3.11"
+  pip { install("-r", "src/main/python/requirements.txt") }
+ }
 }
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {
