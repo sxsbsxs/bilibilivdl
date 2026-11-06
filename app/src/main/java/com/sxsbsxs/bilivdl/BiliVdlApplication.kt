@@ -2,6 +2,9 @@ package com.sxsbsxs.bilivdl
 
 import android.app.Application
 import android.webkit.CookieManager
+import cc.kafuu.bilidownload.common.CommonLibs
+import cc.kafuu.bilidownload.common.manager.AccountManager
+import com.chibatching.kotpref.Kotpref
 import com.a10miaomiao.bilimiao.comm.BilimiaoCommCore
 import com.a10miaomiao.bilimiao.comm.platform.AndroidBase64Provider
 import com.a10miaomiao.bilimiao.comm.platform.AndroidCookieProvider
@@ -31,10 +34,14 @@ class BiliVdlApplication : Application() {
 
         BilimiaoCommCore().onCreate()
 
+        Kotpref.init(this)
+        CommonLibs.init(this)
+
         startupScope.launch { runCatching { DownloadQueueStore.migrateLegacy(this@BiliVdlApplication) } }
 
         val cookie = BiliSession.cookie(this)
         if (cookie.isNotBlank()) {
+            AccountManager.updateCookie(cookie)
             val manager = CookieManager.getInstance()
             listOf(
                 "https://bilibili.com",

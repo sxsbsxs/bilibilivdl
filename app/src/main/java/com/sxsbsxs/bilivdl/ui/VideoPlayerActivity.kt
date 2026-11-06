@@ -44,9 +44,11 @@ import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.data.BiliAccountApi
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideoActionApi
-import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
-import com.sxsbsxs.bilivdl.data.BiliDownloadService
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
+import cc.kafuu.bilidownload.common.model.bili.BiliVideoModel as BvdVideoModel
+import cc.kafuu.bilidownload.common.model.bili.BiliMediaModel as BvdMediaModel
+import cc.kafuu.bilidownload.common.utils.BvConvertUtils as BvdBvConvertUtils
+import cc.kafuu.bilidownload.feature.viewbinding.view.activity.VideoDetailsActivity as BvdVideoDetailsActivity
 import com.sxsbsxs.bilivdl.data.VideoComment
 import com.sxsbsxs.bilivdl.data.DanmakuItem
 import com.sxsbsxs.bilivdl.databinding.ActivityVideoPlayerBinding
@@ -211,7 +213,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         loadRelatedVideos()
         b.qualityButton.setOnClickListener { showQuality() }
         b.partButton.setOnClickListener { showParts() }
-        b.playerDownload.setOnClickListener { showDownloadQuality() }
+        b.playerDownload.setOnClickListener { openBvdDownloadPage() }
         b.shareVideoButton.setOnClickListener { shareCurrentVideo() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.subtitleButton.setOnClickListener { showSubtitles() }
@@ -238,7 +240,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.videoCoin.setOnClickListener { showCoinDialog() }
         b.videoFavorite.setOnClickListener { showFavoriteFolders() }
         b.videoTriple.setOnClickListener { tripleVideo() }
-        b.downloadAllParts.setOnClickListener { showDownloadAllParts() }
+        b.downloadAllParts.setOnClickListener { openBvdDownloadPage() }
         b.danmakuSend.setOnClickListener { showDanmakuComposer() }
         load(127)
         loadComments(true)
@@ -274,6 +276,29 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** Opens BiliDownload original video details, quality and part-selection screen. */
+    private fun openBvdDownloadPage() {
+        val current = info
+        val title = b.playerTitle.text.toString().ifBlank { intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "B站视频" } }
+        val cover = intent.getStringExtra(EXTRA_COVER).orEmpty().ifBlank { current?.cover.orEmpty() }
+        val description = current?.description.orEmpty()
+        val author = current?.author.orEmpty().ifBlank { intent.getStringExtra(EXTRA_AUTHOR).orEmpty() }
+        val target = if (epId > 0L) {
+            BvdVideoDetailsActivity.buildIntent(BvdMediaModel(title, cover, description, current?.pubdate ?: 0L, epId, seasonId))
+        } else {
+            val targetBvid = bvid.ifBlank { aid.takeIf { it > 0L }?.let { BvdBvConvertUtils.av2bv(it.toString()) }.orEmpty() }
+            require(targetBvid.startsWith("BV")) { "当前视频缺少有效的 BV 号" }
+            val durationSeconds = current?.duration ?: 0
+            BvdVideoDetailsActivity.buildIntent(BvdVideoModel(
+                title = title, cover = cover, description = description, pubDate = current?.pubdate ?: 0L,
+                author = author, bvid = targetBvid,
+                duration = "${durationSeconds / 60}:${(durationSeconds % 60).toString().padStart(2, '0')}",
+                preferredCid = current?.cid
+            ))
+        }
+        target.setClass(this, BvdVideoDetailsActivity::class.java)
+        startActivity(target)
+    }
     private fun formatCount(value: Long): String {
         if (value < 10_000L) return value.toString()
         val divisor = if (value >= 100_000_000L) 100_000_000L else 10_000L

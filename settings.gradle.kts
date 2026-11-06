@@ -35,3 +35,9 @@ include(":bilimiao-grpc:generator")
 project(":bilimiao-grpc:generator").projectDir = file("upstream/bilimiao2/bilimiao-grpc/generator")
 include(":danmaku-engine")
 project(":danmaku-engine").projectDir = file("upstream/bilimiao2/danmaku-engine")
+
+include(":bilimiao-compose")
+project(":bilimiao-compose").projectDir = file("upstream/bilimiao2/bilimiao-compose")
+
+include(":bvd-downloader")
+project(":bvd-downloader").projectDir = file("bvd-downloader")

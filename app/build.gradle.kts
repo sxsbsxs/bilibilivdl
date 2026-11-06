@@ -3,7 +3,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
  defaultConfig {
-  applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=38; versionName="2.0.18"
+  applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=39; versionName="2.0.19"
   // Ship only the native ABI used by the app's media pipeline; excluding
   // unused 32-bit and x86 variants keeps the APK smaller.
   ndk { abiFilters += listOf("arm64-v8a") }
@@ -32,6 +32,8 @@ dependencies {
  implementation("androidx.compose.foundation:foundation")
  implementation("androidx.compose.material3:material3")
  implementation(project(":bilimiao-comm"))
+ implementation(project(":bilimiao-compose"))
+ implementation(project(":bvd-downloader"))
  implementation(project(":bilimiao-download"))
  implementation(project(":danmaku-engine"))
  implementation("com.squareup.okhttp3:okhttp:4.10.0")
