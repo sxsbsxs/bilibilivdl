@@ -1,11 +1,11 @@
-plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("com.chaquo.python"); alias(libs.plugins.ksp) }
+plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose"); id("com.chaquo.python"); alias(libs.plugins.ksp) }
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
  defaultConfig {
   applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=23; versionName="2.0.3"
   ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
  }
- buildFeatures { viewBinding=true }
+ buildFeatures { viewBinding=true; compose=true }
  compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
 }
 chaquopy {
@@ -30,12 +30,16 @@ dependencies {
  implementation("androidx.media3:media3-exoplayer:1.5.1")
  implementation("androidx.media3:media3-exoplayer-dash:1.5.1")
  implementation("androidx.media3:media3-ui:1.5.1")
+ implementation(platform("androidx.compose:compose-bom:2025.12.00"))
+ implementation("androidx.compose.ui:ui")
+ implementation("androidx.compose.foundation:foundation")
+ implementation("androidx.compose.material3:material3")
+ implementation("com.a10miaomiao:bilimiao-compose:1.0")
  implementation(project(":bilimiao-comm"))
  implementation(project(":bilimiao-download"))
  implementation(project(":danmaku-engine"))
  implementation("com.squareup.okhttp3:okhttp:4.10.0")
  implementation("com.google.zxing:core:3.5.3")
- // Keep Room aligned with the upstream Kotlin/KSP toolchain.
  implementation("androidx.room:room-runtime:2.7.2")
  implementation("androidx.room:room-ktx:2.7.2")
  ksp("androidx.room:room-compiler:2.7.2")
