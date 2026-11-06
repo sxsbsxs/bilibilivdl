@@ -550,10 +550,11 @@ object BiliPlaybackApi {
             tryGrpcPlayback(resolvedAid, cid, qn) else null
         val grpc = grpcRaw?.takeUnless { it.quality in lockedIds }
 
-        // Only probe individual tiers if every independent route is still at 720P or below.
+        // Probe whenever the best independent route is below the requested tier.
+        // A silent 1080P downgrade must not suppress discovery of 4K/HDR/8K tracks.
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
         val independentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality, grpc?.quality).maxOrNull() ?: 0
-        if (qn >= 80 && independentBestQuality <= 64) {
+        if (qn >= 80 && independentBestQuality < qn) {
             onStage("正在核对视频实际可用画质…")
             discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, requestedVideoCodec, isVip, isLoggedIn) }
                 .onFailure { if (it is CancellationException) throw it }
