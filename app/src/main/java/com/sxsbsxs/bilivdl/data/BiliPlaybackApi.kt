@@ -251,7 +251,8 @@ object BiliPlaybackApi {
                 shares = stat?.optLong("share"),
                 comments = stat?.optLong("reply"),
                 category = item.optString("tname"),
-                pubdate = item.optLong("pubdate").takeIf { it > 0L }
+                pubdate = item.optLong("pubdate").takeIf { it > 0L },
+                authorFace = owner?.optString("face").orEmpty().let { if (it.startsWith("//")) "https:$it" else it }
             )
         }.distinctBy { it.bvid.ifBlank { it.aid.toString() } }
     }
