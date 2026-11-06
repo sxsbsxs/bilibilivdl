@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand">#FFFB7299</color>
-    <color name="brand_dark">#FFE85D87</color>
-    <color name="brand_soft">#FFFFE9F0</color>
+    <color name="brand">#FB7299</color>
+    <color name="brand_dark">#E85D87</color>
+    <color name="brand_soft">#FFFFF0F4</color>
     <color name="background_dark">#FFF6F7F9</color>
     <color name="surface_dark">#FFFFFFFF</color>
-    <color name="surface_elevated">#FFF1F3F5</color>
-    <color name="text_primary">#FF202127</color>
-    <color name="text_secondary">#FF858B95</color>
+    <color name="surface_elevated">#FFF2F3F5</color>
+    <color name="text_primary">#FF25262B</color>
+    <color name="text_secondary">#FF858B96</color>
     <color name="icon_tint">#FF626873</color>
-    <color name="stroke_dark">#FFE7E9ED</color>
+    <color name="stroke_dark">#FFE9EBEF</color>
     <color name="divider">#FFF0F1F3</color>
     <color name="overlay_scrim">#66000000</color>
     <color name="white">#FFFFFFFF</color>

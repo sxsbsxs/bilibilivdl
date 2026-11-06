@@ -68,6 +68,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.setContent
 import cn.a10miaomiao.bilimiao.compose.components.player.videoplayer.progress.MediaCacheProgressInfo
 import cn.a10miaomiao.bilimiao.compose.components.player.videoplayer.progress.MediaProgressSlider
 import cn.a10miaomiao.bilimiao.compose.components.player.videoplayer.progress.MediaProgressSliderDefaults

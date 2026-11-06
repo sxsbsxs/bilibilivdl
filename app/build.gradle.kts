@@ -31,8 +31,6 @@ dependencies {
  implementation("androidx.compose.ui:ui")
  implementation("androidx.compose.foundation:foundation")
  implementation("androidx.compose.material3:material3")
- implementation("com.chibatching.kotpref:kotpref:2.13.2")
- implementation("org.openani.mediamp:mediamp-api:0.3.2")
  implementation(project(":bilimiao-comm"))
  implementation(project(":bilimiao-compose"))
  implementation(project(":bvd-downloader"))

@@ -53,6 +53,14 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 .setNegativeButton("取消", null)
                 .setPositiveButton("退出") { _, _ -> logout() }.show()
         }
+        styleMenuTile(view, R.id.account_history)
+        styleMenuTile(view, R.id.account_watch_later)
+        styleMenuTile(view, R.id.account_favorites)
+        styleMenuTile(view, R.id.account_following)
+        styleMenuTile(view, R.id.account_liked)
+        styleMenuTile(view, R.id.account_messages)
+        styleMenuTile(view, R.id.account_bangumi)
+        styleMenuTile(view, R.id.account_cinema)
         bindLibraryEntry(view, R.id.account_history, AccountLibraryActivity.TYPE_HISTORY)
         bindLibraryEntry(view, R.id.account_watch_later, AccountLibraryActivity.TYPE_WATCH_LATER)
         bindLibraryEntry(view, R.id.account_favorites, AccountLibraryActivity.TYPE_FAVORITES)
@@ -62,6 +70,30 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         bindLibraryEntry(view, R.id.account_bangumi, AccountLibraryActivity.TYPE_BANGUMI)
         bindLibraryEntry(view, R.id.account_cinema, AccountLibraryActivity.TYPE_CINEMA)
         refresh()
+    }
+
+    private fun styleMenuTile(root: View, viewId: Int) {
+        val tile = root.findViewById<TextView>(viewId) ?: return
+        val raw = tile.text.toString()
+        val labelStart = raw.indexOf('\n')
+        if (labelStart <= 0) return
+
+        val styled = android.text.SpannableString(raw)
+        styled.setSpan(
+            android.text.style.RelativeSizeSpan(1.65f),
+            0,
+            labelStart,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        styled.setSpan(
+            android.text.style.ForegroundColorSpan(
+                androidx.core.content.ContextCompat.getColor(requireContext(), R.color.brand_dark)
+            ),
+            0,
+            labelStart,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        tile.text = styled
     }
 
     private fun bindLibraryEntry(view: View, viewId: Int, type: String) {

@@ -92,7 +92,7 @@ class MainActivity : AppCompatActivity() {
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Color(0xFFFB7299),
                                 selectedTextColor = Color(0xFFFB7299),
-                                indicatorColor = Color(0xFFFFEDF2),
+                                indicatorColor = Color.Transparent,
                                 unselectedIconColor = Color(0xFF777D87),
                                 unselectedTextColor = Color(0xFF777D87)
                             )

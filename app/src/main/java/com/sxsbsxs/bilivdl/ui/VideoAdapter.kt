@@ -1,11 +1,7 @@
 package com.sxsbsxs.bilivdl.ui
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
@@ -14,13 +10,10 @@ import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliVideo
+import com.sxsbsxs.bilivdl.databinding.ItemVideoBinding
 
-class VideoAdapter(
-    private val onClick: (BiliVideo) -> Unit,
-    private val gridMode: Boolean = false
-) : RecyclerView.Adapter<VideoAdapter.Holder>() {
+class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adapter<VideoAdapter.Holder>() {
     private val items = mutableListOf<BiliVideo>()
-
     fun submitList(list: List<BiliVideo>) {
         val seen = hashSetOf<String>()
         val next = list.filter { seen.add(stableKey(it)) }
@@ -44,7 +37,6 @@ class VideoAdapter(
         items.addAll(next)
         diff.dispatchUpdatesTo(this)
     }
-
     fun appendList(list: List<BiliVideo>) {
         if (list.isEmpty()) return
         val keys = items.mapTo(hashSetOf()) { stableKey(it) }
@@ -60,51 +52,39 @@ class VideoAdapter(
         video.aid > 0L -> "av:${video.aid}"
         else -> "title:${video.author}:${video.title}"
     }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-        val layout = if (gridMode) R.layout.item_video_grid else R.layout.item_video
-        return Holder(LayoutInflater.from(parent.context).inflate(layout, parent, false))
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+        Holder(ItemVideoBinding.inflate(LayoutInflater.from(parent.context), parent, false))
     override fun getItemCount() = items.size
     override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(items[position])
     override fun onViewRecycled(holder: Holder) {
-        Glide.with(holder.itemView).clear(holder.videoCover)
-        Glide.with(holder.itemView).clear(holder.videoAuthorAvatar)
+        Glide.with(holder.itemView).clear(holder.binding.videoCover)
         super.onViewRecycled(holder)
     }
-
     private fun formatCount(value: Long): String = when {
         value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
         value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1f万", value / 10_000.0)
         else -> value.toString()
     }
-
-    inner class Holder(root: View) : RecyclerView.ViewHolder(root) {
-        val videoCover = root.findViewById<ImageView>(R.id.video_cover)
-        val videoAuthorAvatar = root.findViewById<ImageView>(R.id.video_author_avatar)
-        private val coverFrame = root.findViewById<FrameLayout>(R.id.video_cover_frame)
-        private val durationBadge = root.findViewById<TextView>(R.id.video_duration_badge)
-        private val title = root.findViewById<TextView>(R.id.video_title)
-        private val author = root.findViewById<TextView>(R.id.video_author)
-        private val meta = root.findViewById<TextView>(R.id.video_meta)
-        private val extraMeta = root.findViewById<TextView>(R.id.video_extra_meta)
-
+    inner class Holder(val binding: ItemVideoBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(v: BiliVideo) {
-            coverFrame.post {
-                val width = coverFrame.width
+            // Derive the cover height from the measured card width so the same feed
+            // keeps a true 16:9 thumbnail on narrow phones and in split-screen mode.
+            binding.videoCoverFrame.post {
+                val width = binding.videoCoverFrame.width
                 if (width > 0) {
-                    val height = (width * 9f / 16f).toInt()
-                    val params = coverFrame.layoutParams
-                    if (params.height != height) {
-                        params.height = height
-                        coverFrame.layoutParams = params
+                    val targetHeight = (width * 9f / 16f).toInt()
+                    val params = binding.videoCoverFrame.layoutParams
+                    if (params.height != targetHeight) {
+                        params.height = targetHeight
+                        binding.videoCoverFrame.layoutParams = params
                     }
                 }
             }
-            title.text = v.title
-            author.text = v.author
-            durationBadge.text = v.duration
-            meta.text = buildString {
+            binding.videoTitle.text = v.title
+            binding.videoAuthor.text = v.author
+            binding.videoDurationBadge.text = v.duration
+            // Keep feed metadata quiet; danmaku availability belongs to playback.
+            binding.videoMeta.text = buildString {
                 append("播放 ")
                 append(v.play)
                 v.danmaku?.takeIf { it > 0L }?.let {
@@ -112,21 +92,14 @@ class VideoAdapter(
                     append(formatCount(it))
                 }
             }
-            extraMeta.visibility = View.GONE
-
-            val headers = LazyHeaders.Builder()
-                .addHeader("Referer", "https://www.bilibili.com/")
-                .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
-                .build()
-            val face = v.authorFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
-            if (face.startsWith("https://") || face.startsWith("http://")) {
-                Glide.with(videoAuthorAvatar).load(GlideUrl(face, headers))
-                    .placeholder(R.drawable.bg_comment_avatar).error(R.drawable.bg_comment_avatar)
-                    .circleCrop().into(videoAuthorAvatar)
-            } else {
-                Glide.with(videoAuthorAvatar).clear(videoAuthorAvatar)
-                videoAuthorAvatar.setImageResource(R.drawable.bg_comment_avatar)
-            }
+            binding.videoExtraMeta.text = listOf(
+                v.likes?.let { "点赞 " + formatCount(it) }.orEmpty(),
+                v.favorites?.let { "收藏 " + formatCount(it) }.orEmpty(),
+                v.coins?.let { "投币 " + formatCount(it) }.orEmpty(),
+                v.shares?.let { "分享 " + formatCount(it) }.orEmpty(),
+                v.comments?.let { "评论 " + formatCount(it) }.orEmpty()
+            ).filter { it.isNotBlank() }.joinToString("  ·  ")
+            binding.videoExtraMeta.visibility = android.view.View.GONE
             val imageUrl = v.cover.trim().let {
                 when {
                     it.startsWith("//") -> "https:$it"
@@ -134,17 +107,37 @@ class VideoAdapter(
                     else -> it
                 }
             }
-            durationBadge.visibility = if (v.duration.isBlank()) View.GONE else View.VISIBLE
-            if (imageUrl.startsWith("https://") || imageUrl.startsWith("http://")) {
-                Glide.with(videoCover).load(GlideUrl(imageUrl, headers))
-                    .placeholder(R.drawable.bg_empty_card).error(R.drawable.bg_empty_card)
-                    .diskCacheStrategy(DiskCacheStrategy.ALL).override(480, 270).centerCrop()
-                    .into(videoCover)
+            val headers = LazyHeaders.Builder()
+                .addHeader("Referer", "https://www.bilibili.com/")
+                .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
+                .build()
+            val face = v.authorFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
+            if (face.startsWith("https://") || face.startsWith("http://")) {
+                Glide.with(binding.videoAuthorAvatar)
+                    .load(GlideUrl(face, headers))
+                    .placeholder(R.drawable.bg_comment_avatar)
+                    .error(R.drawable.bg_comment_avatar)
+                    .circleCrop()
+                    .into(binding.videoAuthorAvatar)
             } else {
-                Glide.with(videoCover).clear(videoCover)
-                videoCover.setImageResource(R.drawable.bg_empty_card)
+                Glide.with(binding.videoAuthorAvatar).clear(binding.videoAuthorAvatar)
+                binding.videoAuthorAvatar.setImageResource(R.drawable.bg_comment_avatar)
             }
-            itemView.setOnClickListener { onClick(v) }
+            binding.videoDurationBadge.visibility = if (v.duration.isBlank()) android.view.View.GONE else android.view.View.VISIBLE
+            if (imageUrl.startsWith("https://") || imageUrl.startsWith("http://")) {
+                Glide.with(binding.videoCover)
+                    .load(GlideUrl(imageUrl, headers))
+                    .placeholder(R.drawable.bg_empty_card)
+                    .error(R.drawable.bg_empty_card)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .override(480, 270)
+                    .centerCrop()
+                    .into(binding.videoCover)
+            } else {
+                Glide.with(binding.videoCover).clear(binding.videoCover)
+                binding.videoCover.setImageResource(R.drawable.bg_empty_card)
+            }
+            binding.root.setOnClickListener { onClick(v) }
         }
     }
 }
