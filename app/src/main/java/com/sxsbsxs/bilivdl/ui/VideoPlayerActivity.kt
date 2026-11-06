@@ -246,6 +246,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                 relatedAdapter.submitList(items)
                 b.relatedVideosStatus.text = if (items.isEmpty()) "暂时没有相关推荐" else ""
                 b.relatedVideosStatus.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 b.relatedVideosStatus.visibility = View.VISIBLE
                 b.relatedVideosStatus.text = "相关推荐加载失败"
@@ -279,6 +281,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             try {
                 withContext(Dispatchers.IO) { YtDlpBridge.download(this@VideoPlayerActivity, url, BiliSession.cookie(this@VideoPlayerActivity)) }
                 b.downloadStatus.text = "下载完成，已保存到系统视频库"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 b.downloadStatus.text = "yt-dlp 下载失败：" + (error.message ?: "暂不支持此链接")
             }
@@ -1025,6 +1029,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.danmakuOverlay.setPlaying(exo?.isPlaying == true)
                 danmakuLoadFailed = false
                 b.danmakuButton.text = if (items.isEmpty()) "暂无弹幕" else "弹幕：开（${items.size}）· 长按导出"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 danmakuLoadFailed = true
                 b.danmakuButton.text = "弹幕加载失败 · 点击重试"
@@ -1095,6 +1101,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                         loadComments(false)
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 b.commentsStatus.visibility = View.VISIBLE
                 b.commentsStatus.text = "评论加载失败，请稍后重试"
