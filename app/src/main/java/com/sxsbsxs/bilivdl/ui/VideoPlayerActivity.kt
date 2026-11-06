@@ -173,7 +173,24 @@ class VideoPlayerActivity : AppCompatActivity() {
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentSort.text = "按热度"
         b.commentsList.layoutManager = LinearLayoutManager(this)
-        b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment, ::openUserSpace, ::handleCommentLongPress)
+        b.commentsList.isNestedScrollingEnabled = true
+        b.commentsList.clipToPadding = false
+        b.commentsList.adapter = CommentAdapter(
+            onReplies = { comment -> showReplies(comment, comment) },
+            onLike = ::likeComment,
+            onUser = ::openUserSpace,
+            onLongPress = ::handleCommentLongPress
+        )
+        b.commentsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                val manager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                if (dy > 0 && commentHasMore && !commentLoading &&
+                    manager.findLastVisibleItemPosition() >= manager.itemCount - 4) {
+                    loadComments(false)
+                }
+            }
+        })
         relatedAdapter = VideoAdapter { video ->
             startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
                 putExtra(EXTRA_BVID, video.bvid)
@@ -221,17 +238,6 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.videoTriple.setOnClickListener { tripleVideo() }
         b.downloadAllParts.setOnClickListener { showDownloadAllParts() }
         b.danmakuSend.setOnClickListener { showDanmakuComposer() }
-        // comments_list is inside a NestedScrollView with nested scrolling disabled;
-        // listen to the parent scroll view or the RecyclerView never receives scroll events.
-        b.playerScroll.setOnScrollChangeListener(
-            NestedScrollView.OnScrollChangeListener { scroll, _, y, _, _ ->
-                val content = scroll.getChildAt(0) ?: return@OnScrollChangeListener
-                if (b.playerCommentsPanel.visibility == View.VISIBLE &&
-                    y + scroll.height >= content.measuredHeight - 650) {
-                    loadComments(false)
-                }
-            }
-        )
         load(127)
         loadComments(true)
     }
@@ -1099,43 +1105,67 @@ class VideoPlayerActivity : AppCompatActivity() {
         commentHasMore = true
         consecutiveEmptyCommentPages = 0
         (b.commentsList.adapter as CommentAdapter).submit(emptyList())
+        b.commentsList.scrollToPosition(0)
         loadComments(true)
     }
 
     private fun loadComments(reset: Boolean) {
         if (commentLoading || (!commentHasMore && !reset)) return
+        if (reset) {
+            commentPage = 1
+            consecutiveEmptyCommentPages = 0
+        }
         commentLoading = true
-        b.commentsStatus.visibility = View.GONE
+        b.commentsStatus.visibility = View.VISIBLE
+        b.commentsStatus.text = if (reset) "正在加载评论…" else "正在加载更多…"
         lifecycleScope.launch {
             try {
-                val page = commentPage
-                val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.commentsPage(aid, page, commentSort) }
-                (b.commentsList.adapter as CommentAdapter).submit(result.comments, append = !reset)
-                commentPage = page + 1
-                consecutiveEmptyCommentPages = if (result.comments.isEmpty() && result.hasMore) consecutiveEmptyCommentPages + 1 else 0
+                val requestedPage = commentPage
+                val result = withContext(Dispatchers.IO) {
+                    BilimiaoApiBridge.commentsPage(aid, requestedPage, commentSort)
+                }
+                (b.commentsList.adapter as CommentAdapter).submit(
+                    result.comments,
+                    append = !reset
+                )
+                commentPage = requestedPage + 1
+                consecutiveEmptyCommentPages = if (result.comments.isEmpty() && result.hasMore) {
+                    consecutiveEmptyCommentPages + 1
+                } else {
+                    0
+                }
                 commentHasMore = result.hasMore && consecutiveEmptyCommentPages < 3
                 b.commentsTitle.text = "评论区 · " + formatCount(result.total.toLong())
-                b.commentsStatus.visibility = if (result.comments.isEmpty()) View.VISIBLE else View.GONE
+
+                val continueAfterEmptyPage = result.comments.isEmpty() && commentHasMore
                 b.commentsStatus.text = when {
-                    result.comments.isEmpty() && reset && !result.hasMore -> "暂无评论"
-                    result.comments.isEmpty() && commentHasMore -> "这一页暂时没有评论，正在继续加载…"
-                    result.comments.isEmpty() -> "暂时没有更多可展示的评论"
-                    else -> ""
+                    result.comments.isNotEmpty() && commentHasMore -> "上滑加载更多"
+                    result.comments.isNotEmpty() -> "没有更多评论了"
+                    reset && result.total <= 0 -> "暂时没有评论"
+                    continueAfterEmptyPage -> "正在跳过空页…"
+                    else -> "暂时没有更多可展示的评论"
                 }
-                // RecyclerView 位于关闭嵌套滚动的 NestedScrollView 中，追加内容后主动检查是否仍接近底部。
-                if (commentHasMore) b.playerScroll.post {
-                    val content = b.playerScroll.getChildAt(0)
-                    if (b.playerCommentsPanel.visibility == View.VISIBLE && content != null &&
-                        b.playerScroll.scrollY + b.playerScroll.height >= content.measuredHeight - 500) {
-                        loadComments(false)
+                b.commentsStatus.visibility = if (result.comments.isNotEmpty() && !commentHasMore) {
+                    View.VISIBLE
+                } else {
+                    View.VISIBLE
+                }
+
+                if (continueAfterEmptyPage) {
+                    b.commentsList.post {
+                        if (!commentLoading && commentHasMore) loadComments(false)
                     }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (e: Exception) {
+            } catch (error: Exception) {
                 b.commentsStatus.visibility = View.VISIBLE
-                b.commentsStatus.text = "评论加载失败，请稍后重试"
-            } finally { commentLoading = false }
+                b.commentsStatus.text = error.message?.takeIf { it.isNotBlank() }
+                    ?: "评论加载失败，点击重试"
+                b.commentsStatus.setOnClickListener { loadComments(reset = true) }
+            } finally {
+                commentLoading = false
+            }
         }
     }
 
@@ -1144,7 +1174,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         startActivity(Intent(this, UserSpaceActivity::class.java).putExtra(UserSpaceActivity.EXTRA_MID, mid))
     }
 
-    private fun showReplies(comment: VideoComment) {
+    private fun showReplies(rootComment: VideoComment, replyTo: VideoComment = rootComment) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(16, 8, 16, 8)
@@ -1158,14 +1188,15 @@ class VideoPlayerActivity : AppCompatActivity() {
             textSize = 12f
             setTextColor(getColor(com.sxsbsxs.bilivdl.R.color.text_secondary))
             setPadding(4, 6, 4, 6)
-            visibility = View.GONE
+            visibility = View.VISIBLE
+            text = "正在加载回复…"
         }
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
         }
         val input = EditText(this).apply {
-            hint = "回复这条评论…"
+            hint = if (replyTo.id == rootComment.id) "回复这条评论…" else "回复 ${replyTo.user}…"
             minLines = 1
             maxLines = 3
             textSize = 14f
@@ -1183,21 +1214,30 @@ class VideoPlayerActivity : AppCompatActivity() {
         root.addView(status, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(composer, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("全部回复 · ${comment.replyCount}")
+            .setTitle("全部回复 · ${rootComment.replyCount}")
             .setView(root)
             .setNegativeButton("关闭", null)
             .create()
+
         replyAdapter = CommentAdapter(
-            onReplies = { nested -> showReplies(nested) },
+            onReplies = { nested -> showReplies(rootComment, nested) },
             onLike = { target ->
-                lifecycleScope.launch {
-                    try {
-                        if (cookie.isBlank()) error("评论点赞需要先登录 B站账号")
-                        withContext(Dispatchers.IO) { BilimiaoApiBridge.likeComment(aid, target.id, !target.liked) }
-                        replyAdapter.updateLike(target.id, !target.liked)
-                    } catch (error: Exception) {
-                        status.visibility = View.VISIBLE
-                        status.text = error.message ?: "点赞失败"
+                if (replyAdapter.beginLike(target.id)) {
+                    lifecycleScope.launch {
+                        try {
+                            if (cookie.isBlank()) error("评论点赞需要先登录 B站账号")
+                            withContext(Dispatchers.IO) {
+                                BilimiaoApiBridge.likeComment(aid, target.id, !target.liked)
+                            }
+                            replyAdapter.updateLike(target.id, !target.liked)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            status.visibility = View.VISIBLE
+                            status.text = error.message ?: "点赞失败"
+                        } finally {
+                            replyAdapter.finishLike(target.id)
+                        }
                     }
                 }
             },
@@ -1209,29 +1249,44 @@ class VideoPlayerActivity : AppCompatActivity() {
         var hasMore = true
         var loading = false
         var emptyPages = 0
+
         fun loadReplyPage(reset: Boolean) {
             if (loading || (!hasMore && !reset)) return
-            if (reset) emptyPages = 0
+            if (reset) {
+                page = 1
+                emptyPages = 0
+                replyAdapter.submit(listOf(rootComment))
+            }
             loading = true
-            val requestedPage = if (reset) 1 else page
+            val requestedPage = page
+            status.visibility = View.VISIBLE
+            status.text = if (reset) "正在加载回复…" else "正在加载更多回复…"
             lifecycleScope.launch {
+                var shouldContinueEmpty = false
                 try {
                     val result = withContext(Dispatchers.IO) {
-                        BilimiaoApiBridge.replies(aid, comment.id, requestedPage)
+                        BilimiaoApiBridge.replies(aid, rootComment.id, requestedPage)
                     }
-                    if (reset) replyAdapter.submit(listOf(comment) + result.comments)
+                    if (reset) replyAdapter.submit(listOf(rootComment) + result.comments)
                     else replyAdapter.submit(result.comments, append = true)
                     page = requestedPage + 1
                     emptyPages = if (result.comments.isEmpty() && result.hasMore) emptyPages + 1 else 0
                     hasMore = result.hasMore && emptyPages < 3
-                    status.visibility = if (!hasMore || result.comments.isEmpty()) View.VISIBLE else View.GONE
+                    shouldContinueEmpty = result.comments.isEmpty() && hasMore
                     status.text = when {
-                        result.comments.isEmpty() && reset && !result.hasMore -> "暂无回复"
-                        result.comments.isEmpty() && hasMore -> "这一页暂无回复，继续加载…"
-                        !hasMore -> "没有更多回复了"
-                        else -> ""
+                        result.comments.isNotEmpty() && hasMore -> "上滑加载更多回复"
+                        result.comments.isNotEmpty() -> "没有更多回复了"
+                        reset && !hasMore -> "暂时没有回复"
+                        shouldContinueEmpty -> "正在跳过空页…"
+                        else -> "没有更多回复了"
                     }
-                    if (result.comments.isEmpty() && hasMore) status.post { loadReplyPage(false) }
+                    if (shouldContinueEmpty) {
+                        list.post {
+                            if (!loading && hasMore) loadReplyPage(false)
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     status.visibility = View.VISIBLE
                     status.text = "回复加载失败：${error.message ?: "网络异常"}"
@@ -1240,11 +1295,13 @@ class VideoPlayerActivity : AppCompatActivity() {
                 }
             }
         }
+
         list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 val manager = recyclerView.layoutManager as? LinearLayoutManager ?: return
-                if (dy > 0 && manager.findLastVisibleItemPosition() >= manager.itemCount - 3) {
+                if (dy > 0 && hasMore && !loading &&
+                    manager.findLastVisibleItemPosition() >= manager.itemCount - 3) {
                     loadReplyPage(false)
                 }
             }
@@ -1255,18 +1312,21 @@ class VideoPlayerActivity : AppCompatActivity() {
                 input.error = "请输入回复内容"
                 return@setOnClickListener
             }
+            send.isEnabled = false
             lifecycleScope.launch {
-                send.isEnabled = false
                 try {
-                    if (cookie.isBlank()) error("回复评论需要先登录 B站账号")
+                    if (cookie.isBlank()) error("回复评论需要先使用 B站 APP 扫码登录")
                     withContext(Dispatchers.IO) {
-                        BilimiaoApiBridge.sendReply(aid, comment.id, comment.id, message)
+                        // Keep the original root ID for the thread and the tapped reply ID
+                        // as the parent; nested replies must not become new root threads.
+                        BilimiaoApiBridge.sendReply(
+                            aid, rootComment.id, replyTo.id, message
+                        )
                     }
                     input.setText("")
-                    page = 1
-                    hasMore = true
-                    replyAdapter.submit(listOf(comment))
                     loadReplyPage(true)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     status.visibility = View.VISIBLE
                     status.text = error.message ?: "回复发送失败"
@@ -1284,37 +1344,55 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun likeComment(comment: VideoComment) {
+        val adapter = b.commentsList.adapter as? CommentAdapter ?: return
+        if (!adapter.beginLike(comment.id)) return
         lifecycleScope.launch {
             try {
                 if (cookie.isBlank()) error("评论点赞需要先使用 B站 APP 扫码登录")
-                val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.likeComment(aid, comment.id, !comment.liked) }
-                (b.commentsList.adapter as CommentAdapter).updateLike(comment.id, !comment.liked)
-                b.commentsStatus.visibility = View.GONE
-            } catch (e: Exception) {
+                withContext(Dispatchers.IO) {
+                    BilimiaoApiBridge.likeComment(aid, comment.id, !comment.liked)
+                }
+                adapter.updateLike(comment.id, !comment.liked)
+                b.commentsStatus.text = "操作成功"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
                 b.commentsStatus.visibility = View.VISIBLE
-                b.commentsStatus.text = e.message ?: "点赞失败"
+                b.commentsStatus.text = error.message ?: "点赞失败"
+            } finally {
+                adapter.finishLike(comment.id)
             }
         }
     }
 
     private fun sendComment() {
         val text = b.commentInput.text?.toString()?.trim().orEmpty()
-        if (text.isBlank()) { b.commentsStatus.visibility = View.VISIBLE; b.commentsStatus.text = "先输入评论内容"; return }
+        if (text.isBlank()) {
+            b.commentsStatus.visibility = View.VISIBLE
+            b.commentsStatus.text = "先输入评论内容"
+            return
+        }
+        val button = b.commentSend
+        if (!button.isEnabled) return
+        button.isEnabled = false
         lifecycleScope.launch {
             try {
                 if (cookie.isBlank()) error("发表评论需要先使用 B站 APP 扫码登录")
-                val result = withContext(Dispatchers.IO) { BilimiaoApiBridge.sendComment(aid, text) }
+                withContext(Dispatchers.IO) {
+                    BilimiaoApiBridge.sendComment(aid, text)
+                }
                 b.commentInput.text?.clear()
-                b.commentsStatus.visibility = View.GONE
                 resetComments()
-            } catch (e: Exception) {
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
                 b.commentsStatus.visibility = View.VISIBLE
-                b.commentsStatus.text = e.message ?: "发送失败"
+                b.commentsStatus.text = error.message ?: "发送失败"
+            } finally {
+                button.isEnabled = true
             }
         }
     }
-
-
 
     private fun setupAccountActionButtons() {
         val authorRow = b.playerAuthor.parent as? ViewGroup ?: return
