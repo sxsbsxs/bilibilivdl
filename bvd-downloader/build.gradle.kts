@@ -35,8 +35,8 @@ ksp {
 dependencies {
     compileOnly(files("$rootDir/app/libs/ffmpeg-kit.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.core:core:1.15.0")
+    api("androidx.core:core-ktx:1.15.0")
+    api("androidx.core:core:1.15.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.activity:activity:1.8.0")
     implementation("org.jetbrains.kotlin:kotlin-reflect:2.3.10")
