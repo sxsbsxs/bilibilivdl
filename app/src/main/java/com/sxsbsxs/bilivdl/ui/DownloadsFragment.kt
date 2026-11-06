@@ -171,22 +171,21 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             setPadding(0, 0, 0, dp(8))
         }
         fun button(label: String, enabled: Boolean, action: () -> Unit) {
-            controls.addView(MaterialButton(context).apply {
+            controls.addView(TextView(context).apply {
                 text = label
-                isAllCaps = false
+                gravity = Gravity.CENTER
+                minHeight = dp(34)
+                includeFontPadding = false
                 isEnabled = enabled
-                minHeight = dp(36)
                 val emphasized = enabled && label == "继续全部"
-                backgroundTintList = android.content.res.ColorStateList.valueOf(
-                    context.getColor(if (emphasized) R.color.brand_soft else R.color.surface_elevated)
-                )
-                strokeWidth = 0
-                elevation = 0f
                 setTextColor(context.getColor(if (emphasized) R.color.brand_dark else R.color.text_secondary))
-                textSize = 12f
-                setOnClickListener { action() }
-                layoutParams = LinearLayout.LayoutParams(0, dp(36), 1f).apply {
-                    marginEnd = dp(5)
+                if (!enabled) alpha = 0.45f
+                textSize = 11f
+                setPadding(dp(4), 0, dp(4), 0)
+                background = context.getDrawable(android.R.drawable.list_selector_background)
+                setOnClickListener { if (isEnabled) action() }
+                layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+                    marginEnd = dp(3)
                 }
             })
         }
@@ -334,26 +333,22 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
         }
         fun action(label: String, primary: Boolean = false, click: () -> Unit) {
-            actions.addView(MaterialButton(context).apply {
+            actions.addView(TextView(context).apply {
                 text = label
-                isAllCaps = false
-                minWidth = 0
-                minHeight = dp(30)
-                insetTop = 0
-                insetBottom = 0
-                cornerRadius = dp(16)
-                backgroundTintList = android.content.res.ColorStateList.valueOf(
-                    context.getColor(if (primary) R.color.brand else android.R.color.transparent)
-                )
-                strokeWidth = 0
-                elevation = 0f
-                setTextColor(context.getColor(if (primary) android.R.color.white else R.color.text_secondary))
-                textSize = 11f
+                gravity = Gravity.CENTER
+                minHeight = dp(32)
+                includeFontPadding = false
+                isClickable = true
+                isFocusable = true
+                setTextColor(context.getColor(if (primary) R.color.brand_dark else R.color.text_secondary))
+                if (primary) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                textSize = 12f
                 setPadding(dp(10), 0, dp(10), 0)
+                background = context.getDrawable(android.R.drawable.list_selector_background)
                 setOnClickListener { click() }
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, dp(32)
-                ).apply { marginStart = dp(4) }
+                ).apply { marginStart = dp(3) }
             })
         }
         when (task.status) {
