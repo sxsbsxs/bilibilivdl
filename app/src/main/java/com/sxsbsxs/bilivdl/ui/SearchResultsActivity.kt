@@ -99,7 +99,7 @@ class SearchResultsActivity : AppCompatActivity() {
                 if (fresh.isNotEmpty()) {
                     page = nextPage
                     val adapter = videoAdapter ?: return@launch
-                    adapter.submitList(adapter.currentList + fresh)
+                    adapter.appendList(fresh)
                 }
                 hasMore = result.size >= PAGE_SIZE && fresh.isNotEmpty()
                 val count = videoAdapter?.itemCount ?: 0
