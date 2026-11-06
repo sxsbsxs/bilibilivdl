@@ -329,15 +329,19 @@ object BiliPlaybackApi {
      * Video, normal audio, Dolby audio and FLAC are kept as distinct choices.
      */
     suspend fun downloadStreamChoicesAll(
+        bvid: String,
         aid: Long,
         cid: Long,
         cookie: String,
         isVip: Boolean,
         isLoggedIn: Boolean
     ): DownloadStreamChoices {
-        require(aid > 0L && cid > 0L) { "缺少视频编号或 CID" }
+        require((bvid.isNotBlank() || aid > 0L) && cid > 0L) { "缺少视频编号或 CID" }
         currentCoroutineContext().ensureActive()
-        val url = "https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&fnval=4048&fnver=0&fourk=1&high_quality=1&otype=json"
+        // Match BiliDownload's x/player/playurl request: no qn parameter, so the
+        // response contains the complete DASH track inventory for this page.
+        val identity = if (bvid.isNotBlank()) "bvid=${enc(bvid)}" else "avid=$aid"
+        val url = "https://api.bilibili.com/x/player/playurl?$identity&cid=$cid&fnval=4048&fnver=0&fourk=1"
         val root = get(url, cookie)
         if (root.optInt("code", -1) != 0) {
             error(root.optString("message").ifBlank { "B站清晰度解析失败（${root.optInt("code")}）" })
