@@ -38,6 +38,13 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     private data class SpeedSample(val bytes: Long, val atMs: Long)
     private val speedSamples = mutableMapOf<String, SpeedSample>()
     private val currentSpeeds = mutableMapOf<String, Long>()
+    private data class TaskCardViews(
+        val status: TextView,
+        val speed: TextView,
+        val progress: ProgressBar
+    )
+    private val taskCardViews = mutableMapOf<String, TaskCardViews>()
+    private var renderedTaskSignature: String? = null
 
     private val exportDirectoryPicker = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -85,21 +92,28 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         val previousScrollY = _binding?.downloadScroll?.scrollY ?: 0
         currentTasks = tasks
         updateSpeedSamples(tasks)
-        b.downloadTaskControls.removeAllViews()
+
         if (tasks.isEmpty()) {
             b.downloadSummary.text = ""
             b.downloadTasks.visibility = View.VISIBLE
             b.downloadTasks.text = "暂无下载任务"
+            val emptySignature = "$taskFilter|empty"
+            if (renderedTaskSignature != emptySignature) {
+                renderedTaskSignature = emptySignature
+                taskCardViews.clear()
+                b.downloadTaskControls.removeAllViews()
+            }
             restoreDownloadScroll(previousScrollY)
             return
         }
+
         val active = tasks.count { it.status == "queued" || it.status == "downloading" }
         val paused = tasks.count { it.status == "paused" }
         val completed = tasks.count { it.status == "completed" }
         val failed = tasks.count { it.status == "failed" }
         b.downloadSummary.text = "全部 " + tasks.size + "    进行中 " + active + "    已暂停 " + paused + "    已完成 " + completed + "    失败 " + failed
         b.downloadTasks.visibility = View.GONE
-        addTaskFilters(tasks)
+
         val visible = when (taskFilter) {
             "active" -> tasks.filter { it.status == "queued" || it.status == "downloading" }
             "paused" -> tasks.filter { it.status == "paused" }
@@ -107,6 +121,19 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             "failed" -> tasks.filter { it.status == "failed" || it.status == "cancelled" }
             else -> tasks
         }
+        // Room emits progress changes frequently. Keep existing card views when the
+        // task set and states are unchanged; only patch the status/speed/progress text.
+        val signature = taskFilter + "|" + visible.joinToString("|") { "${it.taskId}:${it.status}" }
+        if (signature == renderedTaskSignature) {
+            visible.forEach(::updateTaskCard)
+            restoreDownloadScroll(previousScrollY)
+            return
+        }
+
+        renderedTaskSignature = signature
+        taskCardViews.clear()
+        b.downloadTaskControls.removeAllViews()
+        addTaskFilters(tasks)
         addBatchControls(visible)
         if (visible.isEmpty()) {
             b.downloadTaskControls.addView(TextView(requireContext()).apply {
@@ -115,8 +142,32 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 setTextColor(requireContext().getColor(R.color.text_secondary))
                 setPadding(dp(8), dp(20), dp(8), dp(20))
             })
-        } else visible.forEach { addTaskCard(it) }
+        } else {
+            visible.forEach { addTaskCard(it) }
+        }
         restoreDownloadScroll(previousScrollY)
+    }
+
+    private fun updateTaskCard(task: DownloadTaskEntity) {
+        val views = taskCardViews[task.taskId] ?: return
+        views.status.text = statusText(task)
+        val isDownloading = task.status == "downloading"
+        views.speed.visibility = if (isDownloading) View.VISIBLE else View.GONE
+        if (isDownloading) {
+            val speed = currentSpeeds[task.taskId] ?: 0L
+            val remaining = if (speed > 0L && task.totalBytes > task.completedBytes)
+                formatEtaSeconds((task.totalBytes - task.completedBytes) / speed) else ""
+            views.speed.text = "下载速度  " + formatBytesPerSecond(speed) +
+                if (remaining.isNotBlank()) "    预计剩余 " + remaining else ""
+        }
+        val isActive = isDownloading || task.status == "queued"
+        views.progress.visibility = if (isActive) View.VISIBLE else View.GONE
+        views.progress.isIndeterminate = isActive && task.totalBytes <= 0L
+        if (isActive && !views.progress.isIndeterminate) {
+            views.progress.max = 1000
+            views.progress.progress = ((task.completedBytes.toDouble() /
+                task.totalBytes.coerceAtLeast(1L)).coerceIn(0.0, 1.0) * 1000).toInt()
+        }
     }
 
     private fun restoreDownloadScroll(previousScrollY: Int) {
@@ -298,33 +349,24 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         })
         header.addView(details, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         card.addView(header)
-        card.addView(TextView(context).apply {
-            text = statusText(task)
+        val statusView = TextView(context).apply {
             textSize = 12f
             includeFontPadding = false
             setPadding(0, dp(8), 0, dp(4))
             setTextColor(context.getColor(R.color.text_secondary))
-        })
-        if (task.status == "downloading") {
-            val speed = currentSpeeds[task.taskId] ?: 0L
-            val remaining = if (speed > 0L && task.totalBytes > task.completedBytes)
-                formatEtaSeconds((task.totalBytes - task.completedBytes) / speed) else ""
-            card.addView(TextView(context).apply {
-                text = "下载速度  " + formatBytesPerSecond(speed) + if (remaining.isNotBlank()) "    预计剩余 " + remaining else ""
-                textSize = 11f
-                setPadding(0, 0, 0, dp(7))
-                setTextColor(context.getColor(R.color.brand_dark))
-            })
         }
-        if (task.status == "downloading" || task.status == "queued") {
-            card.addView(ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-                isIndeterminate = task.totalBytes <= 0L
-                if (!isIndeterminate) {
-                    max = 1000
-                    progress = ((task.completedBytes.toDouble() / task.totalBytes).coerceIn(0.0, 1.0) * 1000).toInt()
-                }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)))
+        card.addView(statusView)
+        val speedView = TextView(context).apply {
+            textSize = 11f
+            setPadding(0, 0, 0, dp(7))
+            setTextColor(context.getColor(R.color.brand_dark))
+            visibility = View.GONE
         }
+        card.addView(speedView)
+        val progressView = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+            visibility = View.GONE
+        }
+        card.addView(progressView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4)))
         val actions = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
@@ -374,6 +416,8 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         }
         card.addView(actions)
         b.downloadTaskControls.addView(card)
+        taskCardViews[task.taskId] = TaskCardViews(statusView, speedView, progressView)
+        updateTaskCard(task)
     }
 
 
