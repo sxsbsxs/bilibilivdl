@@ -4,8 +4,6 @@ android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
  defaultConfig {
   applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=39; versionName="2.0.19"
-  // Ship only the native ABI used by the app's media pipeline; excluding
-  // unused 32-bit and x86 variants keeps the APK smaller.
   ndk { abiFilters += listOf("arm64-v8a") }
  }
  buildFeatures { viewBinding=true; compose=true }
@@ -31,6 +29,8 @@ dependencies {
  implementation("androidx.compose.ui:ui")
  implementation("androidx.compose.foundation:foundation")
  implementation("androidx.compose.material3:material3")
+ implementation("com.chibatching.kotpref:kotpref:2.13.2")
+ implementation("org.openani.mediamp:mediamp-api:0.3.2")
  implementation(project(":bilimiao-comm"))
  implementation(project(":bilimiao-compose"))
  implementation(project(":bvd-downloader"))
