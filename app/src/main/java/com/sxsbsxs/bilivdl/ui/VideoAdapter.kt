@@ -32,14 +32,6 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
             binding.videoTitle.text = v.title
             binding.videoAuthor.text = v.author
             binding.videoDurationBadge.text = v.duration
-            val face = v.authorFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
-            if (face.isNotBlank()) Glide.with(binding.videoAuthorAvatar)
-                .load(GlideUrl(face, headers))
-                .placeholder(R.drawable.bg_comment_avatar)
-                .error(R.drawable.bg_comment_avatar)
-                .circleCrop()
-                .into(binding.videoAuthorAvatar)
-            else binding.videoAuthorAvatar.setImageResource(R.drawable.bg_comment_avatar)
             binding.videoMeta.text = listOf(
                 "播放 " + v.play,
                 if (v.danmaku != null) "弹幕 " + formatCount(v.danmaku) else "",
@@ -52,7 +44,7 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
                 v.shares?.let { "分享 " + formatCount(it) }.orEmpty(),
                 v.comments?.let { "评论 " + formatCount(it) }.orEmpty()
             ).filter { it.isNotBlank() }.joinToString("  ·  ")
-            binding.videoExtraMeta.visibility = if (binding.videoExtraMeta.text.isNullOrBlank()) android.view.View.GONE else android.view.View.VISIBLE
+            binding.videoExtraMeta.visibility = android.view.View.GONE
             val imageUrl = v.cover.trim().let {
                 when {
                     it.startsWith("//") -> "https:$it"
@@ -64,6 +56,15 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
                 .addHeader("Referer", "https://www.bilibili.com/")
                 .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
                 .build()
+            val face = v.authorFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
+            if (face.isNotBlank()) Glide.with(binding.videoAuthorAvatar)
+                .load(GlideUrl(face, headers))
+                .placeholder(R.drawable.bg_comment_avatar)
+                .error(R.drawable.bg_comment_avatar)
+                .circleCrop()
+                .into(binding.videoAuthorAvatar)
+            else binding.videoAuthorAvatar.setImageResource(R.drawable.bg_comment_avatar)
+            binding.videoDurationBadge.visibility = if (v.duration.isBlank()) android.view.View.GONE else android.view.View.VISIBLE
             binding.videoCover.setImageResource(R.drawable.bg_empty_card)
             Glide.with(binding.videoCover)
                 .load(GlideUrl(imageUrl, headers))
