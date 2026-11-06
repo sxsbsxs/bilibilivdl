@@ -23,8 +23,7 @@ subprojects {
                 "androidx.compose.runtime",
                 "androidx.compose.foundation",
                 "androidx.compose.animation",
-                "androidx.compose.ui",
-                "androidx.compose.material" -> useVersion("1.10.0")
+                "androidx.compose.ui" -> useVersion("1.10.0")
                 "androidx.compose.material3" -> useVersion("1.4.0")
             }
         }
