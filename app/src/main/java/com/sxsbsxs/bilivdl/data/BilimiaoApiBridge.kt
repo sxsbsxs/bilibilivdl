@@ -48,7 +48,7 @@ object BilimiaoApiBridge {
         require(mid > 0L) { "UP主 UID 无效" }
         val root = execute(userApi.upperVideoList(
             vmid = mid.toString(),
-            aid = cursorAid.toString(),
+            aid = cursorAid.takeIf { it > 0L }?.toString().orEmpty(),
             pageSize = pageSize.coerceIn(1, 50)
         ))
         val data = root.optJSONObject("data") ?: return emptyList()
