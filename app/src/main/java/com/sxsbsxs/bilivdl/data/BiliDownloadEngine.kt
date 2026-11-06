@@ -156,15 +156,29 @@ object BiliDownloadEngine {
         throw last ?: IllegalStateException("所有 CDN 地址均不可用")
     }
 
-    private class CdnHttpException(val status: Int) : java.io.IOException("CDN 返回 HTTP " + status)
+    private class CdnHttpException(val status: Int, val retryAfter: String?) : java.io.IOException("CDN 返回 HTTP " + status)
 
     private suspend fun transfer(url: String, file: File, headers: Map<String, String>,
         progress: (Long, Long) -> Unit) {
         var last: Exception? = null
-        for (attempt in 0..MAX_RETRIES) {
-            try { transferOnce(url, file, headers, progress); return }
-            catch (e: CancellationException) { throw e }
-            catch (e: Exception) { last = e; if (e is CdnHttpException && (e.status == 403 || e.status == 412)) break; if (attempt == MAX_RETRIES) break; delay((1000L shl attempt).coerceAtMost(8000L)) }
+        for (retry in 1..MAX_RETRIES) {
+            try {
+                transferOnce(url, file, headers, progress)
+                return
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                last = error
+                val waitMillis = when (error) {
+                    is CdnHttpException -> if (error.status == 403 || error.status == 412) null
+                        else BiliDownloadRetryPolicy.delayMillis(error.status, retry, error.retryAfter)
+                    is java.net.SocketTimeoutException, is java.net.ConnectException,
+                    is java.net.UnknownHostException, is java.net.SocketException, is java.io.EOFException ->
+                        BiliDownloadRetryPolicy.delayMillis(null, retry, null)
+                    else -> null
+                } ?: break
+                delay(waitMillis)
+            }
         }
         throw last ?: IllegalStateException("下载失败")
     }
@@ -208,7 +222,7 @@ object BiliDownloadEngine {
                     return
                 }
             }
-            if (code != 200 && code != 206) throw CdnHttpException(code)
+            if (code != 200 && code != 206) throw CdnHttpException(code, c.getHeaderField("Retry-After"))
             val append = offset > 0 && code == 206
             var rangeTotal = -1L
             if (append) {
