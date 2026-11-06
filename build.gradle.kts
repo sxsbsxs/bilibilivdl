@@ -26,7 +26,7 @@ subprojects {
                 "androidx.compose.animation",
                 "androidx.compose.ui" -> useVersion("1.10.0")
                 "androidx.compose.material3" -> useVersion("1.5.0-beta02")
-                "androidx.compose.material" -> useVersion("1.11.4")
+                "androidx.compose.material" -> useVersion("1.7.8")
             }
         }
     }
