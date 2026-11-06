@@ -43,7 +43,8 @@ object BiliDownloadEngine {
             "Referer" to "https://www.bilibili.com/",
             "Accept" to "*/*"
         )
-        val merged = File(dir, "$fileStem.final.mp4")
+        val outputExtension = if (playback.audioCodec.contains("flac", ignoreCase = true)) "mkv" else "mp4"
+        val merged = File(dir, "$fileStem.final.$outputExtension")
         try {
             if (playback.isDash) {
                 val video = playback.videoUrl ?: error("DASH 视频轨道缺失")
@@ -61,7 +62,11 @@ object BiliDownloadEngine {
                 muxDashTracks(vf, af, merged)
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 if (!merged.isFile || merged.length() == 0L) error("音视频合并失败：输出文件为空")
-                validateMuxedOutput(merged, requireAudio = true)
+                if (outputExtension == "mkv") {
+                    if (!merged.isFile || merged.length() <= 1024L) error("FLAC 音视频封装失败：输出文件无效")
+                } else {
+                    validateMuxedOutput(merged, requireAudio = true)
+                }
                 vf.delete(); af.delete()
             } else if (playback.segments.size > 1) {
                 // DURL 多段视频需要按接口返回顺序全部下载并顺序拼接。
@@ -438,8 +443,9 @@ object BiliDownloadEngine {
     private suspend fun publish(context: Context, file: File, title: String): String {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "$title.mp4")
-            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+            val extension = file.extension.lowercase().ifBlank { "mp4" }
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "$title.$extension")
+            put(MediaStore.MediaColumns.MIME_TYPE, if (extension == "mkv") "video/x-matroska" else "video/mp4")
             if (Build.VERSION.SDK_INT >= 29) {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/BiliVdl")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
