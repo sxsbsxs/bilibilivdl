@@ -94,6 +94,7 @@ class UserSpaceActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.space_own_shortcuts).visibility = View.GONE
         findViewById<TextView>(R.id.space_video_heading).visibility = View.GONE
+        findViewById<View>(R.id.space_video_tab).visibility = View.GONE
         findViewById<TextView>(R.id.space_video_status).visibility = View.GONE
         findViewById<RecyclerView>(R.id.space_videos).visibility = View.GONE
         findViewById<TextView>(R.id.space_status).text = "游客模式"
@@ -325,7 +326,7 @@ class UserSpaceActivity : AppCompatActivity() {
                         .centerCrop()
                         .placeholder(R.drawable.bg_home_hero)
                         .error(R.drawable.bg_home_hero)
-                        .into(findViewById(R.id.space_banner))
+                        .into(findViewById<ImageView>(R.id.space_banner))
                 } else {
                     findViewById<ImageView>(R.id.space_banner).setImageResource(R.drawable.bg_home_hero)
                 }
