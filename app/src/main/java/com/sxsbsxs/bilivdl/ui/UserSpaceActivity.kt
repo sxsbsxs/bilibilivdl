@@ -90,6 +90,16 @@ class UserSpaceActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val profile = withContext(Dispatchers.IO) {
+                    val appSpace = runCatching { BilimiaoApiBridge.userSpace(mid) }.getOrNull()
+                    val appCard = appSpace?.optJSONObject("card")
+                    if (appCard != null) {
+                        JSONObject().put("name", appCard.optString("name"))
+                            .put("face", appCard.optString("face"))
+                            .put("sign", appCard.optString("sign"))
+                            .put("level", appCard.optJSONObject("level_info")?.optInt("current_level") ?: 0)
+                            .put("follower", appCard.optLong("fans"))
+                            .put("following", appCard.optLong("friend"))
+                    } else {
                     val primary = runCatching { request("https://api.bilibili.com/x/space/acc/info?mid=$mid") }.getOrNull()
                     val primaryData = primary?.takeIf { it.optInt("code", -1) == 0 }?.optJSONObject("data")
                     if (primaryData != null) {
@@ -112,6 +122,7 @@ class UserSpaceActivity : AppCompatActivity() {
                             .put("level", card.optJSONObject("level_info")?.optInt("current_level") ?: 0)
                             .put("follower", data.optLong("follower"))
                             .put("following", card.optLong("friend"))
+                    }
                     }
                 }
                 name.text = profile.optString("name").ifBlank { "哔哩哔哩用户" }

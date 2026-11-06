@@ -54,12 +54,15 @@ object BilimiaoApiBridge {
         val data = root.optJSONObject("data") ?: return emptyList()
         val list = data.optJSONObject("list")
         val videos = list?.optJSONArray("vlist")
+            ?: data.optJSONArray("item")
             ?: data.optJSONArray("archives")
             ?: data.optJSONArray("items")
             ?: return emptyList()
         return (0 until videos.length()).mapNotNull { index ->
             val item = videos.optJSONObject(index) ?: return@mapNotNull null
-            val aid = item.optLong("aid")
+            val aid = item.optLong("aid").takeIf { it > 0L }
+                ?: item.optString("param").toLongOrNull()
+                ?: 0L
             val bvid = item.optString("bvid")
             if (aid <= 0L && bvid.isBlank()) return@mapNotNull null
             val owner = item.optJSONObject("owner")
@@ -73,6 +76,7 @@ object BilimiaoApiBridge {
                 aid = aid,
                 description = item.optString("description").ifBlank { item.optString("desc") },
                 danmaku = item.optLong("video_review").takeIf { it > 0L }
+                    ?: item.optString("danmaku").toLongOrNull()?.takeIf { it > 0L }
                     ?: item.optJSONObject("stat")?.optLong("danmaku")?.takeIf { it > 0L },
                 likes = item.optJSONObject("stat")?.optLong("like")?.takeIf { it > 0L },
                 favorites = item.optJSONObject("stat")?.optLong("favorite")?.takeIf { it > 0L },
