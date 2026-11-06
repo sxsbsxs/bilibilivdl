@@ -4,6 +4,6 @@
         <item name="chipBackgroundColor">@color/surface_elevated</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="chipStrokeColor">@color/stroke_dark</item>
-        <item name="chipStrokeWidth">1dp</item>
+        <item name="chipStrokeWidth">0dp</item>
     </style>
 </resources>
