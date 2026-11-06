@@ -1,8 +1,8 @@
 plugins {
+    id("org.jetbrains.kotlin.kapt")
     alias(libs.plugins.android.library)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.jetbrains.kotlin.compose)
-    id("com.android.legacy-kapt")
     alias(libs.plugins.ksp)
 }
 android {
