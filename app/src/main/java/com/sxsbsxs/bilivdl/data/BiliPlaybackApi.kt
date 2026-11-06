@@ -454,27 +454,28 @@ object BiliPlaybackApi {
                 }
             }
         }
-        // HTTP 线路可能静默降档。若最高档请求仍只得到 720P 或更低，
-        // 再逐档探测官方接口实际返回的 DASH 轨道，并用最高真实轨道重新请求播放地址。
-        // 这样播放清晰度列表不会只继承某一次被降档的响应。
+        // Try independent app/gRPC routes before the slow per-tier probe. The previous
+        // order could issue many sequential requests before trying the BiliMiao route.
+        val miao = if ((bestHttp?.quality ?: 0) < qn) tryBilimiaoPlayback(resolvedAid, cid, qn) else null
+        val currentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality).maxOrNull() ?: 0
+        val grpc = if (videoCodec.isBlank() && audioCodec.isBlank() && currentBestQuality < qn)
+            tryGrpcPlayback(resolvedAid, cid, qn) else null
+
+        // Only probe individual tiers if every independent route is still at 720P or below.
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
-        if (qn >= 80 && (bestHttp?.quality ?: 0) < qn) {
+        val independentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality, grpc?.quality).maxOrNull() ?: 0
+        if (qn >= 80 && independentBestQuality <= 64) {
             discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie) }
                 .getOrDefault(emptyList())
                 .filter { it.first <= qn }
             val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
-            if (highestDiscovered != null && highestDiscovered.first > (bestHttp?.quality ?: 0)) {
+            if (highestDiscovered != null && highestDiscovered.first > independentBestQuality) {
                 val retried = runCatching {
                     httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048)
                 }.getOrNull()
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
         }
-        // HTTP 主线路若低于用户请求档位，再通过 BiliMiao 的独立请求头/解析器核对一次；
-        // 最后再与 gRPC 真实轨道比较，避免所有线路都被同一条 HTTP 响应限制在 720P。
-        val miao = if ((bestHttp?.quality ?: 0) < qn) tryBilimiaoPlayback(resolvedAid, cid, qn) else null
-        val grpc = if (videoCodec.isBlank() && audioCodec.isBlank() && (bestHttp?.quality ?: 0) < qn)
-            tryGrpcPlayback(resolvedAid, cid, qn) else null
         val candidates = listOfNotNull(bestHttp, miao, grpc)
         val best = candidates.maxByOrNull { it.quality }
         best?.let {
