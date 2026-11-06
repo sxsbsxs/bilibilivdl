@@ -174,6 +174,7 @@
                     android:layout_width="0dp"
                     android:layout_height="46dp"
                     android:id="@+id/quality_button"
+                    android:layout_weight="1"
                     android:gravity="center"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
@@ -231,6 +232,7 @@
                 android:focusable="true" />
 
             <TextView
+                    android:visibility="gone"
                     android:layout_width="match_parent"
                     android:layout_height="42dp"
                     android:id="@+id/share_video_button"
@@ -246,6 +248,7 @@
                     android:focusable="true" />
 
             <TextView
+                    android:visibility="gone"
                     android:layout_width="match_parent"
                     android:layout_height="42dp"
                     android:id="@+id/part_button"
@@ -261,6 +264,7 @@
                     android:focusable="true" />
 
             <TextView
+                    android:visibility="gone"
                     android:layout_width="match_parent"
                     android:layout_height="42dp"
                     android:id="@+id/danmaku_button"
@@ -276,6 +280,7 @@
                     android:focusable="true" />
 
             <TextView
+                    android:visibility="gone"
                     android:layout_width="match_parent"
                     android:layout_height="42dp"
                     android:id="@+id/subtitle_button"
