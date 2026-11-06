@@ -139,7 +139,7 @@ object BiliPlaybackApi {
     suspend fun downloadQualities(aid: Long, cid: Long, cookie: String): List<Pair<Int, String>> {
         // 不只依赖 qn=127 的一次响应：部分账号/视频在不同 qn 请求下返回的可用轨道集合不同。
         // 汇总每次接口真实返回的 DASH 视频轨道，绝不把 accept_quality 中未返回的档位伪造出来。
-        val requested = listOf(127, 120, 116, 112, 80, 74, 64, 32, 16)
+        val requested = listOf(127, 126, 125, 120, 116, 112, 80, 74, 64, 32, 16)
         val found = linkedMapOf<Int, String>()
         for (qn in requested) {
             // WBI 请求即使 HTTP 200，也可能返回业务错误码；这种情况同样要回退普通 playurl，
@@ -369,7 +369,7 @@ object BiliPlaybackApi {
         // The official JSON endpoint avoids localized-number conversion errors in the imported parser.
         // 先请求用户选定档位；若匿名接口对最高档返回空结果，依次尝试常见档位，
         // 但只显示响应中真实存在的视频轨 ID，绝不把请求值当成实际画质。
-        val httpCandidates = listOf(qn, 127, 120, 116, 112, 80, 74, 64, 32, 16)
+        val httpCandidates = listOf(qn, 127, 126, 125, 120, 116, 112, 80, 74, 64, 32, 16)
             .filter { it <= qn }.distinct()
         var bestHttp: PlaybackInfo? = null
         for (fnval in listOf(4048, 1)) {
