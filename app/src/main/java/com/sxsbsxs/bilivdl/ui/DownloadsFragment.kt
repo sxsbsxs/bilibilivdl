@@ -109,7 +109,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         button("继续全部", resumable.isNotEmpty()) {
             resumable.forEach {
                 BiliDownloadService.resume(context, it.taskId, it.bvid, it.aid,
-                    it.title, it.qn, it.episodeId, it.videoCodec, it.audioCodec, it.pageIndex)
+                    it.title, it.qn, it.episodeId, it.videoCodec, it.audioCodec, it.pageIndex, it.cover, it.author)
             }
         }
         button("取消全部", active.isNotEmpty()) {
@@ -216,7 +216,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         when (task.status) {
             "downloading" -> action("暂停") { BiliDownloadService.pause(context, task.taskId) }
             "paused", "failed", "queued" -> action(if (task.status == "failed") "重试" else "继续") {
-                BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec, task.pageIndex)
+                BiliDownloadService.resume(context, task.taskId, task.bvid, task.aid, task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec, task.pageIndex, task.cover, task.author)
             }
         }
         if (task.status == "downloading" || task.status == "paused" || task.status == "failed" || task.status == "queued") {
@@ -227,6 +227,15 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             card.setOnClickListener { openResource(task) }
         } else {
             card.setOnClickListener { if (task.status == "failed") showFailure(task) }
+        }
+        if (task.status == "completed" || task.status == "failed" || task.status == "cancelled") {
+            action("移除记录") {
+                AlertDialog.Builder(context).setMessage("只移除这条下载记录，不会删除已经保存的视频文件。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("移除") { _, _ ->
+                        viewLifecycleOwner.lifecycleScope.launch { dao.delete(task.taskId) }
+                    }.show()
+            }
         }
         card.addView(actions)
         b.downloadTaskControls.addView(card)
