@@ -163,10 +163,13 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 isAllCaps = false
                 isEnabled = enabled
                 minHeight = dp(36)
-                backgroundTintList = android.content.res.ColorStateList.valueOf(context.getColor(if (enabled) R.color.brand_soft else R.color.surface_elevated))
+                val emphasized = enabled && label == "继续全部"
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    context.getColor(if (emphasized) R.color.brand_soft else R.color.surface_elevated)
+                )
                 strokeWidth = 0
                 elevation = 0f
-                setTextColor(context.getColor(if (enabled) R.color.brand_dark else R.color.text_secondary))
+                setTextColor(context.getColor(if (emphasized) R.color.brand_dark else R.color.text_secondary))
                 textSize = 12f
                 setOnClickListener { action() }
                 layoutParams = LinearLayout.LayoutParams(0, dp(36), 1f).apply {
