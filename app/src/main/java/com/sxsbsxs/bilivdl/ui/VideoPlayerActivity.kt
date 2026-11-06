@@ -15,6 +15,9 @@ import android.widget.SeekBar
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -884,120 +887,134 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun showDownloadQuality() {
         downloadQualityJob?.cancel()
+        downloadOptionsJob?.cancel()
         val p = info
-        if (p == null) { b.downloadStatus.visibility = View.VISIBLE
-        b.downloadStatus.text = "请先等待播放地址加载完成"; return }
+        if (p == null) {
+            b.downloadStatus.visibility = View.VISIBLE
+            b.downloadStatus.text = "请先等待播放地址加载完成"
+            return
+        }
         b.downloadStatus.visibility = View.VISIBLE
-        b.downloadStatus.text = "正在读取可用清晰度…"
+        b.downloadStatus.text = "正在读取全部视频和音频资源…"
         downloadQualityJob = lifecycleScope.launch {
             try {
-                val downloadedChoices = withContext(Dispatchers.IO) {
-                    if (epId <= 0L && aid > 0L) {
-                        // Download probing can be capped independently from playback (BiliMiao/gRPC).
-                        runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie, isVip = accountIsVip, isLoggedIn = accountIsLoggedIn) }
-                            .onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList())
-                    } else emptyList()
-                }
-                // Merge verified playback tiers with download-endpoint tiers; never discard
-                // a 720P/1080P track that playback already proved is available.
-                val choices = (p.qualities + downloadedChoices)
-                    .distinctBy { it.first }.sortedByDescending { it.first }
-                val locked = p.restrictedQualities.associateBy { it.id }
-                val allOptions = (choices.map { it.first to it.second } + locked.values.map { it.id to it.label })
-                    .distinctBy { it.first }.sortedByDescending { it.first }
-                if (allOptions.isEmpty()) error("B站没有返回可用清晰度")
-                if (choices.isEmpty()) {
-                    MaterialAlertDialogBuilder(this@VideoPlayerActivity)
-                        .setTitle("当前账号暂无可下载画质")
-                        .setMessage(allOptions.joinToString("\n") { (id, label) ->
-                            label + if (locked[id]?.requiresVip == true) " · 需要大会员" else " · 需要登录"
-                        })
-                        .setPositiveButton("知道了", null)
-                        .show()
-                    b.downloadStatus.visibility = View.GONE
-                    return@launch
-                }
-                var selectedQuality = choices.first().first
-                val initialIndex = allOptions.indexOfFirst { it.first == selectedQuality }.coerceAtLeast(0)
-                MaterialAlertDialogBuilder(this@VideoPlayerActivity).setTitle("选择下载清晰度")
-                    .setSingleChoiceItems(allOptions.map { (id, label) ->
-                        label + when {
-                            locked[id]?.requiresVip == true -> "  🔒大会员专享"
-                            locked[id]?.requiresLogin == true -> "  🔒登录后可用"
-                            id == choices.firstOrNull()?.first -> " · 推荐"
-                            else -> ""
-                        }
-                    }.toTypedArray(), initialIndex) { _, which ->
-                        val id = allOptions[which].first
-                        val gate = locked[id]
-                        if (gate != null) {
-                            android.widget.Toast.makeText(this@VideoPlayerActivity,
-                                if (gate.requiresVip) "该清晰度需要大会员" else "该清晰度需要登录",
-                                android.widget.Toast.LENGTH_SHORT).show()
-                        } else selectedQuality = id
+                val options = withContext(Dispatchers.IO) {
+                    if (epId > 0L) {
+                        // 番剧暂沿用现有剧集资源解析；普通稿件使用 BiliDownload 的不指定 qn 请求。
+                        BangumiApiBridge.downloadStreamChoices(epId, p.cid, 127)
+                    } else {
+                        BiliPlaybackApi.downloadStreamChoicesAll(
+                            aid = aid,
+                            cid = p.cid,
+                            cookie = cookie,
+                            isVip = accountIsVip,
+                            isLoggedIn = accountIsLoggedIn
+                        )
                     }
+                }
+                if (options.video.isEmpty() || options.audio.isEmpty()) {
+                    error("B站没有返回完整的 DASH 音视频轨道")
+                }
+
+                val content = LinearLayout(this@VideoPlayerActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(18), dp(12), dp(18), dp(8))
+                }
+                fun addHeading(label: String) {
+                    content.addView(TextView(this@VideoPlayerActivity).apply {
+                        text = label
+                        textSize = 14f
+                        setTextColor(android.graphics.Color.rgb(45, 48, 54))
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        setPadding(0, dp(9), 0, dp(5))
+                    })
+                }
+                fun addTrackGroup(items: List<com.sxsbsxs.bilivdl.data.DownloadStreamOption>): RadioGroup {
+                    val group = RadioGroup(this@VideoPlayerActivity).apply {
+                        orientation = RadioGroup.VERTICAL
+                    }
+                    items.forEachIndexed { index, item ->
+                        val button = RadioButton(this@VideoPlayerActivity).apply {
+                            id = View.generateViewId()
+                            text = item.label
+                            textSize = 13f
+                            setTextColor(android.graphics.Color.rgb(48, 51, 58))
+                            tag = item
+                            setPadding(dp(4), dp(7), dp(4), dp(7))
+                        }
+                        group.addView(button, RadioGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        ))
+                        if (index == 0) group.check(button.id)
+                    }
+                    content.addView(group)
+                    return group
+                }
+
+                addHeading("视频轨道 · 选择清晰度 / 帧率 / 编码")
+                val videoGroup = addTrackGroup(options.video)
+                addHeading("音频轨道 · 包含杜比音频与 FLAC")
+                val audioGroup = addTrackGroup(options.audio)
+
+                if (options.lockedQualities.isNotEmpty()) {
+                    content.addView(TextView(this@VideoPlayerActivity).apply {
+                        text = "当前账号受限：" + options.lockedQualities.joinToString("、") {
+                            it.label + if (it.requiresVip) "（大会员）" else "（登录）"
+                        }
+                        textSize = 12f
+                        setTextColor(android.graphics.Color.rgb(130, 92, 54))
+                        setPadding(0, dp(12), 0, dp(4))
+                    })
+                }
+
+                val scroll = ScrollView(this@VideoPlayerActivity).apply {
+                    addView(content)
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dp(440)
+                    )
+                    isFillViewport = true
+                }
+                val dialog = MaterialAlertDialogBuilder(this@VideoPlayerActivity)
+                    .setTitle("选择下载资源")
+                    .setView(scroll)
                     .setNegativeButton("取消", null)
-                    .setPositiveButton("下一步") { _, _ -> loadDownloadStreamOptions(selectedQuality) }
-                    .show()
+                    .setPositiveButton("加入下载队列", null)
+                    .create()
+                dialog.setOnShowListener {
+                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                        .setOnClickListener {
+                            val selectedVideo = videoGroup.findViewById<RadioButton>(videoGroup.checkedRadioButtonId)
+                                ?.tag as? com.sxsbsxs.bilivdl.data.DownloadStreamOption
+                            val selectedAudio = audioGroup.findViewById<RadioButton>(audioGroup.checkedRadioButtonId)
+                                ?.tag as? com.sxsbsxs.bilivdl.data.DownloadStreamOption
+                            if (selectedVideo == null || selectedAudio == null) {
+                                android.widget.Toast.makeText(
+                                    this@VideoPlayerActivity,
+                                    "请分别选择视频轨道和音频轨道",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                return@setOnClickListener
+                            }
+                            // Persist exact track ID + codec. URL refresh must not switch to
+                            // another audio resource that merely uses the same codec.
+                            startDownload(
+                                qn = selectedVideo.id,
+                                videoCodec = selectedVideo.id.toString() + "|" + selectedVideo.codec,
+                                audioCodec = selectedAudio.id.toString() + "|" + selectedAudio.codec
+                            )
+                            dialog.dismiss()
+                        }
+                }
+                dialog.show()
                 b.downloadStatus.visibility = View.GONE
                 b.downloadStatus.text = ""
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                b.downloadStatus.text = "读取清晰度失败：${error.message ?: "网络异常"}"
-            }
-        }
-    }
-
-    private fun loadDownloadStreamOptions(qn: Int) {
-        downloadOptionsJob?.cancel()
-        val p = info ?: return
-        if (epId <= 0L && aid <= 0L) {
-            startDownload(qn)
-            return
-        }
-        b.downloadStatus.text = "正在读取可选音视频资源…"
-        downloadOptionsJob = lifecycleScope.launch {
-            try {
-                val options = withContext(Dispatchers.IO) {
-                    if (epId > 0L) BangumiApiBridge.downloadStreamChoices(epId, p.cid, qn) else BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn, cookie)
-                }
-                // The selected quality is a hard ceiling and must not silently turn into
-                // a lower-resolution download just because this endpoint returned 480P/360P.
-                val matchingVideos = options.video.filter { it.id == qn }
-                if (matchingVideos.isEmpty()) {
-                    startDownload(qn)
-                    return@launch
-                }
-                val videoLabels = matchingVideos.map { it.label + if (it.bandwidth == matchingVideos.maxOf { v -> v.bandwidth }) " · 推荐" else "" }.toTypedArray()
-                var videoIndex = 0
-                MaterialAlertDialogBuilder(this@VideoPlayerActivity)
-                    .setTitle("选择视频资源")
-                    .setSingleChoiceItems(videoLabels, 0) { _, which -> videoIndex = which }
-                    .setNegativeButton("取消", null)
-                    .setPositiveButton("下一步") { _, _ ->
-                        val selectedVideo = matchingVideos[videoIndex]
-                        if (options.audio.isEmpty()) {
-                            startDownload(qn, selectedVideo.id.toString() + "|" + selectedVideo.codec, "")
-                        } else {
-                            var audioIndex = 0
-                            val audioLabels = options.audio.map {
-                                it.label + if (it.bandwidth == options.audio.maxOf { a -> a.bandwidth }) " · 推荐" else ""
-                            }.toTypedArray()
-                            MaterialAlertDialogBuilder(this@VideoPlayerActivity)
-                                .setTitle("选择音频资源")
-                                .setSingleChoiceItems(audioLabels, 0) { _, which -> audioIndex = which }
-                                .setNegativeButton("取消", null)
-                                .setPositiveButton("开始下载") { _, _ ->
-                                    startDownload(qn, selectedVideo.id.toString() + "|" + selectedVideo.codec, options.audio[audioIndex].id.toString() + "|" + options.audio[audioIndex].codec)
-                                }.show()
-                        }
-                    }.show()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                b.downloadStatus.text = "读取资源选项失败，使用默认音视频轨道： " + (error.message ?: "未知错误")
-                startDownload(qn)
+                b.downloadStatus.visibility = View.VISIBLE
+                b.downloadStatus.text = "读取下载资源失败：\${error.message ?: "网络异常"}"
             }
         }
     }
