@@ -64,9 +64,51 @@ class UserSpaceActivity : AppCompatActivity() {
                 }
             }
         )
+        setupOwnAccountShortcuts(mid)
         setupFollowButton(mid)
         loadProfile(mid)
         loadCreatorVideos(mid, reset = true)
+    }
+
+
+    /**
+     * The signed-in user's own space gets shortcuts to private account libraries.
+     * Other creators' spaces remain focused on their public profile and uploads.
+     */
+    private fun setupOwnAccountShortcuts(targetMid: Long) {
+        val shortcuts = findViewById<View>(R.id.space_own_shortcuts)
+        val cookie = BiliSession.cookie(this)
+        if (cookie.isBlank()) {
+            shortcuts.visibility = View.GONE
+            return
+        }
+        lifecycleScope.launch {
+            val myMid = withContext(Dispatchers.IO) {
+                runCatching { BiliSession.profile(this@UserSpaceActivity, cookie).optLong("mid") }
+                    .getOrDefault(0L)
+            }
+            if (myMid != targetMid || myMid <= 0L || isFinishing || isDestroyed) {
+                shortcuts.visibility = View.GONE
+                return@launch
+            }
+            shortcuts.visibility = View.VISIBLE
+            findViewById<TextView>(R.id.space_own_title).text = "我的内容"
+            bindOwnShortcut(R.id.space_own_favorites, AccountLibraryActivity.TYPE_FAVORITES, myMid)
+            bindOwnShortcut(R.id.space_own_bangumi, AccountLibraryActivity.TYPE_BANGUMI, myMid)
+            bindOwnShortcut(R.id.space_own_cinema, AccountLibraryActivity.TYPE_CINEMA, myMid)
+            bindOwnShortcut(R.id.space_own_history, AccountLibraryActivity.TYPE_HISTORY, myMid)
+            bindOwnShortcut(R.id.space_own_watch_later, AccountLibraryActivity.TYPE_WATCH_LATER, myMid)
+            bindOwnShortcut(R.id.space_own_liked, AccountLibraryActivity.TYPE_LIKED, myMid)
+        }
+    }
+
+    private fun bindOwnShortcut(viewId: Int, type: String, mid: Long) {
+        findViewById<TextView>(viewId).setOnClickListener {
+            startActivity(Intent(this, AccountLibraryActivity::class.java).apply {
+                putExtra(AccountLibraryActivity.EXTRA_TYPE, type)
+                putExtra(AccountLibraryActivity.EXTRA_MID, mid)
+            })
+        }
     }
 
     private fun request(url: String): JSONObject {
