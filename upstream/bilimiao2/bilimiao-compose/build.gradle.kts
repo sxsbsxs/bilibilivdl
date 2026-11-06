@@ -63,8 +63,6 @@ kotlin {
             kotlin.srcDir("src/androidMain/java")
             resources.srcDir("src/androidMain/res")
             dependencies {
-                // Keep AndroidX Compose versions compatible with API 36 and AGP 8.13.
-                implementation(enforcedPlatform(libs.androidx.compose.bom))
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.androidx.appcompat)
                 implementation(libs.material)
