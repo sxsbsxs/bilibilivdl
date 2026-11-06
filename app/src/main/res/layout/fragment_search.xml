@@ -29,8 +29,7 @@
             android:textColor="@color/text_primary" android:textColorHint="@color/text_secondary"/>
     </com.google.android.material.textfield.TextInputLayout>
     <com.google.android.material.button.MaterialButton
-        android:id="@+id/search_button" android:layout_width="match_parent"
-        android:layout_width="wrap_content" android:layout_height="36dp" android:layout_gravity="end" android:layout_marginTop="6dp" android:minWidth="56dp" android:insetTop="0dp" android:insetBottom="0dp"
+        android:id="@+id/search_button" android:layout_width="wrap_content" android:layout_height="36dp" android:layout_gravity="end" android:layout_marginTop="6dp" android:minWidth="56dp" android:insetTop="0dp" android:insetBottom="0dp"
         android:text="搜索" android:textAllCaps="false" style="@style/Widget.Material3.Button.TextButton"
         android:textColor="@color/text_primary" app:backgroundTint="@android:color/transparent"
         app:cornerRadius="8dp"/>
