@@ -3,6 +3,10 @@ package com.sxsbsxs.bilivdl.ui
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
+import android.widget.ImageView
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.LazyHeaders
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
@@ -15,11 +19,17 @@ import kotlinx.coroutines.withContext
 class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private var status: TextView? = null
     private var accountName: TextView? = null
+    private var accountAvatar: ImageView? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         status = view.findViewById(R.id.account_status)
         accountName = view.findViewById(R.id.account_name)
+        accountAvatar = view.findViewById(R.id.account_avatar)
+        accountAvatar?.setOnClickListener {
+            val mid = BiliSession.profile(requireContext()).optLong("mid")
+            if (mid > 0L) startActivity(android.content.Intent(requireContext(), UserSpaceActivity::class.java).putExtra(UserSpaceActivity.EXTRA_MID, mid))
+        }
         view.findViewById<MaterialButton>(R.id.account_qr_login).setOnClickListener {
             startActivity(android.content.Intent(requireContext(), QrLoginActivity::class.java))
         }
@@ -45,6 +55,15 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 val data = withContext(Dispatchers.IO) { BiliSession.profile(context) }
                 val logged = data.optBoolean("isLogin")
                 accountName?.text = if (logged) data.optString("uname", "已登录") else "未登录"
+                val face = data.optString("face").let { if (it.startsWith("//")) "https:$it" else it }
+                if (logged && face.isNotBlank()) Glide.with(this@ProfileFragment)
+                    .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
+                    .placeholder(R.drawable.bg_comment_avatar).error(R.drawable.bg_comment_avatar).circleCrop()
+                    .into(accountAvatar ?: return@launch)
+                accountAvatar?.setOnClickListener {
+                    val mid = data.optLong("mid")
+                    if (mid > 0L) startActivity(android.content.Intent(requireContext(), UserSpaceActivity::class.java).putExtra(UserSpaceActivity.EXTRA_MID, mid))
+                }
                 status?.text = if (logged) "账号已连接 · UID ${data.optLong("mid")}"
                     else "未检测到有效登录。点击下方按钮使用哔哩哔哩 APP 扫码登录。"
             } catch (e: Exception) {
@@ -57,6 +76,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     override fun onDestroyView() {
         status = null
         accountName = null
+        accountAvatar = null
         super.onDestroyView()
     }
 }
