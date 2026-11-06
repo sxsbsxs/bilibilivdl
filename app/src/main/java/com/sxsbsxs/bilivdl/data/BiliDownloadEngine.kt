@@ -114,6 +114,11 @@ object BiliDownloadEngine {
         progress: (Long, Long) -> Unit) {
         val candidates = urls.filter { it.startsWith("https://") || it.startsWith("http://") }.distinct().toMutableList()
         require(candidates.isNotEmpty()) { "B站没有返回可用的 CDN 地址" }
+        // BiliDownload-style bounded 64 KiB probes: prefer the fastest reachable CDN,
+        // but keep every unselected URL as a fallback in its original relative order.
+        val ranked = rankCandidates(candidates, headers)
+        candidates.clear()
+        candidates.addAll(ranked)
         var last: Exception? = null
         var index = 0
         var refreshed = false
@@ -155,6 +160,58 @@ object BiliDownloadEngine {
         }
         throw last ?: IllegalStateException("所有 CDN 地址均不可用")
     }
+
+    private suspend fun rankCandidates(urls: List<String>, headers: Map<String, String>): List<String> =
+        coroutineScope {
+            val samples = urls.distinct().map { candidate ->
+                async {
+                    val connection = try {
+                        (URL(candidate).openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 3000
+                            readTimeout = 3000
+                            instanceFollowRedirects = true
+                            headers.forEach { (key, value) -> setRequestProperty(key, value) }
+                            setRequestProperty("Range", "bytes=0-65535")
+                            setRequestProperty("Accept-Encoding", "identity")
+                        }
+                    } catch (_: Exception) {
+                        return@async Triple(candidate, 0, Long.MAX_VALUE)
+                    }
+                    val start = System.nanoTime()
+                    kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
+                        ?.invokeOnCompletion { cause ->
+                            if (cause is CancellationException) connection.disconnect()
+                        }
+                    val count = try {
+                        val status = connection.responseCode
+                        if (status != 200 && status != 206) 0 else {
+                            var total = 0
+                            val buffer = ByteArray(8192)
+                            connection.inputStream.use { input ->
+                                while (total < 64 * 1024) {
+                                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                                    val read = input.read(buffer, 0, minOf(buffer.size, 64 * 1024 - total))
+                                    if (read < 0) break
+                                    total += read
+                                }
+                            }
+                            total
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        0
+                    } finally {
+                        connection.disconnect()
+                    }
+                    Triple(candidate, count, (System.nanoTime() - start).coerceAtLeast(1L))
+                }
+            }.awaitAll()
+            val reachable = samples.filter { it.second > 0 }
+                .sortedByDescending { it.second.toDouble() / it.third }
+                .map { it.first }
+            (reachable + urls).distinct()
+        }
 
     private class CdnHttpException(val status: Int, val retryAfter: String?) : java.io.IOException("CDN 返回 HTTP " + status)
 
