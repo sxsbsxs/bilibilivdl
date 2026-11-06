@@ -268,172 +268,84 @@ object BiliDownloadEngine {
      * 合并 B站 DURL 的多个 MP4 分段。不能直接拼接 MP4 文件字节；
      * 这里按媒体轨道读取样本，并为每段增加前一段的时间偏移。
      */
+    /** 使用 APK 内置媒体封装器合并 DURL MP4 分段。 */
     private suspend fun muxDurlSegments(segments: List<File>, output: File) {
-        output.delete()
         require(segments.isNotEmpty()) { "没有可合并的视频分段" }
-        val muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        val outputTracks = linkedMapOf<String, Int>()
-        val buffer = ByteBuffer.allocate(16 * 1024 * 1024)
-        val info = MediaCodec.BufferInfo()
-        var started = false
-        var timeOffsetUs = 0L
-        try {
-            for ((segmentIndex, file) in segments.withIndex()) {
-                val extractor = MediaExtractor()
-                try {
-                    extractor.setDataSource(file.absolutePath)
-                    val trackMap = linkedMapOf<Int, Int>()
-                    var segmentDurationUs = 0L
-                    for (track in 0 until extractor.trackCount) {
-                        val format = extractor.getTrackFormat(track)
-                        val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
-                        val outTrack = outputTracks[mime] ?: run {
-                            if (started) error("DURL 分段媒体轨道发生变化：" + mime)
-                            muxer.addTrack(format).also { outputTracks[mime] = it }
-                        }
-                        trackMap[track] = outTrack
-                        if (format.containsKey(MediaFormat.KEY_DURATION)) {
-                            segmentDurationUs = maxOf(segmentDurationUs, format.getLong(MediaFormat.KEY_DURATION))
-                        }
-                        extractor.selectTrack(track)
-                    }
-                    if (trackMap.isEmpty()) error("第 " + (segmentIndex + 1) + " 段没有可识别的媒体轨道")
-                    if (!started) {
-                        muxer.start()
-                        started = true
-                    }
-                    while (true) {
-                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                        val track = extractor.sampleTrackIndex
-                        if (track < 0) break
-                        val outTrack = trackMap[track]
-                        if (outTrack == null) {
-                            extractor.advance()
-                            continue
-                        }
-                        buffer.clear()
-                        val size = extractor.readSampleData(buffer, 0)
-                        if (size < 0) break
-                        val pts = extractor.sampleTime.coerceAtLeast(0L) + timeOffsetUs
-                        info.set(0, size, pts, extractor.sampleFlags)
-                        muxer.writeSampleData(outTrack, buffer, info)
-                        extractor.advance()
-                    }
-                    timeOffsetUs += segmentDurationUs
-                } finally {
-                    extractor.release()
-                }
-            }
-            if (!started) error("所有 DURL 分段均无法解析")
-            muxer.stop()
-        } catch (cancelled: CancellationException) {
-            output.delete()
-            throw cancelled
-        } catch (error: Exception) {
-            output.delete()
-            throw IllegalStateException("DURL 分段合并失败：" + (error.message ?: "媒体轨道异常"), error)
-        } finally {
-            runCatching { muxer.release() }
-        }
+        FfmpegMediaProcessor.mergeSegments(segments, output)
     }
 
-    /** 使用 Android MediaExtractor/MediaMuxer 直接复制 DASH 轨道，不重新编码。 */
+    /** 使用 APK 内置媒体封装器将 DASH 音视频轨道合并为 MP4。 */
     private suspend fun muxDashTracks(video: File, audio: File, output: File) {
-        output.delete()
-        val videoExtractor = MediaExtractor()
-        val audioExtractor = MediaExtractor()
-        var muxer: MediaMuxer? = null
-        try {
-            videoExtractor.setDataSource(video.absolutePath)
-            audioExtractor.setDataSource(audio.absolutePath)
-            val videoTrack = (0 until videoExtractor.trackCount).firstOrNull {
-                videoExtractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
-            } ?: error("下载的视频资源中没有视频轨道")
-            val audioTrack = (0 until audioExtractor.trackCount).firstOrNull {
-                audioExtractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: error("下载的音频资源中没有音频轨道")
-            val activeMuxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            muxer = activeMuxer
-            val outVideo = activeMuxer.addTrack(videoExtractor.getTrackFormat(videoTrack))
-            val outAudio = activeMuxer.addTrack(audioExtractor.getTrackFormat(audioTrack))
-            activeMuxer.start()
-            videoExtractor.selectTrack(videoTrack)
-            audioExtractor.selectTrack(audioTrack)
-            val videoBuffer = ByteBuffer.allocate(16 * 1024 * 1024)
-            val audioBuffer = ByteBuffer.allocate(1024 * 1024)
-            val info = MediaCodec.BufferInfo()
-            var videoTime = videoExtractor.sampleTime
-            var audioTime = audioExtractor.sampleTime
-            while (videoTime >= 0 || audioTime >= 0) {
-                kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                val takeVideo = audioTime < 0 || (videoTime >= 0 && videoTime <= audioTime)
-                val extractor = if (takeVideo) videoExtractor else audioExtractor
-                val buffer = if (takeVideo) videoBuffer else audioBuffer
-                val targetTrack = if (takeVideo) outVideo else outAudio
-                buffer.clear()
-                val size = extractor.readSampleData(buffer, 0)
-                if (size < 0) {
-                    if (takeVideo) videoTime = -1 else audioTime = -1
-                    continue
-                }
-                info.set(0, size, extractor.sampleTime, extractor.sampleFlags)
-                activeMuxer.writeSampleData(targetTrack, buffer, info)
-                extractor.advance()
-                if (takeVideo) videoTime = extractor.sampleTime else audioTime = extractor.sampleTime
-            }
-            activeMuxer.stop()
-        } catch (cancelled: CancellationException) {
-            output.delete()
-            throw cancelled
-        } catch (error: Exception) {
-            output.delete()
-            throw IllegalStateException("DASH 音视频合并失败：" + (error.message ?: "媒体轨道异常"), error)
-        } finally {
-            runCatching { muxer?.release() }
-            videoExtractor.release()
-            audioExtractor.release()
-        }
+        require(video.isFile && video.length() > 0L) { "视频轨道文件不存在或为空" }
+        require(audio.isFile && audio.length() > 0L) { "音频轨道文件不存在或为空" }
+        FfmpegMediaProcessor.mergeDashTracks(video, audio, output)
     }
 
     /** 检查合并产物可重新解析，且音视频轨道的起点和时长没有明显错位。 */
-    private fun validateMuxedOutput(file: File, requireAudio: Boolean) {
+    private data class TrackTiming(
+        val mime: String, val durationUs: Long, val firstPtsUs: Long,
+        val lastPtsUs: Long, val sampleCount: Long
+    )
+
+    /** 遍历轨道样本，检查时间戳单调性、有效样本和声明时长。 */
+    private fun inspectTrack(file: File, trackIndex: Int): TrackTiming {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(file.absolutePath)
-            var videoDuration = -1L
-            var audioDuration = -1L
-            var videoStart = -1L
-            var audioStart = -1L
-            for (index in 0 until extractor.trackCount) {
-                val format = extractor.getTrackFormat(index)
-                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
-                val duration = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else -1L
-                extractor.selectTrack(index)
-                val firstSample = extractor.sampleTime
-                if (mime.startsWith("video/")) {
-                    videoDuration = duration
-                    videoStart = firstSample
-                } else if (mime.startsWith("audio/")) {
-                    audioDuration = duration
-                    audioStart = firstSample
-                }
-                extractor.unselectTrack(index)
+            val format = extractor.getTrackFormat(trackIndex)
+            val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+            val duration = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else -1L
+            extractor.selectTrack(trackIndex)
+            var first = -1L
+            var last = -1L
+            var previous = Long.MIN_VALUE
+            var count = 0L
+            while (extractor.sampleTrackIndex >= 0) {
+                val pts = extractor.sampleTime
+                if (pts < 0L) error("媒体轨道包含无效时间戳：$mime")
+                if (previous != Long.MIN_VALUE && pts < previous) error("媒体轨道时间戳不单调：$mime")
+                if (first < 0L) first = pts
+                last = pts
+                previous = pts
+                count++
+                extractor.advance()
             }
-            if (videoDuration <= 0L || videoStart < 0L) error("合并文件缺少有效视频样本或时长")
-            if (requireAudio && (audioDuration <= 0L || audioStart < 0L)) error("合并文件缺少有效音频样本或时长")
-            if (audioStart >= 0L) {
-                val startDelta = kotlin.math.abs(videoStart - audioStart)
-                if (startDelta > 750_000L) error("音视频起始时间偏差过大：" + (startDelta / 1000) + " ms")
-                if (videoDuration > 0L && audioDuration > 0L) {
-                    val durationDelta = kotlin.math.abs(videoDuration - audioDuration)
-                    val tolerance = maxOf(2_000_000L, minOf(videoDuration, audioDuration) / 30L)
-                    if (durationDelta > tolerance) error("音视频时长不匹配：" + (videoDuration / 1000) + " ms / " + (audioDuration / 1000) + " ms")
+            if (count == 0L || first < 0L || last < first) error("媒体轨道没有有效样本：$mime")
+            if (duration > 0L && last - first > duration + maxOf(1500000L, duration / 20L)) {
+                error("媒体样本超出轨道声明时长：$mime")
+            }
+            return TrackTiming(mime, duration, first, last, count)
+        } finally { extractor.release() }
+    }
+
+    /** 校验音视频轨道存在性，并比较两条轨道的起点和结束位置。 */
+    private fun validateMuxedOutput(file: File, requireAudio: Boolean) {
+        if (!file.isFile || file.length() <= 1024L) error("合并输出文件为空或过小")
+        val extractor = MediaExtractor()
+        val tracks = mutableListOf<TrackTiming>()
+        try {
+            extractor.setDataSource(file.absolutePath)
+            for (index in 0 until extractor.trackCount) {
+                val mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME).orEmpty()
+                if (mime.startsWith("video/") || mime.startsWith("audio/")) {
+                    tracks += inspectTrack(file, index)
                 }
             }
         } catch (error: Exception) {
             throw IllegalStateException("合并后媒体校验失败：" + (error.message ?: "无法读取输出文件"), error)
-        } finally {
-            extractor.release()
+        } finally { extractor.release() }
+        val video = tracks.firstOrNull { it.mime.startsWith("video/") } ?: error("合并文件缺少视频轨道")
+        val audio = tracks.firstOrNull { it.mime.startsWith("audio/") }
+        if (requireAudio && audio == null) error("合并文件缺少音频轨道")
+        if (audio != null) {
+            val startDelta = kotlin.math.abs(video.firstPtsUs - audio.firstPtsUs)
+            if (startDelta > 750000L) error("音视频起始时间偏差过大：" + (startDelta / 1000) + " ms")
+            val videoEnd = if (video.durationUs > 0L) video.firstPtsUs + video.durationUs else video.lastPtsUs
+            val audioEnd = if (audio.durationUs > 0L) audio.firstPtsUs + audio.durationUs else audio.lastPtsUs
+            val endDelta = kotlin.math.abs(videoEnd - audioEnd)
+            val referenceDuration = listOf(video.durationUs, audio.durationUs).filter { it > 0L }.minOrNull() ?: 0L
+            val tolerance = maxOf(2000000L, referenceDuration / 30L)
+            if (endDelta > tolerance) error("音视频结束位置不匹配：" + (endDelta / 1000) + " ms")
         }
     }
 

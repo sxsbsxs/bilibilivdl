@@ -17,9 +17,9 @@ def download(url, output_dir, cookie=""):
     if cookie and (host == "bilibili.com" or host.endswith(".bilibili.com")):
         headers["Cookie"] = cookie
 
-    # Prefer separate best video/audio only when a real FFmpeg binary is available.
-    # The current APK does not bundle FFmpeg, so Android safely falls back to a
-    # progressive stream that already contains both tracks.
+    # Prefer separate streams only when a real FFmpeg CLI is available on PATH.
+    # The APK embeds FFmpegKit native libraries, not a shell executable, so this
+    # Python downloader intentionally selects a progressive A/V format on Android.
     ffmpeg_path = shutil.which("ffmpeg")
     options = {
         "outtmpl": os.path.join(output_dir, "%(title).140B [%(id)s].%(ext)s"),

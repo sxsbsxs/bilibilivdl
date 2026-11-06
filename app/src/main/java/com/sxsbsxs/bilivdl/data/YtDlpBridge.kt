@@ -50,15 +50,15 @@ object YtDlpBridge {
             ) { _, _, _ -> }
         }
 
-        synchronized(pythonRuntimeLock) {
-            if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
-        }
         val outputDir = File(
             context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir,
             "BiliVdl"
         ).apply { mkdirs() }
-        val module = Python.getInstance().getModule("ytdlp_bridge")
-        val path = module.callAttr("download", url, outputDir.absolutePath, cookie).toString()
+        val path = synchronized(pythonRuntimeLock) {
+            if (!Python.isStarted()) Python.start(AndroidPlatform(context.applicationContext))
+            Python.getInstance().getModule("ytdlp_bridge")
+                .callAttr("download", url, outputDir.absolutePath, cookie).toString()
+        }
         val downloaded = File(path).canonicalFile
         val safeRoot = outputDir.canonicalFile
         val safePrefix = safeRoot.absolutePath.trimEnd(File.separatorChar) + File.separator
