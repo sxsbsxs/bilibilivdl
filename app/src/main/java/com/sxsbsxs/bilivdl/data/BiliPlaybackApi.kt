@@ -372,10 +372,15 @@ object BiliPlaybackApi {
             val frameRate = item.optString("frameRate").ifBlank { item.optString("frame_rate") }
             if (id <= 0 || codec.isBlank() || id in lockedIds) null else {
                 val fps = frameRate.takeIf { it.isNotBlank() }?.let { value -> " · " + if (value.contains("fps", ignoreCase = true)) value else "$value fps" }.orEmpty()
+                val dynamicRange = when (id) {
+                    126 -> " · 杜比视界"
+                    125 -> " · HDR"
+                    else -> ""
+                }
                 DownloadStreamOption(
                     id = id,
                     codec = codec,
-                    label = "${height}P$fps · $codec · ${bandwidth / 1000} kbps",
+                    label = "${height}P$fps$dynamicRange · $codec · ${bandwidth / 1000} kbps",
                     bandwidth = bandwidth,
                     height = height,
                     frameRate = frameRate,
@@ -512,9 +517,9 @@ object BiliPlaybackApi {
             val aa = dash.optJSONArray("audio")
             val videos = (0 until (va?.length() ?: 0)).mapNotNull { va?.optJSONObject(it) }
             val audios = mutableListOf<JSONObject>().apply {
-                for (index in 0 until (aa?.length() ?: 0)) aa?.optJSONObject(index)?.let(::add)
+                for (index in 0 until (aa?.length() ?: 0)) aa?.optJSONObject(index)?.let { add(it) }
                 val dolby = dash.optJSONObject("dolby")?.optJSONArray("audio")
-                for (index in 0 until (dolby?.length() ?: 0)) dolby?.optJSONObject(index)?.let(::add)
+                for (index in 0 until (dolby?.length() ?: 0)) dolby?.optJSONObject(index)?.let { add(it) }
                 dash.optJSONObject("flac")?.optJSONObject("audio")?.let(::add)
             }
             // B站的 data.quality 可能是本次请求协商出的档位（例如 64/720P），
@@ -560,7 +565,7 @@ object BiliPlaybackApi {
                 realQualities.ifEmpty { listOf(actual to qualityLabel(actual)) },
                 isDash = !audioUrl.isNullOrBlank(), videoUrl = videoUrl, audioUrl = audioUrl,
                 videoBackupUrls = backupUrls(video).filterNot { it == videoUrl },
-                audioBackupUrls = audio?.let(::backupUrls).orEmpty().filterNot { it == audioUrl },
+                audioBackupUrls = audio?.let { backupUrls(it) }.orEmpty().filterNot { it == audioUrl },
                 restrictedQualities = restricted)
         }
         val durl = data.optJSONArray("durl") ?: return null
