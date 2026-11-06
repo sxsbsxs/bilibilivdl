@@ -110,10 +110,22 @@ class LocalDownloadsActivity : AppCompatActivity() {
         ) else arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
             MediaStore.Video.Media.SIZE, MediaStore.Video.Media.DATE_ADDED, MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.DATA)
-        val selection = if (Build.VERSION.SDK_INT >= 29)
-            "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? OR ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
-        else "${MediaStore.Video.Media.DATA} LIKE ? OR ${MediaStore.Video.Media.DATA} LIKE ?"
-        val args = arrayOf("%BiliVdl%", "%BiliDownload%")
+        // BiliDownload publishes completed videos to Movies/BVD by default.
+        // Keep the older BiliVdl folders searchable for files downloaded by previous builds.
+        val selectionColumn = if (Build.VERSION.SDK_INT >= 29)
+            MediaStore.MediaColumns.RELATIVE_PATH
+        else MediaStore.Video.Media.DATA
+        val selection = listOf(
+            "$selectionColumn LIKE ?",
+            "$selectionColumn LIKE ?",
+            "$selectionColumn LIKE ?",
+            "$selectionColumn LIKE ?"
+        ).joinToString(" OR ")
+        val args = if (Build.VERSION.SDK_INT >= 29) {
+            arrayOf("%Movies/BVD/%", "%Download/BVD/%", "%BiliVdl%", "%BiliDownload%")
+        } else {
+            arrayOf("%/Movies/BVD/%", "%/Download/BVD/%", "%BiliVdl%", "%BiliDownload%")
+        }
         contentResolver.query(collection, projection, selection, args, "${MediaStore.Video.Media.DATE_ADDED} DESC")?.use { c ->
             val idCol = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
             val nameCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
