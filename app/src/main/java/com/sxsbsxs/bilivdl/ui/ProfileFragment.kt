@@ -98,7 +98,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 loginEntry?.visibility = View.GONE
                 refreshEntry?.visibility = View.VISIBLE
                 logoutEntry?.visibility = View.VISIBLE
-                accountAvatar?.setImageResource(R.drawable.bg_comment_avatar)
+                accountAvatar?.setImageResource(R.drawable.bili_akari_img)
             }
         }
     }
@@ -106,7 +106,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private fun openOwnSpace() {
         val ctx = context?.applicationContext ?: return
         if (BiliSession.cookie(ctx).isBlank()) {
-            startActivity(Intent(requireContext(), QrLoginActivity::class.java))
+            startActivity(Intent(requireContext(), UserSpaceActivity::class.java)
+                .putExtra(UserSpaceActivity.EXTRA_GUEST_MODE, true))
             return
         }
         if (accountMid > 0L) {
@@ -124,7 +125,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                     startActivity(Intent(requireContext(), UserSpaceActivity::class.java)
                         .putExtra(UserSpaceActivity.EXTRA_MID, account.mid))
                 } else {
-                    startActivity(Intent(requireContext(), QrLoginActivity::class.java))
+                    startActivity(Intent(requireContext(), UserSpaceActivity::class.java)
+                        .putExtra(UserSpaceActivity.EXTRA_GUEST_MODE, true))
                 }
             } catch (error: Exception) {
                 if (isAdded) status?.text = error.message ?: "暂时无法打开个人空间，请刷新账号"
@@ -144,9 +146,9 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         if (account.avatar.isNotBlank()) {
             Glide.with(this).load(GlideUrl(account.avatar,
                 LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
-                .placeholder(R.drawable.bg_comment_avatar).error(R.drawable.bg_comment_avatar)
+                .placeholder(R.drawable.bili_akari_img).error(R.drawable.bili_akari_img)
                 .circleCrop().into(accountAvatar ?: return)
-        } else accountAvatar?.setImageResource(R.drawable.bg_comment_avatar)
+        } else accountAvatar?.setImageResource(R.drawable.bili_akari_img)
         accountHeader?.isClickable = true
         accountAvatar?.setOnClickListener { openOwnSpace() }
     }
@@ -158,7 +160,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         logoutEntry?.visibility = View.GONE
         accountName?.text = "未登录"
         status?.text = "浏览、搜索和游客可用的播放功能无需登录"
-        accountAvatar?.setImageResource(R.drawable.bg_comment_avatar)
+        accountAvatar?.setImageResource(R.drawable.bili_akari_img)
         accountAvatar?.setOnClickListener { openOwnSpace() }
         accountHeader?.isClickable = true
     }

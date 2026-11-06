@@ -27,7 +27,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class UserSpaceActivity : AppCompatActivity() {
-    companion object { const val EXTRA_MID = "user_mid" }
+    companion object {
+        const val EXTRA_MID = "user_mid"
+        const val EXTRA_GUEST_MODE = "guest_mode"
+    }
     private lateinit var videosAdapter: VideoAdapter
     private var videosLoading = false
     private var videosHasMore = true
@@ -39,6 +42,10 @@ class UserSpaceActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_user_space)
         findViewById<View>(R.id.space_back).setOnClickListener { finish() }
+        if (intent.getBooleanExtra(EXTRA_GUEST_MODE, false)) {
+            showGuestSpace()
+            return
+        }
         val mid = intent.getLongExtra(EXTRA_MID, 0L)
         if (mid <= 0L) { finish(); return }
         videosAdapter = VideoAdapter { video ->
@@ -71,6 +78,28 @@ class UserSpaceActivity : AppCompatActivity() {
     }
 
 
+    /** Displays the guest personal-space shell without blocking browsing behind login. */
+    private fun showGuestSpace() {
+        findViewById<TextView>(R.id.space_page_title).text = "个人空间"
+        findViewById<TextView>(R.id.space_name).text = "未登录"
+        findViewById<TextView>(R.id.space_uid).text = "登录后查看你的个人主页"
+        findViewById<TextView>(R.id.space_sign).text = "登录后同步头像、关注、收藏、追番、历史记录和稍后再看。游客仍可浏览、搜索和播放公开内容。"
+        findViewById<TextView>(R.id.space_stats).text = "关注 —    粉丝 —"
+        findViewById<ImageView>(R.id.space_avatar).apply {
+            setImageResource(R.drawable.bili_akari_img)
+            setOnClickListener { startActivity(Intent(this@UserSpaceActivity, QrLoginActivity::class.java)) }
+        }
+        findViewById<View>(R.id.space_own_shortcuts).visibility = View.GONE
+        findViewById<TextView>(R.id.space_video_heading).visibility = View.GONE
+        findViewById<TextView>(R.id.space_video_status).visibility = View.GONE
+        findViewById<RecyclerView>(R.id.space_videos).visibility = View.GONE
+        findViewById<TextView>(R.id.space_status).text = "游客模式"
+        findViewById<MaterialButton>(R.id.space_follow_button).apply {
+            text = "B站 APP 扫码登录"
+            visibility = View.VISIBLE
+            setOnClickListener { startActivity(Intent(this@UserSpaceActivity, QrLoginActivity::class.java)) }
+        }
+    }
     /**
      * The signed-in user's own space gets shortcuts to private account libraries.
      * Other creators' spaces remain focused on their public profile and uploads.

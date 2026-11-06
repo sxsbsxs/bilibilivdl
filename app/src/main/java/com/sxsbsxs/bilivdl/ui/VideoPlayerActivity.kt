@@ -11,7 +11,6 @@ import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.SeekBar
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -60,6 +59,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.setContent
+import cn.a10miaomiao.bilimiao.compose.components.player.videoplayer.progress.MediaCacheProgressInfo
+import cn.a10miaomiao.bilimiao.compose.components.player.videoplayer.progress.MediaProgressSlider
+import cn.a10miaomiao.bilimiao.compose.components.player.videoplayer.progress.MediaProgressSliderDefaults
+import cn.a10miaomiao.bilimiao.compose.components.player.videoplayer.progress.PlayerProgressSliderState
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -137,20 +152,12 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var temporarySpeed = false
     private var fullscreen = false
     private var lastTapAt = 0L
-    private var updatingSeek = false
     private val progressUpdater = object : Runnable {
         override fun run() {
             if (!isFinishing && ::b.isInitialized) {
                 val player = exo
-                val seek = findViewById<SeekBar>(R.id.player_seek)
-                if (player != null && seek != null && !updatingSeek && player.duration > 0L) {
-                    seek.max = 1000
-                    val duration = player.duration.toDouble()
-                    seek.progress = ((player.currentPosition.toDouble() / duration).coerceIn(0.0, 1.0) * 1000).toInt()
-                    seek.secondaryProgress = ((player.bufferedPosition.coerceAtLeast(0L).toDouble() / duration)
-                        .coerceIn(0.0, 1.0) * 1000).toInt()
-                    findViewById<TextView>(R.id.player_time)?.text =
-                        "${timeLabel(player.currentPosition)} / ${timeLabel(player.duration)}"
+                if (player != null && player.duration > 0L) {
+                    b.playerTime.text = "${timeLabel(player.currentPosition)} / ${timeLabel(player.duration)}"
                 }
                 playerUiHandler.postDelayed(this, 500L)
             }
@@ -299,6 +306,61 @@ class VideoPlayerActivity : AppCompatActivity() {
         target.setClass(this, BvdVideoDetailsActivity::class.java)
         startActivity(target)
     }
+    /** Uses bilimiao2 original Compose progress slider with the existing ExoPlayer session. */
+    private fun setupBilimiaoProgressSlider(player: ExoPlayer) {
+        b.playerSeekCompose.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        b.playerSeekCompose.setContent {
+            val position = remember(player) { mutableLongStateOf(player.currentPosition.coerceAtLeast(0L)) }
+            val buffered = remember(player) { mutableLongStateOf(player.bufferedPosition.coerceAtLeast(0L)) }
+            val duration = remember(player) { mutableLongStateOf(player.duration.coerceAtLeast(0L)) }
+            LaunchedEffect(player) {
+                while (isActive) {
+                    position.longValue = player.currentPosition.coerceAtLeast(0L)
+                    buffered.longValue = player.bufferedPosition.coerceAtLeast(0L)
+                    duration.longValue = player.duration.coerceAtLeast(0L)
+                    delay(180L)
+                }
+            }
+            val sliderState = remember(player) {
+                PlayerProgressSliderState(
+                    currentPositionMillis = { position.longValue },
+                    totalDurationMillis = { duration.longValue },
+                    chapters = { emptyList() },
+                    onPreview = { },
+                    onPreviewFinished = { player.seekTo(it) }
+                )
+            }
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = ComposeColor(0xFFFB7299),
+                    surface = ComposeColor(0xFF303036),
+                    onSurface = ComposeColor.White,
+                    onBackground = ComposeColor.White
+                )
+            ) {
+                MediaProgressSlider(
+                    state = sliderState,
+                    cacheProgressInfoFlow = {
+                        val total = duration.longValue
+                        if (total <= 0L) null else MediaCacheProgressInfo(
+                            (buffered.longValue.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                        )
+                    },
+                    colors = MediaProgressSliderDefaults.colors(
+                        trackBackgroundColor = ComposeColor.White.copy(alpha = 0.28f),
+                        trackProgressColor = ComposeColor(0xFFFB7299),
+                        thumbColor = ComposeColor.White,
+                        cachedProgressColor = ComposeColor.White.copy(alpha = 0.62f),
+                        previewTimeBackgroundColor = ComposeColor(0xFF24242A),
+                        previewTimeTextColor = ComposeColor.White
+                    ),
+                    enabled = duration.longValue > 0L,
+                    showPreviewTimeTextOnThumb = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
     private fun formatCount(value: Long): String {
         if (value < 10_000L) return value.toString()
         val divisor = if (value >= 100_000_000L) 100_000_000L else 10_000L
@@ -406,6 +468,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val source = DefaultMediaSourceFactory(this@VideoPlayerActivity).setDataSourceFactory(http)
                 exo = ExoPlayer.Builder(this@VideoPlayerActivity).setMediaSourceFactory(source).build().also { player ->
                     b.playerView.player = player
+                    setupBilimiaoProgressSlider(player)
                     if (p.isDash && p.videoUrl != null && p.audioUrl != null) {
                         val videoSource = source.createMediaSource(buildMediaItem(p.videoUrl))
                         val audioSource = source.createMediaSource(buildMediaItem(p.audioUrl))
@@ -679,24 +742,11 @@ class VideoPlayerActivity : AppCompatActivity() {
         val forward = findViewById<TextView>(R.id.player_forward10)
         val speed = findViewById<TextView>(R.id.player_speed)
         val full = findViewById<TextView>(R.id.player_fullscreen)
-        val seek = findViewById<SeekBar>(R.id.player_seek)
         play.setOnClickListener { exo?.let { if (it.isPlaying) it.pause() else it.play() }; updatePlayerControlLabels() }
         back.setOnClickListener { seekBy(-10_000L) }
         forward.setOnClickListener { seekBy(10_000L) }
         speed.setOnClickListener { cyclePlaybackSpeed(); updatePlayerControlLabels() }
         full.setOnClickListener { toggleFullscreen() }
-        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onStartTrackingTouch(bar: SeekBar) { updatingSeek = true }
-            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
-                if (fromUser) findViewById<TextView>(R.id.player_time).text =
-                    "${timeLabel((exo?.duration?.coerceAtLeast(0L) ?: 0L) * value / 1000L)} / ${timeLabel(exo?.duration ?: 0L)}"
-            }
-            override fun onStopTrackingTouch(bar: SeekBar) {
-                val player = exo
-                if (player != null && player.duration > 0L) player.seekTo(player.duration * bar.progress / 1000L)
-                updatingSeek = false
-            }
-        })
         layer.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
