@@ -21,6 +21,10 @@ import com.google.gson.JsonObject
 object AccountManager {
     private const val TAG = "AccountManager"
 
+    // Reject delayed account responses from a previous login after the cookie changes.
+    @Volatile
+    private var sessionGeneration = 0L
+
     private const val FILE_CACHE = "account"
     private const val KEY_COOKIES = "cookies"
 
@@ -39,6 +43,7 @@ object AccountManager {
      */
     fun updateCookie(cookies: String? = null) {
         val nextCookies = cookies ?: getCookieLocalCache() ?: return
+        val generation = synchronized(this) { ++sessionGeneration }
         if (cookiesLiveData.value != nextCookies) {
             NetworkManager.biliVideoStatsRepository.invalidate()
         }
@@ -51,12 +56,16 @@ object AccountManager {
                 message: String,
                 data: MyBiliAccountData
             ) {
-                requestAccountFace(mid = data.mid)
+                if (generation == sessionGeneration) {
+                    requestAccountFace(mid = data.mid, generation = generation)
+                }
             }
 
             override fun onFailure(httpCode: Int, code: Int, message: String) {
-                clearAccount()
-                Log.e(TAG, "onFailure: httpCode=$httpCode, code=$code, message=$message")
+                if (generation == sessionGeneration) {
+                    clearAccount()
+                    Log.e(TAG, "onFailure: httpCode=$httpCode, code=$code, message=$message")
+                }
             }
         }
         NetworkManager.biliAccountRepository.requestMyAccountData(callback = callback)
@@ -88,7 +97,7 @@ object AccountManager {
     }
 
     /** 获取账号资料；请求成功后再缓存当前 Cookie 并发布账号模型，失败则清理内存账号状态。 */
-    private fun requestAccountFace(mid: Long) {
+    private fun requestAccountFace(mid: Long, generation: Long) {
         val callback = object : IServerCallback<BiliAccountData> {
             override fun onSuccess(
                 httpCode: Int,
@@ -96,13 +105,16 @@ object AccountManager {
                 message: String,
                 data: BiliAccountData
             ) {
+                if (generation != sessionGeneration) return
                 updateCookieLocalCache()
                 accountLiveData.postValue(BiliAccountModel.create(data = data))
             }
 
             override fun onFailure(httpCode: Int, code: Int, message: String) {
-                clearAccount()
-                Log.e(TAG, "onFailure: httpCode=$httpCode, code=$code, message=$message")
+                if (generation == sessionGeneration) {
+                    clearAccount()
+                    Log.e(TAG, "onFailure: httpCode=$httpCode, code=$code, message=$message")
+                }
             }
 
         }
@@ -110,8 +122,14 @@ object AccountManager {
     }
 
     /** 清理共享账号状态；默认保留持久缓存，只有明确退出成功时同时移除缓存。 */
+    /** Clear BiliDownload's in-memory identity and its private cookie cache after BiliVdl logs out. */
+    fun clearLocalSession() {
+        clearAccount(removeLocalCache = true)
+    }
+
     private fun clearAccount(removeLocalCache: Boolean = false) {
-        // 先取消旧身份下的补齐，避免退出后的迟到响应重新填入共享缓存。
+        // Invalidate late account callbacks before publishing the logged-out state.
+        synchronized(this) { sessionGeneration += 1L }
         NetworkManager.biliVideoStatsRepository.invalidate()
         cookiesLiveData.postValue(null)
         accountLiveData.postValue(null)

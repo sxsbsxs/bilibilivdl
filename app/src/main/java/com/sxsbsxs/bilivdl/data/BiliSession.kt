@@ -1,7 +1,10 @@
 package com.sxsbsxs.bilivdl.data
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
+import cc.kafuu.bilidownload.common.manager.AccountManager
 import android.webkit.CookieManager
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -50,12 +53,21 @@ object BiliSession {
             "https://passport.bilibili.com", "https://m.bilibili.com")
             .forEach { manager.setCookie(it, normalized) }
         manager.flush()
+
+        // Keep the embedded BiliDownload account header and detail screens in the
+        // same login session as BiliVdl immediately, without requiring an app restart.
+        val syncAccount = Runnable { AccountManager.updateCookie(normalized) }
+        if (Looper.myLooper() == Looper.getMainLooper()) syncAccount.run()
+        else Handler(Looper.getMainLooper()).post(syncAccount)
     }
 
     @Synchronized fun clear(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
+        // Remove BiliDownload's separate account preference as well; keep its Room
+        // download history untouched.
+        runCatching { AccountManager.clearLocalSession() }
     }
 
     /** Account identity model adapted from BiliDownload's AccountManager/BiliAccountModel flow. */
