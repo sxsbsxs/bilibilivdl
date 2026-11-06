@@ -14,6 +14,12 @@ import com.sxsbsxs.bilivdl.databinding.ItemVideoBinding
 class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adapter<VideoAdapter.Holder>() {
     private val items = mutableListOf<BiliVideo>()
     fun submitList(list: List<BiliVideo>) { items.clear(); items.addAll(list); notifyDataSetChanged() }
+    fun appendList(list: List<BiliVideo>) {
+        if (list.isEmpty()) return
+        val start = items.size
+        items.addAll(list)
+        notifyItemRangeInserted(start, list.size)
+    }
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         Holder(ItemVideoBinding.inflate(LayoutInflater.from(parent.context), parent, false))
     override fun getItemCount() = items.size
