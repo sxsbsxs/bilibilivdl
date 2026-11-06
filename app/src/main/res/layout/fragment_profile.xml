@@ -3,9 +3,12 @@
  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="22dp">
   <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="我的" android:textColor="@color/text_primary" android:textSize="26sp" android:textStyle="bold"/>
   <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" app:cardBackgroundColor="@color/surface_elevated" app:cardCornerRadius="20dp" app:strokeColor="@color/stroke_dark" app:strokeWidth="1dp">
-   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
-    <TextView android:id="@+id/account_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="未登录" android:textColor="@color/text_primary" android:textSize="21sp" android:textStyle="bold"/>
-    <TextView android:id="@+id/account_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="正在检查账号状态…" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:padding="20dp">
+    <ImageView android:id="@+id/account_avatar" android:layout_width="64dp" android:layout_height="64dp" android:background="@drawable/bg_comment_avatar" android:clipToOutline="true" android:scaleType="centerCrop" android:contentDescription="我的头像"/>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+     <TextView android:id="@+id/account_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="未登录" android:textColor="@color/text_primary" android:textSize="21sp" android:textStyle="bold"/>
+     <TextView android:id="@+id/account_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="正在检查账号状态…" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+    </LinearLayout>
    </LinearLayout>
   </com.google.android.material.card.MaterialCardView>
   <com.google.android.material.button.MaterialButton android:id="@+id/account_qr_login" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="18dp" android:text="使用哔哩哔哩 APP 扫码登录" android:textAllCaps="false" app:backgroundTint="@color/brand" app:cornerRadius="16dp"/>
