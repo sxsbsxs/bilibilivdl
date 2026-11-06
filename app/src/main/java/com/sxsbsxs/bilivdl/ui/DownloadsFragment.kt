@@ -19,7 +19,6 @@ import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
-import com.google.android.material.button.MaterialButton
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliDownloadService
 import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
