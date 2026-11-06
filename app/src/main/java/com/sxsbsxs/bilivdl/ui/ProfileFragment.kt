@@ -83,6 +83,9 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         status = null
         accountName = null
         accountAvatar = null
+        loginEntry = null
+        refreshEntry = null
+        logoutEntry = null
         super.onDestroyView()
     }
 }
