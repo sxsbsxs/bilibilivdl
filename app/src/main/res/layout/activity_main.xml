@@ -3,10 +3,10 @@
     android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background_dark" android:orientation="vertical">
     <FrameLayout android:id="@+id/fragment_container" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
     <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottom_navigation" android:layout_width="match_parent" android:layout_height="64dp"
-        android:background="@color/surface_dark" android:elevation="8dp"
+        android:id="@+id/bottom_navigation" android:layout_width="match_parent" android:layout_height="60dp"
+        android:background="@color/surface_dark" android:elevation="6dp"
         app:itemHorizontalTranslationEnabled="false" app:itemIconSize="21dp"
         app:itemIconTint="@color/nav_item_tint" app:itemTextColor="@color/nav_item_tint"
-        app:itemPaddingTop="5dp" app:itemPaddingBottom="4dp"
+        app:itemPaddingTop="4dp" app:itemPaddingBottom="3dp"
         app:labelVisibilityMode="labeled" app:menu="@menu/bottom_navigation"/>
 </LinearLayout>
