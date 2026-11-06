@@ -1,6 +1,9 @@
 package com.sxsbsxs.bilivdl.ui
 
 import android.content.Intent
+import android.net.Uri
+import android.provider.DocumentsContract
+import android.widget.Toast
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -10,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
@@ -22,6 +26,8 @@ import com.sxsbsxs.bilivdl.data.queue.DownloadQueueDatabase
 import com.sxsbsxs.bilivdl.data.queue.DownloadTaskEntity
 import com.sxsbsxs.bilivdl.databinding.FragmentDownloadBinding
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class DownloadsFragment : Fragment(R.layout.fragment_download) {
     private var _binding: FragmentDownloadBinding? = null
@@ -32,6 +38,20 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     private data class SpeedSample(val bytes: Long, val atMs: Long)
     private val speedSamples = mutableMapOf<String, SpeedSample>()
     private val currentSpeeds = mutableMapOf<String, Long>()
+
+    private val exportDirectoryPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                requireContext().contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            exportCompletedFiles(uri)
+        }
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -164,6 +184,10 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 BiliDownloadService.resume(context, it.taskId, it.bvid, it.aid,
                     it.title, it.qn, it.episodeId, it.videoCodec, it.audioCodec, it.pageIndex, it.cover, it.author)
             }
+        }
+        val completed = tasks.filter { it.status == "completed" && it.outputPath.isNotBlank() }
+        button("导出全部", completed.isNotEmpty()) {
+            exportDirectoryPicker.launch(null)
         }
         button("取消全部", active.isNotEmpty()) {
             AlertDialog.Builder(context).setTitle("取消全部活动任务")
@@ -310,6 +334,61 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         }
         card.addView(actions)
         b.downloadTaskControls.addView(card)
+    }
+
+
+    /** 将已完成任务复制到用户通过系统文件选择器授权的目录，不移动或删除原文件。 */
+    private fun exportCompletedFiles(treeUri: Uri) {
+        val targets = currentTasks.filter { it.status == "completed" && it.outputPath.isNotBlank() }
+        if (targets.isEmpty()) {
+            Toast.makeText(requireContext(), "没有可导出的已完成文件", Toast.LENGTH_SHORT).show()
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val context = requireContext().applicationContext
+                val resolver = context.contentResolver
+                val rootDocument = DocumentsContract.buildDocumentUriUsingTree(
+                    treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+                )
+                var exported = 0
+                var failed = 0
+                targets.forEachIndexed { index, task ->
+                    val baseName = task.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                        .trim().take(70).ifBlank { "B站视频" }
+                    val name = if (index == 0) "$baseName.mp4" else "$baseName-$index.mp4"
+                    var destination: Uri? = null
+                    try {
+                        destination = DocumentsContract.createDocument(
+                            resolver, rootDocument, "video/mp4", name
+                        ) ?: error("无法在目标目录创建文件")
+                        val source = Uri.parse(task.outputPath)
+                        val input = if (source.scheme == "file") {
+                            java.io.FileInputStream(java.io.File(source.path.orEmpty()))
+                        } else resolver.openInputStream(source) ?: error("无法读取源视频")
+                        input.use { from ->
+                            resolver.openOutputStream(destination, "w")?.use { to ->
+                                from.copyTo(to)
+                                to.flush()
+                            } ?: error("无法写入目标文件")
+                        }
+                        exported++
+                    } catch (_: Exception) {
+                        failed++
+                        destination?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+                    }
+                }
+                exported to failed
+            }
+            if (_binding != null) {
+                val (exported, failed) = result
+                Toast.makeText(
+                    requireContext(),
+                    "导出完成：成功 $exported 个，失败 $failed 个",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun openResource(task: DownloadTaskEntity) {
