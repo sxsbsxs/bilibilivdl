@@ -48,8 +48,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:background="#77000000"
-                    android:padding="7dp">
+                    android:background="@drawable/bg_player_controls"
+                    android:padding="9dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -157,7 +157,7 @@
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:textStyle="bold"
-                    android:background="?attr/selectableItemBackgroundBorderless" />
+                    android:background="@drawable/bg_player_tab" />
 
                 <TextView
                     android:id="@+id/player_comments_tab"
@@ -169,7 +169,7 @@
                     android:text="评论"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
-                    android:background="?attr/selectableItemBackgroundBorderless" />
+                    android:background="@drawable/bg_player_tab" />
             </LinearLayout>
 
             <LinearLayout
@@ -297,7 +297,7 @@
                     android:text="倍速 1.0x"
                     android:textColor="@color/text_primary"
                     android:textSize="13sp"
-                    android:background="@drawable/bg_surface_card"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -313,7 +313,7 @@
                     android:text="下载"
                     android:textColor="@color/brand_dark"
                     android:textSize="13sp"
-                    android:background="@drawable/bg_surface_card"
+                    android:background="@drawable/bg_pill_soft"
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
@@ -620,7 +620,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:background="@drawable/bg_empty_card"
+                    android:background="@drawable/bg_input_field"
                     android:hint="写下你的评论…"
                     android:inputType="textCapSentences|textMultiLine"
                     android:maxLines="3"
