@@ -114,11 +114,13 @@ class AccountLibraryActivity : AppCompatActivity() {
         }
         toolbar.addView(titleView, LinearLayout.LayoutParams(0, dp(48), 1f))
         val refresh = TextView(this).apply {
-            text = "刷新"
+            text = if (type == TYPE_FAVORITES) "新建" else "刷新"
             textSize = 13f
             setTextColor(Color.rgb(0, 161, 214))
             gravity = Gravity.CENTER
-            setOnClickListener { loadPage(reset = true) }
+            setOnClickListener {
+                if (type == TYPE_FAVORITES) showCreateFavoriteFolderDialog() else loadPage(reset = true)
+            }
         }
         toolbar.addView(refresh, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(toolbar)
@@ -292,6 +294,35 @@ class AccountLibraryActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun showCreateFavoriteFolderDialog() {
+        val input = android.widget.EditText(this).apply {
+            hint = "收藏夹名称"
+            setSingleLine(true)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("新建收藏夹")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("创建") { _, _ ->
+                val title = input.text?.toString()?.trim().orEmpty()
+                if (title.isBlank()) {
+                    statusView.text = "请输入收藏夹名称"
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) { BiliAccountApi.createFavoriteFolder(title) }
+                        statusView.text = "收藏夹已创建"
+                        loadPage(true)
+                    } catch (error: Exception) {
+                        statusView.text = error.message ?: "创建收藏夹失败"
+                    }
+                }
+            }.show()
+    }
+
     private fun emptyText(): String = when (type) {
         TYPE_HISTORY -> "暂时没有历史记录"
         TYPE_WATCH_LATER -> "稍后再看列表为空"
@@ -403,6 +434,7 @@ class AccountLibraryActivity : AppCompatActivity() {
                 if (item.aid > 0L) {
                     startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
                         putExtra(VideoPlayerActivity.EXTRA_AID, item.aid)
+                        putExtra(VideoPlayerActivity.EXTRA_BVID, item.bvid)
                         putExtra(VideoPlayerActivity.EXTRA_TITLE, item.title)
                         putExtra(VideoPlayerActivity.EXTRA_AUTHOR, item.subtitle.substringBefore(" · "))
                     })
@@ -422,6 +454,32 @@ class AccountLibraryActivity : AppCompatActivity() {
                             .onSuccess { statusView.text = "已移除"; loadPage(true) }
                             .onFailure { statusView.text = it.message ?: "移除失败" }
                     }
+                }.show()
+            type == TYPE_FAVORITE_ITEMS && item.kind == "video" -> androidx.appcompat.app.AlertDialog.Builder(this)
+                .setItems(arrayOf("从当前收藏夹移除")) { _, _ ->
+                    lifecycleScope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                BiliAccountApi.removeFavoriteItem(item.aid, item.mediaId)
+                            }
+                        }.onSuccess { statusView.text = "已从收藏夹移除"; loadPage(true) }
+                            .onFailure { statusView.text = it.message ?: "移除失败" }
+                    }
+                }.show()
+            type == TYPE_FAVORITES && item.kind == "folder" -> androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(item.title)
+                .setItems(arrayOf("删除收藏夹")) { _, _ ->
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setMessage("确定删除这个收藏夹吗？")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("删除") { _, _ ->
+                            lifecycleScope.launch {
+                                runCatching {
+                                    withContext(Dispatchers.IO) { BiliAccountApi.deleteFavoriteFolder(item.mediaId) }
+                                }.onSuccess { statusView.text = "收藏夹已删除"; loadPage(true) }
+                                    .onFailure { statusView.text = it.message ?: "删除收藏夹失败" }
+                            }
+                        }.show()
                 }.show()
             (type == TYPE_BANGUMI || type == TYPE_CINEMA) && item.kind == "bangumi" ->
                 androidx.appcompat.app.AlertDialog.Builder(this)

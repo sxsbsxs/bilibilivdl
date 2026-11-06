@@ -4,6 +4,7 @@ import com.a10miaomiao.bilimiao.comm.apis.MessageAPI
 import com.a10miaomiao.bilimiao.comm.apis.BangumiAPI
 import com.a10miaomiao.bilimiao.comm.apis.UserApi
 import com.a10miaomiao.bilimiao.comm.apis.UserRelationApi
+import com.a10miaomiao.bilimiao.comm.apis.VideoAPI
 import com.a10miaomiao.bilimiao.comm.network.MiaoHttp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,6 +22,7 @@ object BiliAccountApi {
     private val relationApi = UserRelationApi()
     private val messageApi = MessageAPI()
     private val bangumiApi = BangumiAPI()
+    private val videoApi = VideoAPI()
 
     private suspend fun root(request: MiaoHttp): JSONObject {
         val body = request.awaitString()
@@ -62,18 +64,22 @@ object BiliAccountApi {
             ?: value.optJSONObject("video") ?: value
         val history = value.optJSONObject("history") ?: JSONObject()
         val aid = item.optLong("aid").takeIf { it > 0L }
+            ?: item.optLong("id").takeIf { it > 0L }
+            ?: item.optString("id").toLongOrNull()?.takeIf { it > 0L }
             ?: value.optLong("aid").takeIf { it > 0L }
             ?: history.optLong("oid").takeIf { it > 0L } ?: value.optLong("oid")
-        val bvid = text(item, "bvid").ifBlank { text(value, "bvid") }
+        val bvid = text(item, "bvid", "bv_id").ifBlank { text(value, "bvid", "bv_id") }
         if (aid <= 0L && bvid.isBlank()) return null
-        val owner = item.optJSONObject("owner") ?: value.optJSONObject("owner") ?: JSONObject()
-        val stat = item.optJSONObject("stat") ?: value.optJSONObject("stat") ?: JSONObject()
+        val owner = item.optJSONObject("owner") ?: item.optJSONObject("upper")
+            ?: value.optJSONObject("owner") ?: value.optJSONObject("upper") ?: JSONObject()
+        val stat = item.optJSONObject("stat") ?: item.optJSONObject("cnt_info")
+            ?: value.optJSONObject("stat") ?: value.optJSONObject("cnt_info") ?: JSONObject()
         val author = text(owner, "name", "uname").ifBlank { text(item, "author", "name") }.ifBlank { "UP主" }
         val title = text(item, "title").ifBlank { "未命名视频" }
         val cover = text(item, "pic", "cover").ifBlank { text(value, "pic", "cover") }
             .let { if (it.startsWith("//")) "https:" + it else it }
         val pieces = mutableListOf(author)
-        val views = stat.optLong("view")
+        val views = stat.optLong("view").takeIf { it > 0L } ?: stat.optLong("play")
         if (views > 0L) pieces += formatCount(views) + " 播放"
         text(item, "duration", "length").takeIf { it.isNotBlank() }?.let(pieces::add)
         val progress = history.optLong("progress").takeIf { it > 0L } ?: value.optLong("progress").takeIf { it > 0L }
@@ -156,7 +162,9 @@ object BiliAccountApi {
         val payload = data(root(userApi.mediaDetail(mediaId, page, pageSize)))
         val medialist = payload.optJSONObject("medialist") ?: payload
         val values = array(medialist, "resources", "list", "items") ?: JSONArray()
-        val items = (0 until values.length()).mapNotNull { values.optJSONObject(it)?.let(::video) }
+        val items = (0 until values.length()).mapNotNull { index ->
+            values.optJSONObject(index)?.let(::video)?.copy(mediaId = mediaId)
+        }
         return AccountCenterPage(items, hasMore(medialist, items.size, pageSize))
     }
 
@@ -210,8 +218,16 @@ object BiliAccountApi {
                 "at" -> "在内容中提到了你"
                 else -> "回复了你的内容"
             }
+            val uri = text(content, "uri")
+            val bvid = Regex("BV[0-9A-Za-z]+").find(uri)?.value.orEmpty()
+            val avAid = Regex("av([0-9]+)", RegexOption.IGNORE_CASE).find(uri)
+                ?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
+            val itemAid = if (text(content, "type") == "video") {
+                content.optLong("item_id").takeIf { it > 0L }
+            } else null
             val aid = content.optLong("subject_id").takeIf { it > 0L }
-                ?: content.optLong("item_id").takeIf { it > 0L }
+                ?: itemAid
+                ?: avAid.takeIf { it > 0L }
                 ?: 0L
             val rootId = content.optLong("root_id")
             val targetId = content.optLong("target_id").takeIf { it > 0L }
@@ -234,8 +250,9 @@ object BiliAccountApi {
                 kind = "message",
                 title = title,
                 subtitle = subtitle,
-                cover = text(content, "image"),
+                cover = text(content, "image").let { if (it.startsWith("//")) "https:" + it else it },
                 aid = aid,
+                bvid = bvid,
                 mid = mid,
                 mediaId = category,
                 url = text(content, "uri"),
@@ -287,6 +304,18 @@ object BiliAccountApi {
     suspend fun removeFromWatchLater(aid: Long) {
         require(aid > 0L) { "视频 AV 号无效" }
         root(userApi.videoToviewDels(listOf(aid.toString())))
+    }
+    suspend fun createFavoriteFolder(title: String) {
+        require(title.isNotBlank()) { "收藏夹名称不能为空" }
+        root(userApi.favAddFolder(title.trim(), "", "", 0))
+    }
+    suspend fun deleteFavoriteFolder(mediaId: String) {
+        require(mediaId.isNotBlank()) { "收藏夹编号无效" }
+        root(userApi.favDeleteFolder(mediaId))
+    }
+    suspend fun removeFavoriteItem(aid: Long, mediaId: String) {
+        require(aid > 0L && mediaId.isNotBlank()) { "收藏内容编号无效" }
+        root(videoApi.favoriteDeal(aid.toString(), emptyList(), listOf(mediaId)))
     }
     suspend fun follow(mid: Long, followed: Boolean) {
         require(mid > 0L) { "UP主 UID 无效" }
