@@ -10,6 +10,7 @@ import bilibili.app.dynamic.v2.DynSpaceReq
 import bilibili.app.dynamic.v2.DynamicItem
 import bilibili.app.dynamic.v2.Module
 import bilibili.app.dynamic.v2.ModuleDynamic
+import bilibili.app.dynamic.v2.Paragraph
 import com.a10miaomiao.bilimiao.comm.network.BiliGRPCHttp
 
 /**
@@ -72,10 +73,27 @@ object BilimiaoApiBridge {
         )
     }
 
+    /**
+     * Parse both legacy dynamic cards (ModuleDesc/DynDraw) and the current Opus
+     * paragraph layout (ModuleOpusSummary/ModuleParagraph). B站逐步切换新卡片后，
+     * 只解析旧字段会把图文动态渲染成一张没有正文的空卡片。
+     */
+    private fun paragraphText(paragraph: Paragraph?): String {
+        val content = paragraph?.content
+        return when (content) {
+            is Paragraph.Content.Text -> content.value.nodes.joinToString("") { it.rawText }
+            else -> ""
+        }
+    }
+
     private fun parseSpaceDynamic(item: DynamicItem, depth: Int = 0): BiliDynamicItem? {
         if (depth > 1) return null
         var authorModule: bilibili.app.dynamic.v2.ModuleAuthor? = null
         var description = ""
+        var paragraphTitle = ""
+        val paragraphTexts = mutableListOf<String>()
+        val paragraphImages = mutableListOf<String>()
+        var opusSummary: bilibili.app.dynamic.v2.ModuleOpusSummary? = null
         var dynamicModule: ModuleDynamic? = null
         var statModule: bilibili.app.dynamic.v2.ModuleStat? = null
         item.modules.forEach { module ->
@@ -85,6 +103,23 @@ object BilimiaoApiBridge {
                 is Module.ModuleItem.ModuleDynamic -> dynamicModule = part.value
                 is Module.ModuleItem.ModuleStat -> statModule = part.value
                 is Module.ModuleItem.ModuleStatForward -> statModule = part.value
+                is Module.ModuleItem.ModuleOpusSummary -> opusSummary = part.value
+                is Module.ModuleItem.ModuleParagraph -> {
+                    val value = part.value
+                    val paragraph = value.paragraph
+                    val text = paragraphText(paragraph).trim()
+                    if (text.isNotBlank()) {
+                        if (value.isArticleTitle && paragraphTitle.isBlank()) paragraphTitle = text
+                        else paragraphTexts += text
+                    }
+                    when (val content = paragraph?.content) {
+                        is Paragraph.Content.Pic -> {
+                            content.value.pics?.items?.mapNotNull { it.src.takeIf(String::isNotBlank) }
+                                ?.let(paragraphImages::addAll)
+                        }
+                        else -> Unit
+                    }
+                }
                 else -> Unit
             }
         }
@@ -107,7 +142,6 @@ object BilimiaoApiBridge {
             ?: forwarded?.aid?.takeIf { it > 0L }
             ?: 0L
         val bvid = archive?.bvid.orEmpty().ifBlank { forwarded?.bvid.orEmpty() }
-        // 有些 PGC 动态会以 Archive 模块呈现，EP/SS 信息也可能放在 Archive 中。
         val episodeId = pgc?.epid?.takeIf { it > 0L }
             ?: archive?.episodeId?.takeIf { it > 0L }
             ?: course?.epid?.takeIf { it > 0L }
@@ -118,11 +152,15 @@ object BilimiaoApiBridge {
             ?: course?.seasonId?.takeIf { it > 0L }
             ?: forwarded?.seasonId?.takeIf { it > 0L }
             ?: 0L
+        val opusTitle = paragraphText(opusSummary?.title)
+        val opusSummaryText = paragraphText(opusSummary?.summary)
         val title = archive?.title.orEmpty().ifBlank {
             pgc?.title.orEmpty().ifBlank {
                 article?.title.orEmpty().ifBlank {
                     ugcSeason?.title.orEmpty().ifBlank {
-                        course?.title.orEmpty().ifBlank { forwarded?.title.orEmpty() }
+                        course?.title.orEmpty().ifBlank {
+                            paragraphTitle.ifBlank { opusTitle.ifBlank { forwarded?.title.orEmpty() } }
+                        }
                     }
                 }
             }
@@ -132,7 +170,11 @@ object BilimiaoApiBridge {
                 article?.covers?.firstOrNull().orEmpty().ifBlank {
                     ugcSeason?.cover.orEmpty().ifBlank {
                         course?.cover.orEmpty().ifBlank {
-                            draw?.items?.firstOrNull()?.src.orEmpty().ifBlank { forwarded?.cover.orEmpty() }
+                            draw?.items?.firstOrNull()?.src.orEmpty().ifBlank {
+                                opusSummary?.covers?.firstOrNull()?.src.orEmpty().ifBlank {
+                                    paragraphImages.firstOrNull().orEmpty().ifBlank { forwarded?.cover.orEmpty() }
+                                }
+                            }
                         }
                     }
                 }
@@ -141,6 +183,8 @@ object BilimiaoApiBridge {
         val images = buildList {
             draw?.items?.mapNotNull { it.src.takeIf(String::isNotBlank) }?.let(::addAll)
             article?.covers?.filter(String::isNotBlank)?.let(::addAll)
+            opusSummary?.covers?.mapNotNull { it.src.takeIf(String::isNotBlank) }?.let(::addAll)
+            paragraphImages.let(::addAll)
             if (isEmpty()) forwarded?.images?.let(::addAll)
         }.map { if (it.startsWith("//")) "https:$it" else it }.distinct().take(9)
         val extend = item.extend
@@ -155,6 +199,11 @@ object BilimiaoApiBridge {
                 }
             }
         }
+        val ownText = buildList {
+            description.takeIf { it.isNotBlank() }?.let(::add)
+            paragraphTexts.filter { it.isNotBlank() }.let(::addAll)
+            opusSummaryText.takeIf { it.isNotBlank() }?.let(::add)
+        }.distinct().joinToString("\n")
         val stats = statModule
         return BiliDynamicItem(
             id = id,
@@ -164,7 +213,7 @@ object BilimiaoApiBridge {
             ownerFace = author?.face.orEmpty().ifBlank { forwarded?.ownerFace.orEmpty() }
                 .let { if (it.startsWith("//")) "https:$it" else it },
             timeLabel = authorModule?.ptimeLabelText.orEmpty().ifBlank { forwarded?.timeLabel.orEmpty() },
-            text = description.ifBlank { forwarded?.text.orEmpty() },
+            text = ownText.ifBlank { forwarded?.text.orEmpty() },
             title = title,
             cover = cover,
             images = if (images.isEmpty() && cover.isNotBlank()) listOf(cover) else images,
