@@ -40,7 +40,8 @@ object BiliApi {
                         danmaku = item.optLong("video_review").takeIf { item.has("video_review") },
                         favorites = item.optLong("favorites").takeIf { item.has("favorites") },
                         category = item.optString("typename"),
-                        pubdate = item.optLong("pubdate").takeIf { item.has("pubdate") }
+                        pubdate = item.optLong("pubdate").takeIf { item.has("pubdate") },
+                        authorFace = item.optString("upic").let { if (it.startsWith("//")) "https:$it" else it }
                     ))
                 }
             }
