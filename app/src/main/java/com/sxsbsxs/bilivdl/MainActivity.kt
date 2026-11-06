@@ -11,6 +11,7 @@ import com.sxsbsxs.bilivdl.ui.ProfileFragment
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private val tabFragments = mutableMapOf<String, Fragment>()
 
     companion object {
         private const val STATE_SELECTED_TAB = "selected_tab"
@@ -58,7 +59,7 @@ class MainActivity : AppCompatActivity() {
             R.id.nav_profile -> TAG_PROFILE to { ProfileFragment() }
             else -> TAG_HOME to { HomeFragment() }
         }
-        val target = manager.findFragmentByTag(tag) ?: create()
+        val target = tabFragments[tag] ?: manager.findFragmentByTag(tag) ?: create().also { tabFragments[tag] = it }
         val transaction = manager.beginTransaction().setReorderingAllowed(true)
 
         manager.fragments.filter { it.isAdded && it !== target }.forEach { fragment ->
