@@ -160,7 +160,7 @@ object BiliPlaybackApi {
      * BiliMiao 使用独立的请求头和官方 playurl 解析器。
      * 当公开 JSON 线路静默降档时，用它做第二条独立 HTTP 路线核对真实轨道。
      */
-    private suspend fun tryBilimiaoPlayback(aid: Long, cid: Long, qn: Int): PlaybackInfo? {
+    private suspend fun tryBilimiaoPlayback(aid: Long, cid: Long, qn: Int, videoCodec: String = "", audioCodec: String = ""): PlaybackInfo? {
         return runCatching {
             val data = com.a10miaomiao.bilimiao.comm.apis.PlayerAPI()
                 .getVideoPalyUrl(aid.toString(), cid.toString(), qn, 4048)
@@ -168,11 +168,17 @@ object BiliPlaybackApi {
             if (dash != null && dash.video.isNotEmpty()) {
                 // Keep the same strict quality ceiling as the official JSON and gRPC paths.
                 // Do not silently jump to a different tier when the requested one is unavailable.
-                val selected = dash.video.filter { it.id in 1..qn }
-                    .maxByOrNull { it.id } ?: return@runCatching null
-                val audio = dash.audio.orEmpty().maxByOrNull { it.bandwidth }
+                val eligibleVideo = dash.video.filter {
+                    it.id in 1..qn && (videoCodec.isBlank() || it.codecs.equals(videoCodec, ignoreCase = true))
+                }
+                val selected = eligibleVideo.maxByOrNull { it.id } ?: return@runCatching null
+                val eligibleAudio = dash.audio.orEmpty().filter {
+                    audioCodec.isBlank() || it.codecs.equals(audioCodec, ignoreCase = true)
+                }
+                val audio = eligibleAudio.maxByOrNull { it.bandwidth }
+                if (audioCodec.isNotBlank() && audio == null) return@runCatching null
                 val labels = data.accept_quality.zip(data.accept_description).toMap()
-                val qualities = dash.video.map { it.id }.filter { it in 1..qn }.distinct()
+                val qualities = eligibleVideo.map { it.id }.distinct()
                     .sortedDescending().map { it to (labels[it] ?: qualityLabel(it)) }
                 val videoUrl = selected.base_url.ifBlank { selected.backup_url?.firstOrNull().orEmpty() }
                 val audioUrl = audio?.let { track -> track.base_url.ifBlank { track.backup_url?.firstOrNull().orEmpty() } }
@@ -320,7 +326,8 @@ object BiliPlaybackApi {
         }.distinctBy { it.bvid.ifBlank { it.aid.toString() } }
     }
 
-    private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048): PlaybackInfo? {
+    private fun httpPlayUrl(aid: Long, cid: Long, qn: Int, cookie: String, fnval: Int = 4048,
+        videoCodec: String = "", audioCodec: String = ""): PlaybackInfo? {
         val wbiRoot = runCatching { get(wbiPlayUrl(aid, cid, qn, fnval, cookie), cookie) }.getOrNull()
         val root = if (wbiRoot?.optInt("code", -1) == 0) wbiRoot else
             get("https://api.bilibili.com/x/player/playurl?avid=" + aid + "&cid=" + cid + "&qn=" + qn + "&fnval=" + fnval + "&fnver=0&force_host=2&fourk=1&high_quality=1&otype=json", cookie)
@@ -345,12 +352,19 @@ object BiliPlaybackApi {
             // 按用户请求上限，从实际返回的 DASH 轨道中选最高档；手动选低档时不会越级。
             // Never fall back to a track above the requested ceiling. The previous fallback
             // could silently play a different quality when the requested tier was unavailable.
-            val eligibleVideos = videos.filter { it.optInt("id") in 1..qn }
+            val eligibleVideos = videos.filter {
+                it.optInt("id") in 1..qn &&
+                    (videoCodec.isBlank() || it.optString("codecs").equals(videoCodec, ignoreCase = true))
+            }
             val video = eligibleVideos.maxWithOrNull(
                 compareBy<JSONObject> { it.optInt("id") }.thenBy { it.optLong("bandwidth") }
             ) ?: return null
             val actual = video.optInt("id").takeIf { it in 1..qn } ?: return null
-            val audio = audios.maxByOrNull { it.optLong("bandwidth") }
+            val eligibleAudios = audios.filter {
+                audioCodec.isBlank() || it.optString("codecs").equals(audioCodec, ignoreCase = true)
+            }
+            val audio = eligibleAudios.maxByOrNull { it.optLong("bandwidth") }
+            if (audioCodec.isNotBlank() && audio == null) return null
             fun primary(item: JSONObject): String = item.optString("baseUrl").ifBlank { item.optString("base_url") }
             val videoUrl = primary(video).ifBlank { video.optJSONArray("backupUrl")?.optString(0).orEmpty() }
             val audioUrl = audio?.let { primary(it).ifBlank { it.optJSONArray("backupUrl")?.optString(0).orEmpty() } }
@@ -358,7 +372,7 @@ object BiliPlaybackApi {
             // accept_quality 是能力声明/排序提示，不是 DASH 实际轨道清单。
             // 以 dash.video 中真实存在的 id 为准，避免 accept_quality 缺项时把高画质过滤掉。
             val labelsById = choices.toMap()
-            val realQualities = videos.mapNotNull { track ->
+            val realQualities = eligibleVideos.mapNotNull { track ->
                 val id = track.optInt("id")
                 id.takeIf { it in 1..qn }?.let { it to (labelsById[it] ?: qualityLabel(it)) }
             }.distinctBy { it.first }.sortedByDescending { it.first }
@@ -446,7 +460,9 @@ object BiliPlaybackApi {
         var bestHttp: PlaybackInfo? = null
         for (fnval in listOf(4048, 1)) {
             for (candidate in httpCandidates) {
-                val resolved = runCatching { httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval) }.getOrNull()
+                val resolved = runCatching {
+                    httpPlayUrl(resolvedAid, cid, candidate, cookie, fnval, videoCodec, audioCodec)
+                }.getOrNull()
                     ?: continue
                 if (bestHttp == null || resolved.quality > bestHttp!!.quality) bestHttp = resolved
                 // Exact requested tier is authoritative; otherwise continue probing lower qn requests
@@ -458,7 +474,8 @@ object BiliPlaybackApi {
         }
         // Try independent app/gRPC routes before the slow per-tier probe. The previous
         // order could issue many sequential requests before trying the BiliMiao route.
-        val miao = if ((bestHttp?.quality ?: 0) < qn) tryBilimiaoPlayback(resolvedAid, cid, qn) else null
+        val miao = if ((bestHttp?.quality ?: 0) < qn)
+            tryBilimiaoPlayback(resolvedAid, cid, qn, videoCodec, audioCodec) else null
         val currentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality).maxOrNull() ?: 0
         val grpc = if (videoCodec.isBlank() && audioCodec.isBlank() && currentBestQuality < qn)
             tryGrpcPlayback(resolvedAid, cid, qn) else null
