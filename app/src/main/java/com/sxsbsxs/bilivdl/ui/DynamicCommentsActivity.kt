@@ -436,10 +436,15 @@ class DynamicCommentsActivity : AppCompatActivity() {
             .setView(content)
             .setNegativeButton("关闭", null)
             .create()
+        var activeReplyTarget = replyTo
 
         lateinit var replyAdapter: CommentAdapter
         replyAdapter = CommentAdapter(
-            onReplies = { nested -> showReplies(rootComment, nested) },
+            onReplies = { nested ->
+                activeReplyTarget = nested
+                replyInput.hint = if (nested.id == rootComment.id) "回复这条评论…" else "回复 ${nested.user}…"
+                statusView.text = "正在回复 ${nested.user}"
+            },
             onLike = { comment ->
                 if (replyAdapter.beginLike(comment.id)) {
                     lifecycleScope.launch {
@@ -500,6 +505,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
                     }
                     replyHasMore = result.hasMore && replyEmptyPages < 3
                     continueAfterEmptyPage = result.comments.isEmpty() && replyHasMore
+                    statusView.setOnClickListener(null)
                     statusView.text = when {
                         result.comments.isNotEmpty() && replyHasMore -> "上滑加载更多回复"
                         result.comments.isNotEmpty() -> "没有更多回复了"
@@ -546,7 +552,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
                     }
                     withContext(Dispatchers.IO) {
                         BilimiaoApiBridge.sendReply(
-                            dynamicId, rootComment.id, replyTo.id, message, DYNAMIC_COMMENT_TYPE
+                            dynamicId, rootComment.id, activeReplyTarget.id, message, DYNAMIC_COMMENT_TYPE
                         )
                     }
                     replyInput.setText("")
