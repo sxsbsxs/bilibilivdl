@@ -36,6 +36,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
         const val EXTRA_TITLE = "dynamic_comment_title"
         const val EXTRA_TEXT = "dynamic_comment_text"
         const val EXTRA_AUTHOR = "dynamic_comment_author"
+        const val EXTRA_OWNER_MID = "dynamic_comment_owner_mid"
         const val EXTRA_FACE = "dynamic_comment_face"
         const val EXTRA_COVER = "dynamic_comment_cover"
         private const val DYNAMIC_COMMENT_TYPE = 17
@@ -43,6 +44,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
 
     private var dynamicId = 0L
     private var accountMid = 0L
+    private var ownerMid = 0L
     private var page = 1
     private var sort = 2
     private var hasMore = true
@@ -66,6 +68,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
             finish()
             return
         }
+        ownerMid = intent.getLongExtra(EXTRA_OWNER_MID, 0L)
         buildPage()
         loadAccount()
         loadComments(reset = true)
@@ -214,6 +217,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
             onUser = ::openUser,
             onLongPress = ::handleLongPress
         )
+        adapter.setOwnerMid(ownerMid)
         list.adapter = adapter
         root.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
 
@@ -471,6 +475,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
             onUser = ::openUser,
             onLongPress = ::handleLongPress
         )
+        replyAdapter.setOwnerMid(ownerMid)
         replyList.adapter = replyAdapter
         var replyPage = 1
         var replyHasMore = true
