@@ -2,6 +2,7 @@ package com.sxsbsxs.bilivdl.ui
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -13,7 +14,28 @@ import com.sxsbsxs.bilivdl.databinding.ItemVideoBinding
 
 class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adapter<VideoAdapter.Holder>() {
     private val items = mutableListOf<BiliVideo>()
-    fun submitList(list: List<BiliVideo>) { items.clear(); items.addAll(list); notifyDataSetChanged() }
+    fun submitList(list: List<BiliVideo>) {
+        val next = list.toList()
+        if (items == next) return
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize() = items.size
+            override fun getNewListSize() = next.size
+            override fun areItemsTheSame(oldPosition: Int, newPosition: Int): Boolean {
+                val old = items[oldPosition]
+                val new = next[newPosition]
+                return when {
+                    old.bvid.isNotBlank() && new.bvid.isNotBlank() -> old.bvid == new.bvid
+                    old.aid > 0L && new.aid > 0L -> old.aid == new.aid
+                    else -> old.title == new.title && old.author == new.author
+                }
+            }
+            override fun areContentsTheSame(oldPosition: Int, newPosition: Int) =
+                items[oldPosition] == next[newPosition]
+        })
+        items.clear()
+        items.addAll(next)
+        diff.dispatchUpdatesTo(this)
+    }
     fun appendList(list: List<BiliVideo>) {
         if (list.isEmpty()) return
         val start = items.size
