@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background_dark" android:fillViewport="true">
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background_dark" android:fillViewport="true">
  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
   <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="下载管理" android:textColor="@color/text_primary" android:textSize="25sp" android:textStyle="bold"/>
-  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="下载入口已整合到视频播放页。打开视频后点击“下载”，这里查看下载进度和历史任务。" android:textColor="@color/text_secondary" android:textSize="13sp"/>
-  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="26dp" android:text="下载任务" android:textColor="@color/text_primary" android:textSize="18sp" android:textStyle="bold"/>
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:text="查看进度、管理任务和已完成的视频" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+  <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" app:cardBackgroundColor="@color/surface_dark" app:cardCornerRadius="18dp" app:strokeColor="@color/stroke_dark" app:strokeWidth="1dp"><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp"><TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="下载任务" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold"/>
   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal">
-   <Button android:id="@+id/clear_completed" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="清理已完成"/>
-   <Button android:id="@+id/retry_failed" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="重试失败"/>
-   <Button android:id="@+id/clear_history" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:text="清空历史"/>
+   <com.google.android.material.button.MaterialButton android:id="@+id/clear_completed" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:text="清理完成" android:textSize="11sp"/>
+   <com.google.android.material.button.MaterialButton android:id="@+id/retry_failed" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:layout_marginStart="6dp" android:text="重试失败" android:textSize="11sp"/>
+   <com.google.android.material.button.MaterialButton android:id="@+id/clear_history" android:layout_width="0dp" android:layout_height="42dp" android:layout_marginStart="6dp" android:layout_weight="1" android:text="清空历史" android:textSize="11sp"/>
   </LinearLayout>
   <TextView android:id="@+id/download_summary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textColor="@color/text_secondary" android:textSize="12sp"/>
-  <TextView android:id="@+id/download_tasks" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:padding="16dp" android:background="@drawable/bg_empty_card" android:text="还没有下载任务" android:textColor="@color/text_secondary" android:textSize="13sp"/>
+  <TextView android:id="@+id/download_tasks" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:padding="14dp" android:background="@drawable/bg_empty_card" android:text="还没有下载任务" android:textColor="@color/text_secondary" android:textSize="13sp"/>
   <LinearLayout android:id="@+id/download_task_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="8dp"/>
- </LinearLayout>
+ </LinearLayout></com.google.android.material.card.MaterialCardView>
 </ScrollView>
