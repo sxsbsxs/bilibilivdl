@@ -189,6 +189,22 @@ object BiliVideoActionApi {
     }
 
     /** 发送弹幕，时间单位毫秒，mode: 1滚动/4底部/5顶部。 */
+    /** 记录 B 站分享操作；游客仍可使用系统分享链接，但不伪造账号分享计数。 */
+    fun share(aid: Long, cookie: String) {
+        require(aid > 0L) { "视频 AV 号无效" }
+        if (cookie.isBlank()) error("记录分享需要先登录 B站账号")
+        val csrf = Regex("bili_jct=([^;]+)").find(cookie)?.groupValues?.getOrNull(1)
+            ?: error("登录 Cookie 缺少 bili_jct，无法记录分享")
+        val root = call(
+            "/x/web-interface/share/add",
+            mapOf("aid" to aid.toString(), "csrf" to csrf),
+            cookie,
+            post = true,
+            appApi = false
+        )
+        check(root, "记录视频分享失败")
+    }
+
     fun sendDanmaku(aid: Long, cid: Long, progressMs: Long, message: String, cookie: String, color: Int = 0xFFFFFF, mode: Int = 1) {
         require(message.isNotBlank()) { "弹幕内容不能为空" }
         require(message.length <= 100) { "弹幕不能超过 100 个字符" }

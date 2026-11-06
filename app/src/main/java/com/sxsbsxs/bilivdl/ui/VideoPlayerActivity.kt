@@ -499,6 +499,21 @@ class VideoPlayerActivity : AppCompatActivity() {
             if (title.isNotBlank()) append(title).append("\\n")
             append(url)
         }
+        // 记录登录账号的真实分享操作；游客仍然可以正常调起系统分享，不强制登录。
+        if (cookie.isNotBlank() && aid > 0L) {
+            lifecycleScope.launch {
+                val recorded = runCatching {
+                    withContext(Dispatchers.IO) { BiliVideoActionApi.share(aid, cookie) }
+                }.isSuccess
+                if (recorded) {
+                    val updated = info?.copy(shareCount = (info?.shareCount ?: 0L) + 1L)
+                    if (updated != null) {
+                        info = updated
+                        b.shareVideoButton.text = "分享 " + formatCount(updated.shareCount)
+                    }
+                }
+            }
+        }
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, shareText)
