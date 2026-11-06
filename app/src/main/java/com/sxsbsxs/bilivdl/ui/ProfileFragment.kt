@@ -19,20 +19,27 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private var status: TextView? = null
     private var accountName: TextView? = null
     private var accountAvatar: ImageView? = null
+    private var loginEntry: TextView? = null
+    private var refreshEntry: TextView? = null
+    private var logoutEntry: TextView? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         status = view.findViewById(R.id.account_status)
         accountName = view.findViewById(R.id.account_name)
         accountAvatar = view.findViewById(R.id.account_avatar)
-        view.findViewById<TextView>(R.id.account_qr_login).setOnClickListener {
+        loginEntry = view.findViewById(R.id.account_qr_login)
+        refreshEntry = view.findViewById(R.id.account_refresh)
+        logoutEntry = view.findViewById(R.id.account_logout)
+        loginEntry?.setOnClickListener {
             startActivity(android.content.Intent(requireContext(), QrLoginActivity::class.java))
         }
-        view.findViewById<TextView>(R.id.account_refresh).setOnClickListener { refresh() }
-        view.findViewById<TextView>(R.id.account_logout).setOnClickListener {
+        refreshEntry?.setOnClickListener { refresh() }
+        logoutEntry?.setOnClickListener {
             BiliSession.clear(requireContext())
             accountName?.text = "未登录"
             status?.text = "登录凭据已清除"
+            refresh()
         }
         refresh()
     }
@@ -49,6 +56,9 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 val context = requireContext().applicationContext
                 val data = withContext(Dispatchers.IO) { BiliSession.profile(context) }
                 val logged = data.optBoolean("isLogin")
+                loginEntry?.visibility = if (logged) View.GONE else View.VISIBLE
+                refreshEntry?.visibility = if (logged) View.VISIBLE else View.GONE
+                logoutEntry?.visibility = if (logged) View.VISIBLE else View.GONE
                 accountName?.text = if (logged) data.optString("uname", "已登录") else "未登录"
                 val face = data.optString("face").let { if (it.startsWith("//")) "https:$it" else it }
                 if (logged && face.isNotBlank()) Glide.with(this@ProfileFragment)
