@@ -47,6 +47,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
     private var sort = 2
     private var hasMore = true
     private var loading = false
+    private var consecutiveEmptyPages = 0
     private lateinit var list: RecyclerView
     private lateinit var status: TextView
     private lateinit var countTitle: TextView
@@ -283,57 +284,82 @@ class DynamicCommentsActivity : AppCompatActivity() {
         if (reset) {
             page = 1
             hasMore = true
+            consecutiveEmptyPages = 0
             adapter.submit(emptyList())
         }
         loading = true
         status.visibility = View.VISIBLE
         status.text = if (reset) "正在加载评论…" else "正在加载更多…"
         lifecycleScope.launch {
+            var continueAfterEmptyPage = false
             try {
+                val requestedPage = page
                 val result = withContext(Dispatchers.IO) {
                     BilimiaoApiBridge.commentsPage(
                         aid = dynamicId,
-                        page = page,
+                        page = requestedPage,
                         sort = sort,
                         type = DYNAMIC_COMMENT_TYPE
                     )
                 }
                 adapter.submit(result.comments, append = !reset)
-                page++
-                hasMore = result.hasMore
-                countTitle.text = "全部评论 " + formatCount(result.total)
-                status.text = when {
-                    result.comments.isEmpty() && reset -> "暂时没有评论"
-                    hasMore -> "继续上滑加载"
-                    else -> "没有更多评论了"
+                page = requestedPage + 1
+                consecutiveEmptyPages = if (result.comments.isEmpty() && result.hasMore) {
+                    consecutiveEmptyPages + 1
+                } else {
+                    0
                 }
+                hasMore = result.hasMore && consecutiveEmptyPages < 3
+                continueAfterEmptyPage = result.comments.isEmpty() && hasMore
+                countTitle.text = "全部评论 " + formatCount(result.total)
+                status.setOnClickListener(null)
+                status.text = when {
+                    result.comments.isNotEmpty() && hasMore -> "上滑加载更多"
+                    result.comments.isNotEmpty() -> "没有更多评论了"
+                    reset && result.total <= 0 -> "暂时没有评论"
+                    continueAfterEmptyPage -> "正在跳过空页…"
+                    else -> "暂时没有更多可展示的评论"
+                }
+                status.visibility = View.VISIBLE
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                status.visibility = View.VISIBLE
                 status.text = error.message ?: "评论加载失败，点击重试"
                 status.setOnClickListener { loadComments(reset = true) }
             } finally {
                 loading = false
+                if (continueAfterEmptyPage) {
+                    list.post {
+                        if (!loading && hasMore) loadComments(reset = false)
+                    }
+                }
             }
         }
     }
 
     private fun likeComment(comment: VideoComment) {
+        if (!adapter.beginLike(comment.id)) return
         lifecycleScope.launch {
             try {
                 if (BiliSession.cookie(this@DynamicCommentsActivity).isBlank()) {
                     error("评论点赞需要先扫码登录")
                 }
                 withContext(Dispatchers.IO) {
-                    BilimiaoApiBridge.likeComment(dynamicId, comment.id, !comment.liked, DYNAMIC_COMMENT_TYPE)
+                    BilimiaoApiBridge.likeComment(
+                        dynamicId, comment.id, !comment.liked, DYNAMIC_COMMENT_TYPE
+                    )
                 }
                 adapter.updateLike(comment.id, !comment.liked)
+                status.visibility = View.VISIBLE
                 status.text = "操作成功"
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
                 status.visibility = View.VISIBLE
                 status.text = error.message ?: "评论点赞失败"
+            } finally {
+                adapter.finishLike(comment.id)
             }
         }
     }
@@ -382,8 +408,9 @@ class DynamicCommentsActivity : AppCompatActivity() {
             isNestedScrollingEnabled = true
         }
         val replyInput = EditText(this).apply {
-            hint = "回复 ${replyTo.user}…"
+            hint = if (replyTo.id == rootComment.id) "回复这条评论…" else "回复 ${replyTo.user}…"
             maxLines = 3
+            minLines = 1
             textSize = 13f
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = getDrawable(R.drawable.bg_empty_card)
@@ -409,18 +436,30 @@ class DynamicCommentsActivity : AppCompatActivity() {
             .setView(content)
             .setNegativeButton("关闭", null)
             .create()
+
         lateinit var replyAdapter: CommentAdapter
         replyAdapter = CommentAdapter(
             onReplies = { nested -> showReplies(rootComment, nested) },
             onLike = { comment ->
-                lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            BilimiaoApiBridge.likeComment(dynamicId, comment.id, !comment.liked, DYNAMIC_COMMENT_TYPE)
+                if (replyAdapter.beginLike(comment.id)) {
+                    lifecycleScope.launch {
+                        try {
+                            if (BiliSession.cookie(this@DynamicCommentsActivity).isBlank()) {
+                                error("评论点赞需要先扫码登录")
+                            }
+                            withContext(Dispatchers.IO) {
+                                BilimiaoApiBridge.likeComment(
+                                    dynamicId, comment.id, !comment.liked, DYNAMIC_COMMENT_TYPE
+                                )
+                            }
+                            replyAdapter.updateLike(comment.id, !comment.liked)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            statusView.text = error.message ?: "回复点赞失败"
+                        } finally {
+                            replyAdapter.finishLike(comment.id)
                         }
-                        replyAdapter.updateLike(comment.id, !comment.liked)
-                    } catch (error: Exception) {
-                        statusView.text = error.message ?: "回复点赞失败"
                     }
                 }
             },
@@ -431,27 +470,59 @@ class DynamicCommentsActivity : AppCompatActivity() {
         var replyPage = 1
         var replyHasMore = true
         var replyLoading = false
+        var replyEmptyPages = 0
+
         fun loadReplyPage(reset: Boolean) {
             if (replyLoading || (!replyHasMore && !reset)) return
-            if (reset) replyPage = 1
+            if (reset) {
+                replyPage = 1
+                replyEmptyPages = 0
+                replyAdapter.submit(listOf(rootComment))
+            }
             replyLoading = true
+            val requestedPage = replyPage
+            statusView.text = if (reset) "正在加载回复…" else "正在加载更多回复…"
             lifecycleScope.launch {
+                var continueAfterEmptyPage = false
                 try {
                     val result = withContext(Dispatchers.IO) {
-                        BilimiaoApiBridge.replies(dynamicId, rootComment.id, replyPage, DYNAMIC_COMMENT_TYPE)
+                        BilimiaoApiBridge.replies(
+                            dynamicId, rootComment.id, requestedPage, DYNAMIC_COMMENT_TYPE
+                        )
                     }
                     if (reset) replyAdapter.submit(listOf(rootComment) + result.comments)
                     else replyAdapter.submit(result.comments, append = true)
-                    replyPage++
-                    replyHasMore = result.hasMore
-                    statusView.text = if (replyHasMore) "继续上滑加载" else "没有更多回复了"
+                    replyPage = requestedPage + 1
+                    replyEmptyPages = if (result.comments.isEmpty() && result.hasMore) {
+                        replyEmptyPages + 1
+                    } else {
+                        0
+                    }
+                    replyHasMore = result.hasMore && replyEmptyPages < 3
+                    continueAfterEmptyPage = result.comments.isEmpty() && replyHasMore
+                    statusView.text = when {
+                        result.comments.isNotEmpty() && replyHasMore -> "上滑加载更多回复"
+                        result.comments.isNotEmpty() -> "没有更多回复了"
+                        reset && result.total <= 0 -> "暂时没有回复"
+                        continueAfterEmptyPage -> "正在跳过空页…"
+                        else -> "没有更多回复了"
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
-                    statusView.text = error.message ?: "加载回复失败"
+                    statusView.text = error.message ?: "加载回复失败，点击重试"
+                    statusView.setOnClickListener { loadReplyPage(reset = true) }
                 } finally {
                     replyLoading = false
+                    if (continueAfterEmptyPage) {
+                        replyList.post {
+                            if (!replyLoading && replyHasMore) loadReplyPage(reset = false)
+                        }
+                    }
                 }
             }
         }
+
         replyList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 val manager = recyclerView.layoutManager as? LinearLayoutManager ?: return
@@ -470,13 +541,18 @@ class DynamicCommentsActivity : AppCompatActivity() {
             sendReply.isEnabled = false
             lifecycleScope.launch {
                 try {
+                    if (BiliSession.cookie(this@DynamicCommentsActivity).isBlank()) {
+                        error("回复评论需要先扫码登录")
+                    }
                     withContext(Dispatchers.IO) {
                         BilimiaoApiBridge.sendReply(
                             dynamicId, rootComment.id, replyTo.id, message, DYNAMIC_COMMENT_TYPE
                         )
                     }
                     replyInput.setText("")
-                    loadReplyPage(true)
+                    loadReplyPage(reset = true)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     statusView.text = error.message ?: "发送回复失败"
                 } finally {
@@ -489,7 +565,7 @@ class DynamicCommentsActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             (resources.displayMetrics.heightPixels * 0.72f).toInt()
         )
-        loadReplyPage(true)
+        loadReplyPage(reset = true)
     }
 
     private fun handleLongPress(comment: VideoComment) {
