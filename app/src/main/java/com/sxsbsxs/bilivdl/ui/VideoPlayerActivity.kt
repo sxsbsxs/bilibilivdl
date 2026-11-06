@@ -904,6 +904,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                         BangumiApiBridge.downloadStreamChoices(epId, p.cid, 127)
                     } else {
                         BiliPlaybackApi.downloadStreamChoicesAll(
+                            bvid = bvid,
                             aid = aid,
                             cid = p.cid,
                             cookie = cookie,
