@@ -61,10 +61,11 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             b.downloadTasks.text = "暂无下载任务"
             return
         }
-        val active = tasks.count { it.status == "queued" || it.status == "downloading" || it.status == "paused" }
+        val active = tasks.count { it.status == "queued" || it.status == "downloading" }
+        val paused = tasks.count { it.status == "paused" }
         val completed = tasks.count { it.status == "completed" }
         val failed = tasks.count { it.status == "failed" }
-        b.downloadSummary.text = "全部 " + tasks.size + "    下载中 " + active + "    已完成 " + completed + "    失败 " + failed
+        b.downloadSummary.text = "全部 " + tasks.size + "    进行中 " + active + "    已暂停 " + paused + "    已完成 " + completed + "    失败 " + failed
         b.downloadTasks.visibility = View.GONE
         addBatchControls(tasks)
         tasks.forEach { addTaskCard(it) }
