@@ -227,7 +227,7 @@ object BiliPlaybackApi {
                     found[id] = labels?.optString(i).orEmpty().ifBlank { "清晰度 $id" }
                 }
             }
-            actualIds.forEach { id -> found.putIfAbsent(id, "清晰度 $id") }
+            actualIds.forEach { id -> found.putIfAbsent(id, qualityLabel(id)) }
         }
         return found.entries.sortedByDescending { it.key }.map { it.key to it.value }
     }
