@@ -10,3 +10,23 @@ plugins {
     alias(libs.plugins.google.protobuf) apply false
     alias(libs.plugins.ksp) apply false
 }
+
+/*
+ * The upstream Compose Multiplatform UI module is newer than this app's
+ * AGP/API baseline. Keep its AndroidX Compose artifacts aligned to the
+ * stable Compose BOM 2025.12.00: core 1.10.0 and Material3 1.4.0.
+ */
+subprojects {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            when (requested.group) {
+                "androidx.compose.runtime",
+                "androidx.compose.foundation",
+                "androidx.compose.animation",
+                "androidx.compose.ui",
+                "androidx.compose.material" -> useVersion("1.10.0")
+                "androidx.compose.material3" -> useVersion("1.4.0")
+            }
+        }
+    }
+}
