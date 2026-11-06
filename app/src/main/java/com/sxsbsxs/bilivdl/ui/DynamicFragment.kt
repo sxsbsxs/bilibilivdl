@@ -222,6 +222,7 @@ class DynamicFragment : Fragment(R.layout.fragment_dynamic) {
             putExtra(DynamicCommentsActivity.EXTRA_TITLE, item.title)
             putExtra(DynamicCommentsActivity.EXTRA_TEXT, item.text)
             putExtra(DynamicCommentsActivity.EXTRA_AUTHOR, item.ownerName)
+            putExtra(DynamicCommentsActivity.EXTRA_OWNER_MID, item.ownerMid)
             putExtra(DynamicCommentsActivity.EXTRA_FACE, item.ownerFace)
             putExtra(DynamicCommentsActivity.EXTRA_COVER, item.cover)
         })
