@@ -13,4 +13,5 @@
   <TextView android:id="@+id/download_tasks" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:padding="14dp" android:background="@drawable/bg_empty_card" android:text="还没有下载任务" android:textColor="@color/text_secondary" android:textSize="13sp"/>
   <LinearLayout android:id="@+id/download_task_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginTop="8dp"/>
  </LinearLayout></com.google.android.material.card.MaterialCardView>
+ </LinearLayout>
 </ScrollView>
