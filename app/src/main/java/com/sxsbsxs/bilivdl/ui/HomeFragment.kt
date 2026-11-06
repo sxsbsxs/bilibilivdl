@@ -28,23 +28,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 
 class HomeFragment : Fragment(R.layout.fragment_home) {
     private var _binding: FragmentHomeBinding? = null
     private val b get() = checkNotNull(_binding) { "HomeFragment view is not available" }
 
     private var page = 0
-    private var feedStartPage = 1
     private var loading = false
     private var hasMore = true
     private var duplicatePages = 0
     private var loadJob: Job? = null
     private val videos = mutableListOf<com.sxsbsxs.bilivdl.data.BiliVideo>()
     private lateinit var adapter: VideoAdapter
-    private lateinit var searchAdapter: VideoAdapter
-    private lateinit var bangumiSearchAdapter: BangumiResultAdapter
-    private var bangumiSearchMode = false
     private var searchJob: Job? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -63,9 +58,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeSearchButton.setOnClickListener { openSearch() }
         b.homeSearchEntry.setOnClickListener { openSearch() }
         b.homeSearchInput.setOnClickListener { b.homeSearchInput.requestFocus() }
-        b.homeSearchVideoMode.setOnClickListener { setHomeSearchMode(false) }
-        b.homeSearchBangumiMode.setOnClickListener { setHomeSearchMode(true) }
-        setHomeSearchMode(false)
         b.homeSearchSubmit.setOnClickListener { searchOnHome() }
         b.homeSearchInput.setOnEditorActionListener { _, action, _ ->
             if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE) {
@@ -127,17 +119,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         if (_binding != null) refreshAccountAvatar()
     }
 
-    private fun setHomeSearchMode(bangumi: Boolean) {
-        bangumiSearchMode = bangumi
-        b.homeSearchVideoMode.isSelected = !bangumi
-        b.homeSearchBangumiMode.isSelected = bangumi
-        b.homeSearchVideoMode.alpha = if (bangumi) 0.65f else 1f
-        b.homeSearchBangumiMode.alpha = if (bangumi) 1f else 0.65f
-        b.homeSearchVideoMode.setTextColor(requireContext().getColor(if (bangumi) R.color.text_secondary else R.color.brand))
-        b.homeSearchBangumiMode.setTextColor(requireContext().getColor(if (bangumi) R.color.brand else R.color.text_secondary))
-        b.homeSearchInput.hint = if (bangumi) "搜索番剧名称" else "搜索视频、UP主、BV号或AV号"
-    }
-
     private fun openBangumiFromHome(item: BangumiSearchResult) {
         b.homeSearchStatus.text = "正在获取《${item.title}》的剧集…"
         viewLifecycleOwner.lifecycleScope.launch {
@@ -173,7 +154,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
     private fun searchOnHome() {
         val keyword = b.homeSearchInput.text?.toString()?.trim().orEmpty()
         if (keyword.isBlank()) {
-            b.homeSearchInput.error = if (bangumiSearchMode) "请输入番剧名称" else "请输入关键词、BV号或AV号"
+            b.homeSearchInput.error = "请输入关键词、BV号、AV号或番剧 EP / SS 号"
             return
         }
         b.homeSearchInput.error = null
@@ -182,7 +163,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         searchJob?.cancel()
         b.homeSearchProgress.visibility = View.VISIBLE
         b.homeSearchStatus.visibility = View.VISIBLE
-        b.homeSearchStatus.text = if (bangumiSearchMode) "正在搜索番剧…" else "正在搜索视频…"
+        b.homeSearchStatus.text = "正在搜索…"
         b.homeSearchSubmit.isEnabled = false
         searchJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -204,30 +185,33 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                     val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(seasonId) }
                     if (season.episodes.isEmpty()) error("该番剧暂时没有可用剧集")
                     openBangumiFromHome(BangumiSearchResult(season.seasonId, season.title, season.cover, season.description))
-                } else if (bangumiSearchMode) {
-                    val result = withContext(Dispatchers.IO) { BangumiApiBridge.search(keyword) }
-                    if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关番剧"
-                    else {
-                        b.homeSearchStatus.visibility = View.GONE
-                        startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
-                            putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
-                            putExtra(SearchResultsActivity.EXTRA_BANGUMI, true)
-                            putExtra(SearchResultsActivity.EXTRA_BANGUMI_RESULTS, ArrayList(result))
-                        })
-                    }
                 } else {
+                    val isDirectVideoId = BiliApi.resolveVideoId(keyword) != null
                     val result = withContext(Dispatchers.IO) {
-                        if (BiliApi.resolveVideoId(keyword) != null) listOf(BiliVideoLookup.get(keyword))
+                        if (isDirectVideoId) listOf(BiliVideoLookup.get(keyword))
                         else BiliApi.searchVideos(keyword)
                     }
-                    if (result.isEmpty()) b.homeSearchStatus.text = "没有找到相关视频"
-                    else {
+                    if (result.isNotEmpty()) {
                         b.homeSearchStatus.visibility = View.GONE
                         startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
                             putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
                             putExtra(SearchResultsActivity.EXTRA_BANGUMI, false)
                             putExtra(SearchResultsActivity.EXTRA_VIDEO_RESULTS, ArrayList(result))
                         })
+                    } else if (!isDirectVideoId) {
+                        val bangumi = withContext(Dispatchers.IO) { BangumiApiBridge.search(keyword) }
+                        if (bangumi.isEmpty()) {
+                            b.homeSearchStatus.text = "没有找到相关视频或番剧"
+                        } else {
+                            b.homeSearchStatus.visibility = View.GONE
+                            startActivity(Intent(requireContext(), SearchResultsActivity::class.java).apply {
+                                putExtra(SearchResultsActivity.EXTRA_QUERY, keyword)
+                                putExtra(SearchResultsActivity.EXTRA_BANGUMI, true)
+                                putExtra(SearchResultsActivity.EXTRA_BANGUMI_RESULTS, ArrayList(bangumi))
+                            })
+                        }
+                    } else {
+                        b.homeSearchStatus.text = "没有找到对应视频"
                     }
                 }
             } catch (e: Exception) {
@@ -243,14 +227,13 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         val binding = _binding ?: return
         loadJob?.cancel()
         page = 0
-        feedStartPage = Random.nextInt(1, 31)
         hasMore = true
         duplicatePages = 0
         loading = false
         videos.clear()
         adapter.submitList(emptyList())
         binding.homeSwipe.isRefreshing = true
-        loadPage(feedStartPage)
+        loadPage(1)
     }
 
     private fun loadPage(target: Int) {
@@ -258,7 +241,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         if (loading || (!hasMore && target > 1)) return
 
         loading = true
-        if (target == feedStartPage && !binding.homeSwipe.isRefreshing) {
+        if (target == 1 && !binding.homeSwipe.isRefreshing) {
             binding.homeProgress.visibility = View.VISIBLE
         }
         val appContext = requireContext().applicationContext
@@ -286,8 +269,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                 current.homeRecommendations.post {
                     val live = _binding ?: return@post
                     val scroll = live.homeScroll
-                    val needsAnotherPage = added == 0 || !scroll.canScrollVertically(1)
-                    if (!loading && hasMore && needsAnotherPage) loadPage(page + 1)
+                    if (!loading && hasMore && !scroll.canScrollVertically(1)) loadPage(page + 1)
                 }
             } catch (e: CancellationException) {
                 throw e

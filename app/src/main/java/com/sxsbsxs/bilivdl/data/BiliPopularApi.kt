@@ -3,7 +3,6 @@ package com.sxsbsxs.bilivdl.data
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.random.Random
 
 object BiliPopularApi {
     fun loadPopular(page: Int = 1, cookie: String = ""): List<BiliVideo> {
@@ -54,8 +53,9 @@ object BiliPopularApi {
                     )
                 }
             }
-            // Keep page boundaries intact, but vary the order on each fetch/refresh.
-            return videos.shuffled(Random(System.nanoTime() xor (page.toLong() shl 32)))
+            // Preserve Bilibili's server ranking and page boundaries.
+            // Shuffling every page made the feed jump unpredictably on refresh.
+            return videos
         } finally {
             connection.disconnect()
         }

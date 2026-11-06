@@ -179,8 +179,6 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.playerCommentsTab.isSelected = !showInfo
         b.playerInfoTab.alpha = if (showInfo) 1f else 0.68f
         b.playerCommentsTab.alpha = if (showInfo) 0.68f else 1f
-        b.playerInfoTab.setTextColor(getColor(if (showInfo) R.color.brand else R.color.text_secondary))
-        b.playerCommentsTab.setTextColor(getColor(if (showInfo) R.color.text_secondary else R.color.brand))
     }
 
     private fun loadRelatedVideos() {
