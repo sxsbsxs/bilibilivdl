@@ -205,7 +205,7 @@ object BiliPlaybackApi {
         }.getOrNull()
     }
 
-    suspend fun downloadQualities(aid: Long, cid: Long, cookie: String): List<Pair<Int, String>> {
+    suspend fun downloadQualities(aid: Long, cid: Long, cookie: String, videoCodec: String = ""): List<Pair<Int, String>> {
         // 不只依赖 qn=127 的一次响应：部分账号/视频在不同 qn 请求下返回的可用轨道集合不同。
         // 汇总每次接口真实返回的 DASH 视频轨道，绝不把 accept_quality 中未返回的档位伪造出来。
         val requested = listOf(127, 126, 125, 120, 116, 112, 80, 74, 64, 32, 16)
@@ -223,7 +223,11 @@ object BiliPlaybackApi {
             val accepted = data.optJSONArray("accept_quality")
             val dashVideo = data.optJSONObject("dash")?.optJSONArray("video")
             val actualIds = if (dashVideo != null) {
-                (0 until dashVideo.length()).mapNotNull { dashVideo.optJSONObject(it)?.optInt("id")?.takeIf { id -> id > 0 } }.toSet()
+                (0 until dashVideo.length()).mapNotNull { index ->
+                    val track = dashVideo.optJSONObject(index) ?: return@mapNotNull null
+                    val id = track.optInt("id")
+                    id.takeIf { it > 0 && (videoCodec.isBlank() || track.optString("codecs").equals(videoCodec, ignoreCase = true)) }
+                }.toSet()
             } else {
                 setOf(data.optInt("quality").takeIf { it > 0 } ?: continue)
             }
@@ -484,13 +488,13 @@ object BiliPlaybackApi {
         var discoveredQualities: List<Pair<Int, String>> = emptyList()
         val independentBestQuality = listOfNotNull(bestHttp?.quality, miao?.quality, grpc?.quality).maxOrNull() ?: 0
         if (qn >= 80 && independentBestQuality <= 64) {
-            discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie) }
+            discoveredQualities = runCatching { downloadQualities(resolvedAid, cid, cookie, videoCodec) }
                 .getOrDefault(emptyList())
                 .filter { it.first <= qn }
             val highestDiscovered = discoveredQualities.maxByOrNull { it.first }
             if (highestDiscovered != null && highestDiscovered.first > independentBestQuality) {
                 val retried = runCatching {
-                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048)
+                    httpPlayUrl(resolvedAid, cid, highestDiscovered.first, cookie, 4048, videoCodec, audioCodec)
                 }.getOrNull()
                 if (retried != null && retried.quality >= highestDiscovered.first) bestHttp = retried
             }
