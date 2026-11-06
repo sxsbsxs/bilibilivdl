@@ -181,9 +181,29 @@ object BiliInteractionApi {
             1 -> (startAt + 8).also { require(it <= data.size) }
             2 -> {
                 val (length, next) = readVarint(data, startAt)
-                (next + length.toInt()).also { require(length >= 0 && it <= data.size) }
+                (next.toLong() + length).also {
+                    require(length >= 0 && it <= data.size && it <= data.size.toLong())
+                }.toInt()
             }
             5 -> (startAt + 4).also { require(it <= data.size) }
+            // Unknown protobuf groups are legal wire types. Skip the complete group
+            // rather than aborting the entire segment on an unrelated future field.
+            3 -> {
+                var index = startAt
+                while (index < data.size) {
+                    val (tag, next) = readVarint(data, index)
+                    index = next
+                    val nestedField = (tag shr 3).toInt()
+                    val nestedWire = (tag and 7).toInt()
+                    if (nestedWire == 4) {
+                        require(nestedField > 0)
+                        return index
+                    }
+                    index = skipField(data, index, nestedWire)
+                }
+                error("弹幕 Protobuf group 未闭合")
+            }
+            4 -> error("弹幕 Protobuf group 结束标记不匹配")
             else -> error("不支持的弹幕 Protobuf 字段")
         }
         fun parseElem(data: ByteArray): DanmakuItem? {
@@ -211,7 +231,7 @@ object BiliInteractionApi {
                     }
                     field == 7 && wire == 2 -> {
                         val (length, n) = readVarint(data, i); i = n
-                        require(length >= 0 && i + length.toInt() <= data.size)
+                        require(length >= 0 && length <= (data.size - i).toLong())
                         message = String(data, i, length.toInt(), Charsets.UTF_8)
                         i += length.toInt()
                     }
@@ -231,7 +251,7 @@ object BiliInteractionApi {
                 val wire = (tag and 7).toInt()
                 if (field == 1 && wire == 2) {
                     val (length, n) = readVarint(data, i); i = n
-                    require(length >= 0 && i + length.toInt() <= data.size)
+                    require(length >= 0 && length <= (data.size - i).toLong())
                     parseElem(data.copyOfRange(i, i + length.toInt()))?.let(result::add)
                     i += length.toInt()
                 } else i = skipField(data, i, wire)
