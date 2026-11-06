@@ -16,5 +16,6 @@ data class BiliVideo(
     val shares: Long? = null,
     val comments: Long? = null,
     val category: String = "",
-    val pubdate: Long? = null
+    val pubdate: Long? = null,
+    val authorFace: String = ""
 ) : java.io.Serializable
