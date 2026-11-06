@@ -49,7 +49,14 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
             binding.videoAuthor.text = v.author
             binding.videoDurationBadge.text = v.duration
             // Keep feed metadata quiet; danmaku availability belongs to playback.
-            binding.videoMeta.text = "播放 " + v.play
+            binding.videoMeta.text = buildString {
+                append("播放 ")
+                append(v.play)
+                v.danmaku?.takeIf { it > 0L }?.let {
+                    append("  ·  弹幕 ")
+                    append(formatCount(it))
+                }
+            }
             binding.videoExtraMeta.text = listOf(
                 v.likes?.let { "点赞 " + formatCount(it) }.orEmpty(),
                 v.favorites?.let { "收藏 " + formatCount(it) }.orEmpty(),
