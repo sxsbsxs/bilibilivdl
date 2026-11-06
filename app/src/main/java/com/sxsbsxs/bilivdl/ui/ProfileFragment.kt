@@ -26,7 +26,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         status = view.findViewById(R.id.account_status)
         accountName = view.findViewById(R.id.account_name)
         accountAvatar = view.findViewById(R.id.account_avatar)
-        view.findViewById<MaterialButton>(R.id.account_qr_login).setOnClickListener {
+        view.findViewById<TextView>(R.id.account_qr_login).setOnClickListener {
             startActivity(android.content.Intent(requireContext(), QrLoginActivity::class.java))
         }
         view.findViewById<MaterialButton>(R.id.account_refresh).setOnClickListener { refresh() }
@@ -44,7 +44,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     }
 
     private fun refresh() {
-        status?.text = "正在验证账号状态…"
+        status?.text = ""
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val context = requireContext().applicationContext
@@ -62,7 +62,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                     if (mid > 0L) startActivity(android.content.Intent(requireContext(), UserSpaceActivity::class.java).putExtra(UserSpaceActivity.EXTRA_MID, mid))
                 }
                 status?.text = if (logged) "账号已连接 · UID ${data.optLong("mid")}"
-                    else "未检测到有效登录。点击下方按钮使用哔哩哔哩 APP 扫码登录。"
+                    else "未登录"
             } catch (e: Exception) {
                 accountName?.text = if (BiliSession.cookie(requireContext()).isBlank()) "未登录" else "待验证"
                 status?.text = "账号状态获取失败：${e.message ?: "网络异常"}"
