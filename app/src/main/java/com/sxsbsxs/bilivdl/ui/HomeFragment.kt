@@ -133,6 +133,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeSearchBangumiMode.isSelected = bangumi
         b.homeSearchVideoMode.alpha = if (bangumi) 0.65f else 1f
         b.homeSearchBangumiMode.alpha = if (bangumi) 1f else 0.65f
+        b.homeSearchVideoMode.setTextColor(requireContext().getColor(if (bangumi) R.color.text_secondary else R.color.brand))
+        b.homeSearchBangumiMode.setTextColor(requireContext().getColor(if (bangumi) R.color.brand else R.color.text_secondary))
         b.homeSearchInput.hint = if (bangumi) "搜索番剧名称" else "搜索视频、UP主、BV号或AV号"
     }
 
