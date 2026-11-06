@@ -6,7 +6,7 @@ import android.view.View
 import androidx.core.widget.NestedScrollView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliPopularApi
 import com.sxsbsxs.bilivdl.data.BiliApi
@@ -68,7 +68,7 @@ class HomeFragment : Fragment(R.layout.fragment_bilivdl_home) {
             } else false
         }
 
-        adapter = VideoAdapter { video ->
+        adapter = VideoAdapter({ video ->
             startActivity(Intent(requireContext(), VideoPlayerActivity::class.java).apply {
                 putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
                 putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
@@ -76,8 +76,8 @@ class HomeFragment : Fragment(R.layout.fragment_bilivdl_home) {
                 putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
                 putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
             })
-        }
-        b.homeRecommendations.layoutManager = LinearLayoutManager(requireContext())
+        }, gridMode = true)
+        b.homeRecommendations.layoutManager = GridLayoutManager(requireContext(), 2)
         b.homeRecommendations.adapter = adapter
         b.homeSwipe.setOnRefreshListener { refresh() }
         b.homeScroll.setOnScrollChangeListener(
