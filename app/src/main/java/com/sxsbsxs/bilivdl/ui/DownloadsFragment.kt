@@ -123,7 +123,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         }
         // Room emits progress changes frequently. Keep existing card views when the
         // task set and states are unchanged; only patch the status/speed/progress text.
-        val signature = taskFilter + "|" + tasks.joinToString("|") { "${it.taskId}:${it.status}" }
+        val signature = taskFilter + "|" + tasks.joinToString("|") { "${it.taskId}:${it.status}:${it.title}:${it.author}:${it.quality}:${it.cover}" }
         if (signature == renderedTaskSignature) {
             visible.forEach(::updateTaskCard)
             return
