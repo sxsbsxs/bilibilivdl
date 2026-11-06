@@ -181,9 +181,10 @@ object BiliInteractionApi {
             1 -> (startAt + 8).also { require(it <= data.size) }
             2 -> {
                 val (length, next) = readVarint(data, startAt)
-                (next.toLong() + length).also {
-                    require(length >= 0 && it <= data.size && it <= data.size.toLong())
-                }.toInt()
+                run {
+                    require(length >= 0 && length <= (data.size - next).toLong())
+                    next + length.toInt()
+                }
             }
             5 -> (startAt + 4).also { require(it <= data.size) }
             // Unknown protobuf groups are legal wire types. Skip the complete group
