@@ -16,6 +16,10 @@ import com.sxsbsxs.bilivdl.data.BangumiSearchResult
 import androidx.appcompat.app.AlertDialog
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.ImageView
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.LazyHeaders
 import android.content.Context
 import com.sxsbsxs.bilivdl.data.BiliSession
 import com.sxsbsxs.bilivdl.databinding.FragmentHomeBinding
@@ -53,6 +57,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         b.homeLoginButton.setOnClickListener {
             (activity as? com.sxsbsxs.bilivdl.MainActivity)?.openAccountPage()
         }
+        refreshAccountAvatar()
         b.homeSearchButton.setOnClickListener { openSearch() }
         b.homeSearchEntry.setOnClickListener { openSearch() }
         b.homeSearchInput.setOnClickListener { b.homeSearchInput.requestFocus() }
@@ -93,6 +98,31 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             }
         )
         refresh()
+    }
+
+    private fun refreshAccountAvatar() {
+        val avatar = b.homeLoginButton
+        viewLifecycleOwner.lifecycleScope.launch {
+            val profile = runCatching {
+                withContext(Dispatchers.IO) { BiliSession.profile(requireContext().applicationContext) }
+            }.getOrNull() ?: return@launch
+            val face = profile.optString("face").let { if (it.startsWith("//")) "https:$it" else it }
+            if (profile.optBoolean("isLogin") && face.isNotBlank()) {
+                Glide.with(this@HomeFragment)
+                    .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
+                    .placeholder(R.drawable.bg_comment_avatar)
+                    .error(R.drawable.bg_comment_avatar)
+                    .circleCrop()
+                    .into(avatar)
+            } else {
+                avatar.setImageResource(R.drawable.bg_comment_avatar)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (_binding != null) refreshAccountAvatar()
     }
 
     private fun setHomeSearchMode(bangumi: Boolean) {
