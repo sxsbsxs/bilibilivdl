@@ -1001,8 +1001,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                             // another audio resource that merely uses the same codec.
                             startDownload(
                                 qn = selectedVideo.id,
-                                videoCodec = selectedVideo.id.toString() + "|" + selectedVideo.codec,
-                                audioCodec = selectedAudio.id.toString() + "|" + selectedAudio.codec
+                                videoCodec = selectedVideo.id.toString() + "|" + selectedVideo.codec + "|" + selectedVideo.codecId,
+                                audioCodec = selectedAudio.id.toString() + "|" + selectedAudio.codec + "|" + selectedAudio.codecId
                             )
                             dialog.dismiss()
                         }
