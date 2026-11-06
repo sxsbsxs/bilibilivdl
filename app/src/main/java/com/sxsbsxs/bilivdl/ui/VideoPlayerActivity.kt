@@ -673,8 +673,8 @@ class VideoPlayerActivity : AppCompatActivity() {
             try {
                 val items = withContext(Dispatchers.IO) { BiliInteractionApi.danmaku(cid, cookie) }
                 loadedDanmaku = items
-                b.danmakuOverlay.setDanmaku(items)
                 b.danmakuOverlay.setPlaybackPositionProvider { exo?.currentPosition ?: 0L }
+                b.danmakuOverlay.setDanmaku(items)
                 b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
                 b.danmakuButton.text = "弹幕：开（${items.size}）· 长按导出"
             } catch (e: Exception) {
