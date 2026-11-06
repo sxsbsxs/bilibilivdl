@@ -69,21 +69,6 @@ object BangumiApiBridge {
         return parseEpisode(data) ?: data.optJSONObject("episode")?.let(::parseEpisode) ?: error("番剧单集信息不完整")
     }
 
-     suspend fun downloadStreamChoices(episodeId: Long, cid: Long, qn: Int): DownloadStreamChoices {
-        val result = playerApi.getBangumiUrl(episodeId.toString(), cid.toString(), qn, 4048)
-        val dash = result.dash ?: return DownloadStreamChoices(emptyList(), emptyList())
-        val videos = dash.video.map { item ->
-            DownloadStreamOption(item.id, item.codecs,
-                item.height.toString() + "P · " + item.codecs + " · " + (item.bandwidth / 1000) + " kbps",
-                item.bandwidth.toLong())
-        }
-        val audios = dash.audio.orEmpty().map { item ->
-            DownloadStreamOption(item.id, item.codecs,
-                item.codecs + " · " + (item.bandwidth / 1000) + " kbps", item.bandwidth.toLong())
-        }
-        return DownloadStreamChoices(videos, audios)
-    }
-
     suspend fun playback(episodeId: Long, qn: Int, videoCodec: String = "", audioCodec: String = ""): PlaybackInfo {
         val ep = episode(episodeId)
         require(ep.cid > 0L) { "番剧剧集缺少 CID" }

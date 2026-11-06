@@ -12,18 +12,12 @@ import com.a10miaomiao.bilimiao.comm.platform.AndroidDeviceInfoProvider
 import com.a10miaomiao.bilimiao.comm.platform.AndroidPlatformContext
 import com.a10miaomiao.bilimiao.comm.platform.PlatformProviders
 import com.sxsbsxs.bilivdl.data.BiliSession
-import com.sxsbsxs.bilivdl.data.queue.DownloadQueueStore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 /**
  * Bridges the existing BiliVdl account cookie into bilimiao's shared network core.
  * The UI remains BiliVdl-owned; upstream APIs and playback/download libraries are reused.
  */
 class BiliVdlApplication : Application() {
-    private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     override fun onCreate() {
         super.onCreate()
 
@@ -37,7 +31,6 @@ class BiliVdlApplication : Application() {
         Kotpref.init(this)
         CommonLibs.init(this)
 
-        startupScope.launch { runCatching { DownloadQueueStore.migrateLegacy(this@BiliVdlApplication) } }
 
         val cookie = BiliSession.cookie(this)
         if (cookie.isNotBlank()) {
@@ -51,6 +44,9 @@ class BiliVdlApplication : Application() {
                 "https://m.bilibili.com"
             ).forEach { manager.setCookie(it, cookie) }
             manager.flush()
+        } else {
+            // Do not let BiliDownload resurrect an old private cookie when BiliVdl is logged out.
+            AccountManager.clearLocalSession()
         }
     }
 }

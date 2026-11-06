@@ -1,4 +1,4 @@
-plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose"); alias(libs.plugins.ksp) }
+plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose") }
 // Compose-first UI shell; business logic remains in the existing Kotlin layers.
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
@@ -38,7 +38,4 @@ dependencies {
  implementation(project(":danmaku-engine"))
  implementation("com.squareup.okhttp3:okhttp:4.10.0")
  implementation("com.google.zxing:core:3.5.3")
- implementation("androidx.room:room-runtime:2.7.2")
- implementation("androidx.room:room-ktx:2.7.2")
- ksp("androidx.room:room-compiler:2.7.2")
 }
