@@ -272,7 +272,13 @@
                     app:iconGravity="textTop"
                     app:iconPadding="4dp"
                     app:iconSize="21dp"
-                    style="@style/Widget.Material3.Button.TextButton"\n                    android:insetTop="0dp"\n                    android:insetBottom="0dp"\n                    android:minHeight="68dp"\n                    android:paddingTop="4dp"\n                    android:paddingBottom="5dp"\n                    android:textSize="12sp"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="68dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:textSize="12sp"
                     android:textAllCaps="false" />
 
                 <com.google.android.material.button.MaterialButton
@@ -286,7 +292,13 @@
                     app:iconGravity="textTop"
                     app:iconPadding="4dp"
                     app:iconSize="21dp"
-                    style="@style/Widget.Material3.Button.TextButton"\n                    android:insetTop="0dp"\n                    android:insetBottom="0dp"\n                    android:minHeight="68dp"\n                    android:paddingTop="4dp"\n                    android:paddingBottom="5dp"\n                    android:textSize="12sp"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="68dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:textSize="12sp"
                     android:textAllCaps="false" />
 
                 <com.google.android.material.button.MaterialButton
@@ -300,7 +312,13 @@
                     app:iconGravity="textTop"
                     app:iconPadding="4dp"
                     app:iconSize="21dp"
-                    style="@style/Widget.Material3.Button.TextButton"\n                    android:insetTop="0dp"\n                    android:insetBottom="0dp"\n                    android:minHeight="68dp"\n                    android:paddingTop="4dp"\n                    android:paddingBottom="5dp"\n                    android:textSize="12sp"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="68dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="5dp"
+                    android:textSize="12sp"
                     android:textAllCaps="false" />
             </LinearLayout>
 
