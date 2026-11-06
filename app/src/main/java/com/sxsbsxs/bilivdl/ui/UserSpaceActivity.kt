@@ -82,9 +82,12 @@ class UserSpaceActivity : AppCompatActivity() {
     private fun showGuestSpace() {
         findViewById<TextView>(R.id.space_page_title).text = "个人空间"
         findViewById<TextView>(R.id.space_name).text = "未登录"
-        findViewById<TextView>(R.id.space_uid).text = "登录后查看你的个人主页"
-        findViewById<TextView>(R.id.space_sign).text = "登录后同步头像、关注、收藏、追番、历史记录和稍后再看。游客仍可浏览、搜索和播放公开内容。"
-        findViewById<TextView>(R.id.space_stats).text = "关注 —    粉丝 —"
+        findViewById<TextView>(R.id.space_uid).text = "登录 B 站账号后查看 UID 和等级"
+        findViewById<TextView>(R.id.space_sign).text = "登录后可同步个人资料、关注、收藏、追番和历史记录。游客仍可搜索、浏览和播放公开内容。"
+        findViewById<TextView>(R.id.space_stats).text = "粉丝 —    关注 —    获赞 —"
+        findViewById<View>(R.id.space_verification_row).visibility = View.GONE
+        findViewById<TextView>(R.id.space_location).visibility = View.GONE
+        findViewById<ImageView>(R.id.space_banner).setImageResource(R.drawable.bg_home_hero)
         findViewById<ImageView>(R.id.space_avatar).apply {
             setImageResource(R.drawable.bili_akari_img)
             setOnClickListener { startActivity(Intent(this@UserSpaceActivity, QrLoginActivity::class.java)) }
@@ -221,51 +224,122 @@ class UserSpaceActivity : AppCompatActivity() {
                     val appSpace = runCatching { BilimiaoApiBridge.userSpace(mid) }.getOrNull()
                     val appCard = appSpace?.optJSONObject("card")
                     if (appCard != null) {
+                        val verification = appCard.optJSONObject("official_verify") ?: JSONObject()
+                        val levelInfo = appCard.optJSONObject("level_info") ?: JSONObject()
+                        val likes = appCard.optJSONObject("likes") ?: JSONObject()
+                        val tags = appCard.optJSONArray("space_tag")
+                        val location = (0 until (tags?.length() ?: 0))
+                            .mapNotNull { tags?.optJSONObject(it) }
+                            .firstOrNull { it.optString("type") == "location" }
+                            ?.optString("title").orEmpty()
+                            .ifBlank { appCard.optString("place") }
                         JSONObject().put("name", appCard.optString("name"))
                             .put("face", appCard.optString("face"))
                             .put("sign", appCard.optString("sign"))
-                            .put("level", appCard.optJSONObject("level_info")?.optInt("current_level") ?: 0)
+                            .put("level", levelInfo.optInt("current_level"))
                             .put("follower", appCard.optLong("fans"))
-                            .put("following", appCard.optLong("friend"))
+                            .put("following", appCard.optLong("attention", appCard.optLong("friend")))
+                            .put("likes", likes.optLong("like_num"))
+                            .put("location", location)
+                            .put("cover", appSpace.optJSONObject("images")?.optString("imgUrl").orEmpty())
+                            .put("verify_title", verification.optString("title").ifBlank { verification.optString("desc") })
+                            .put("verify_icon", verification.optString("icon"))
                     } else {
                     val primary = runCatching { request("https://api.bilibili.com/x/space/acc/info?mid=$mid") }.getOrNull()
                     val primaryData = primary?.takeIf { it.optInt("code", -1) == 0 }?.optJSONObject("data")
                     if (primaryData != null) {
                         val relation = runCatching { request("https://api.bilibili.com/x/relation/stat?vmid=$mid") }
                             .getOrNull()?.optJSONObject("data")
+                        val verification = primaryData.optJSONObject("official_verify") ?: JSONObject()
                         JSONObject().put("name", primaryData.optString("name"))
                             .put("face", primaryData.optString("face"))
                             .put("sign", primaryData.optString("sign"))
                             .put("level", primaryData.optInt("level"))
                             .put("follower", relation?.optLong("follower") ?: 0L)
                             .put("following", relation?.optLong("following") ?: 0L)
+                            .put("likes", primaryData.optLong("likes"))
+                            .put("location", primaryData.optString("place"))
+                            .put("cover", primaryData.optString("top_photo").ifBlank { primaryData.optString("top_photo_v2") })
+                            .put("verify_title", verification.optString("desc"))
+                            .put("verify_icon", verification.optString("icon"))
                     } else {
                         val fallback = request("https://api.bilibili.com/x/web-interface/card?mid=$mid&photo=true")
                         if (fallback.optInt("code", -1) != 0) error(fallback.optString("message", "用户资料加载失败"))
                         val data = fallback.optJSONObject("data") ?: error("用户资料为空")
                         val card = data.optJSONObject("card") ?: error("用户资料为空")
+                        val verification = card.optJSONObject("official_verify") ?: JSONObject()
                         JSONObject().put("name", card.optString("name"))
                             .put("face", card.optString("face"))
                             .put("sign", card.optString("sign"))
                             .put("level", card.optJSONObject("level_info")?.optInt("current_level") ?: 0)
                             .put("follower", data.optLong("follower"))
                             .put("following", card.optLong("friend"))
+                            .put("likes", data.optLong("like_num", card.optLong("likes")))
+                            .put("location", card.optString("place"))
+                            .put("cover", card.optString("top_photo"))
+                            .put("verify_title", verification.optString("desc"))
+                            .put("verify_icon", verification.optString("icon"))
                     }
                     }
                 }
                 name.text = profile.optString("name").ifBlank { "哔哩哔哩用户" }
                 uid.text = "UID $mid · LV${profile.optInt("level")}"
                 sign.text = profile.optString("sign").ifBlank { "这个用户还没有填写个性签名" }
-                stats.text = "关注 ${profile.optLong("following")}    粉丝 ${profile.optLong("follower")}"
+                stats.text = "粉丝 ${formatProfileCount(profile.optLong("follower"))}    关注 ${formatProfileCount(profile.optLong("following"))}    获赞 ${formatProfileCount(profile.optLong("likes"))}"
+
+                val verificationTitle = profile.optString("verify_title").trim()
+                val verificationRow = findViewById<View>(R.id.space_verification_row)
+                val verificationText = findViewById<TextView>(R.id.space_verification)
+                val verificationIcon = findViewById<ImageView>(R.id.space_verification_icon)
+                if (verificationTitle.isNotBlank()) {
+                    verificationRow.visibility = View.VISIBLE
+                    verificationText.text = verificationTitle
+                    val iconUrl = profile.optString("verify_icon").let {
+                        if (it.startsWith("//")) "https:$it" else it
+                    }
+                    if (iconUrl.isNotBlank()) {
+                        verificationIcon.visibility = View.VISIBLE
+                        Glide.with(this@UserSpaceActivity).load(iconUrl).into(verificationIcon)
+                    } else {
+                        verificationIcon.visibility = View.GONE
+                    }
+                } else {
+                    verificationRow.visibility = View.GONE
+                }
+
+                val location = profile.optString("location").trim()
+                findViewById<TextView>(R.id.space_location).apply {
+                    text = location
+                    visibility = if (location.isBlank()) View.GONE else View.VISIBLE
+                }
+
                 val face = profile.optString("face").let { if (it.startsWith("//")) "https:$it" else it }
                 if (face.isNotBlank()) Glide.with(this@UserSpaceActivity)
                     .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
-                    .placeholder(R.drawable.bg_comment_avatar).error(R.drawable.bg_comment_avatar).circleCrop().into(avatar)
+                    .placeholder(R.drawable.bili_akari_img).error(R.drawable.bili_akari_img).circleCrop().into(avatar)
+
+                val cover = profile.optString("cover").let { if (it.startsWith("//")) "https:$it" else it }
+                if (cover.isNotBlank()) {
+                    Glide.with(this@UserSpaceActivity)
+                        .load(GlideUrl(cover, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
+                        .centerCrop()
+                        .placeholder(R.drawable.bg_home_hero)
+                        .error(R.drawable.bg_home_hero)
+                        .into(findViewById(R.id.space_banner))
+                } else {
+                    findViewById<ImageView>(R.id.space_banner).setImageResource(R.drawable.bg_home_hero)
+                }
                 status.text = "个人资料已加载"
             } catch (error: Exception) {
                 status.text = "用户资料加载失败：${error.message ?: "网络异常"}"
             }
         }
+    }
+
+    private fun formatProfileCount(value: Long): String = when {
+        value >= 100_000_000L -> String.format(java.util.Locale.getDefault(), "%.1f亿", value / 100_000_000.0)
+        value >= 10_000L -> String.format(java.util.Locale.getDefault(), "%.1f万", value / 10_000.0)
+        else -> value.toString()
     }
 
     private fun loadCreatorVideos(mid: Long, reset: Boolean) {
