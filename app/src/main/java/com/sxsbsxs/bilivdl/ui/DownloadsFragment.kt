@@ -102,8 +102,8 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 renderedTaskSignature = emptySignature
                 taskCardViews.clear()
                 b.downloadTaskControls.removeAllViews()
+                restoreDownloadScroll(previousScrollY)
             }
-            restoreDownloadScroll(previousScrollY)
             return
         }
 
@@ -126,7 +126,6 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         val signature = taskFilter + "|" + tasks.joinToString("|") { "${it.taskId}:${it.status}" }
         if (signature == renderedTaskSignature) {
             visible.forEach(::updateTaskCard)
-            restoreDownloadScroll(previousScrollY)
             return
         }
 
