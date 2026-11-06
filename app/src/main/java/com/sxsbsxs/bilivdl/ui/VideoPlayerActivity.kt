@@ -226,7 +226,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.downloadStatus.text = "yt-dlp 正在解析并下载…"
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { YtDlpBridge.download(this@VideoPlayerActivity, url) }
+                withContext(Dispatchers.IO) { YtDlpBridge.download(this@VideoPlayerActivity, url, BiliSession.cookie(this@VideoPlayerActivity)) }
                 b.downloadStatus.text = "下载完成，已保存到系统视频库"
             } catch (error: Exception) {
                 b.downloadStatus.text = "yt-dlp 下载失败：" + (error.message ?: "暂不支持此链接")
