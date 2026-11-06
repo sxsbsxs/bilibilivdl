@@ -64,7 +64,7 @@ object BiliPlaybackApi {
         val params = linkedMapOf(
             "avid" to aid.toString(), "cid" to cid.toString(), "qn" to qn.toString(),
             "fnval" to fnval.toString(), "fnver" to "0", "force_host" to "2",
-            "fourk" to "1", "wts" to (System.currentTimeMillis() / 1000L).toString()
+            "fourk" to "1", "high_quality" to "1", "wts" to (System.currentTimeMillis() / 1000L).toString()
         )
         val query = params.toSortedMap().entries.joinToString("&") {
             enc(it.key) + "=" + enc(it.value.replace(Regex("[!'()*]"), ""))
@@ -161,7 +161,7 @@ object BiliPlaybackApi {
             // 不能只在网络异常时回退，否则整轮清晰度探测可能一直停留在单一降档结果。
             val wbiRoot = runCatching { get(wbiPlayUrl(aid, cid, qn, 4048, cookie), cookie) }.getOrNull()
             val root = if (wbiRoot?.optInt("code", -1) == 0) wbiRoot else runCatching {
-                get("https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&otype=json", cookie)
+                get("https://api.bilibili.com/x/player/playurl?avid=$aid&cid=$cid&qn=$qn&fnval=4048&fnver=0&force_host=2&fourk=1&high_quality=1&otype=json", cookie)
             }.getOrNull() ?: continue
             if (root.optInt("code", -1) != 0) continue
             val data = root.optJSONObject("data") ?: continue
