@@ -581,6 +581,11 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroyView() {
+        // The task-card cache holds direct View references. Release them with the
+        // Fragment view so a recreated tab builds fresh cards instead of updating
+        // TextViews that belong to the destroyed view hierarchy.
+        taskCardViews.clear()
+        renderedTaskSignature = null
         _binding = null
         super.onDestroyView()
     }
