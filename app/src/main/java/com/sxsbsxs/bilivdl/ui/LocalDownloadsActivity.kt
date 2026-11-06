@@ -110,8 +110,9 @@ class LocalDownloadsActivity : AppCompatActivity() {
         ) else arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
             MediaStore.Video.Media.SIZE, MediaStore.Video.Media.DATE_ADDED, MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.DATA)
-        // BiliDownload publishes completed videos to Movies/BVD by default.
-        // Keep the older BiliVdl folders searchable for files downloaded by previous builds.
+        // BVD can use private storage or publish to its public BVD folders.
+        // This MediaStore screen lists public files only; the download task page includes both modes.
+        // Keep legacy BiliVdl folders searchable for files downloaded by previous builds.
         val selectionColumn = if (Build.VERSION.SDK_INT >= 29)
             MediaStore.MediaColumns.RELATIVE_PATH
         else MediaStore.Video.Media.DATA
@@ -156,7 +157,9 @@ class LocalDownloadsActivity : AppCompatActivity() {
         list.removeAllViews()
         if (filtered.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = if (query.isBlank()) "还没有找到下载视频\n\n下载完成后，文件会出现在这里。" else "没有匹配的视频"
+                text = if (query.isBlank()) {
+                    "没有找到公共媒体库中的视频\n\n若 BVD 设置为“应用内部存储”，请在“下载”页查看任务和文件。\n设置为“公共媒体库”后，视频会显示在这里。"
+                } else "没有匹配的视频"
                 textSize = 14f; gravity = Gravity.CENTER; setPadding(dp(20), dp(56), dp(20), dp(56))
                 setTextColor(getColor(R.color.text_secondary))
             })
