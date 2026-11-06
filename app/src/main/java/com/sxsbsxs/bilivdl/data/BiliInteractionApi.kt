@@ -257,17 +257,23 @@ object BiliInteractionApi {
         if (!protoResult.isNullOrEmpty()) return protoResult
 
         // Compatibility fallback for older videos/CDN responses that still expose XML.
-        val c = (URL("https://api.bilibili.com/x/v1/dm/list.so?oid=$cid").openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15000
-            readTimeout = 20000
-            setRequestProperty("User-Agent", BiliHeaders.UA)
-            setRequestProperty("Referer", "https://www.bilibili.com/")
-            if (cookie.isNotBlank()) setRequestProperty("Cookie", cookie)
+        // BiliMiao 的稳定兼容线路使用 comment.bilibili.com/{cid}.xml。
+        // x/v1/dm/list.so 在部分视频上已不再返回旧 XML，不能把它当唯一回退。
+        val xml = runCatching {
+            String(getBytes("https://comment.bilibili.com/$cid.xml"), Charsets.UTF_8)
+        }.getOrElse {
+            val c = (URL("https://api.bilibili.com/x/v1/dm/list.so?oid=$cid").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15000
+                readTimeout = 20000
+                setRequestProperty("User-Agent", BiliHeaders.UA)
+                setRequestProperty("Referer", "https://www.bilibili.com/")
+                if (cookie.isNotBlank()) setRequestProperty("Cookie", cookie)
+            }
+            try {
+                val stream = if (c.responseCode in 200..299) c.inputStream else c.errorStream
+                stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            } finally { c.disconnect() }
         }
-        val xml = try {
-            val stream = if (c.responseCode in 200..299) c.inputStream else c.errorStream
-            stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        } finally { c.disconnect() }
         if (xml.isBlank()) error("弹幕加载失败：分段弹幕和旧版 XML 接口均未返回数据")
         val parser = Xml.newPullParser()
         parser.setInput(xml.reader())
