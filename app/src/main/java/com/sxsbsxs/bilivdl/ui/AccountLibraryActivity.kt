@@ -38,6 +38,8 @@ class AccountLibraryActivity : AppCompatActivity() {
         const val TYPE_FOLLOWING = "following"
         const val TYPE_LIKED = "liked"
         const val TYPE_MESSAGES = "messages"
+        const val TYPE_BANGUMI = "bangumi"
+        const val TYPE_CINEMA = "cinema"
     }
 
     private lateinit var titleView: TextView
@@ -49,6 +51,8 @@ class AccountLibraryActivity : AppCompatActivity() {
     private var accountMid = 0L
     private var mediaId = ""
     private var watchLaterCursor = ""
+    private var selectedBangumiStatus = 0
+    private lateinit var bangumiFilterRow: LinearLayout
     private var page = 1
     private var loading = false
     private var hasMore = true
@@ -121,6 +125,14 @@ class AccountLibraryActivity : AppCompatActivity() {
             setPadding(dp(18), dp(5), dp(18), dp(8))
         }
         root.addView(statusView)
+        bangumiFilterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, dp(12), dp(8))
+            visibility = if (type == TYPE_BANGUMI || type == TYPE_CINEMA) View.VISIBLE else View.GONE
+        }
+        root.addView(bangumiFilterRow)
+        renderBangumiFilters()
         scrollView = ScrollView(this).apply {
             clipToPadding = false
             setPadding(dp(14), dp(4), dp(14), dp(24))
@@ -146,6 +158,37 @@ class AccountLibraryActivity : AppCompatActivity() {
         setContentView(root)
     }
 
+
+    private fun renderBangumiFilters() {
+        if (!::bangumiFilterRow.isInitialized) return
+        bangumiFilterRow.removeAllViews()
+        val labels = listOf("全部", "想看", "在看", "看过")
+        labels.forEachIndexed { index, label ->
+            val selected = selectedBangumiStatus == index
+            val chip = TextView(this).apply {
+                text = label
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                setTextColor(if (selected) Color.WHITE else Color.rgb(75, 82, 93))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = dp(18).toFloat()
+                    setColor(if (selected) Color.rgb(0, 161, 214) else Color.rgb(235, 238, 242))
+                }
+                setOnClickListener {
+                    if (selectedBangumiStatus != index) {
+                        selectedBangumiStatus = index
+                        renderBangumiFilters()
+                        loadPage(true)
+                    }
+                }
+            }
+            bangumiFilterRow.addView(chip, LinearLayout.LayoutParams(-2, dp(34)).apply {
+                marginEnd = dp(8)
+            })
+        }
+    }
+
     private fun titleForType(): String = when (type) {
         TYPE_HISTORY -> "历史记录"
         TYPE_WATCH_LATER -> "稍后再看"
@@ -154,6 +197,8 @@ class AccountLibraryActivity : AppCompatActivity() {
         TYPE_FOLLOWING -> "我的关注"
         TYPE_LIKED -> "我赞过的视频"
         TYPE_MESSAGES -> "消息概览"
+        TYPE_BANGUMI -> "我的追番"
+        TYPE_CINEMA -> "我的追剧"
         else -> "账号内容"
     }
 
@@ -181,6 +226,8 @@ class AccountLibraryActivity : AppCompatActivity() {
                         TYPE_FOLLOWING -> BiliAccountApi.followings(accountMid, page)
                         TYPE_LIKED -> BiliAccountApi.likedVideos(accountMid, page)
                         TYPE_MESSAGES -> null
+                        TYPE_BANGUMI -> BiliAccountApi.bangumi("bangumi", selectedBangumiStatus, page)
+                        TYPE_CINEMA -> BiliAccountApi.bangumi("cinema", selectedBangumiStatus, page)
                         else -> error("未知的账号页面")
                     }
                 }
@@ -196,6 +243,7 @@ class AccountLibraryActivity : AppCompatActivity() {
                             "video" -> item.bvid.ifBlank { item.aid.toString() }
                             "folder" -> item.mediaId
                             "user" -> item.mid.toString()
+                            "bangumi" -> item.mediaId
                             else -> item.title
                         }
                         if (key.isNotBlank() && seenKeys.add(key)) addRow(item)
@@ -232,6 +280,8 @@ class AccountLibraryActivity : AppCompatActivity() {
         TYPE_FAVORITE_ITEMS -> "这个收藏夹还没有视频"
         TYPE_FOLLOWING -> "还没有关注的 UP 主"
         TYPE_LIKED -> "还没有点赞过的视频"
+        TYPE_BANGUMI -> "还没有追番记录"
+        TYPE_CINEMA -> "还没有追剧记录"
         else -> "暂无内容"
     }
 
@@ -313,6 +363,11 @@ class AccountLibraryActivity : AppCompatActivity() {
             })
             "user" -> startActivity(Intent(this, UserSpaceActivity::class.java)
                 .putExtra(UserSpaceActivity.EXTRA_MID, item.mid))
+            "bangumi" -> startActivity(Intent(this, BangumiSeasonActivity::class.java).apply {
+                putExtra(BangumiSeasonActivity.EXTRA_SEASON_ID, item.mediaId.toLongOrNull() ?: 0L)
+                putExtra(BangumiSeasonActivity.EXTRA_TITLE, item.title)
+                putExtra(BangumiSeasonActivity.EXTRA_COVER, item.cover)
+            })
         }
     }
 
@@ -326,6 +381,22 @@ class AccountLibraryActivity : AppCompatActivity() {
                             .onFailure { statusView.text = it.message ?: "移除失败" }
                     }
                 }.show()
+            (type == TYPE_BANGUMI || type == TYPE_CINEMA) && item.kind == "bangumi" ->
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle(item.title)
+                    .setItems(arrayOf("取消追番/追剧", "标记为想看", "标记为在看", "标记为看过")) { _, which ->
+                        lifecycleScope.launch {
+                            val targetStatus = when (which) { 1 -> 1; 2 -> 2; 3 -> 3; else -> 0 }
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    BiliAccountApi.changeBangumiStatus(item.mediaId, targetStatus)
+                                }
+                            }.onSuccess {
+                                statusView.text = if (targetStatus == 0) "已取消追番/追剧" else "已更新观看状态"
+                                loadPage(true)
+                            }.onFailure { statusView.text = it.message ?: "更新追番状态失败" }
+                        }
+                    }.show()
             type == TYPE_FOLLOWING && item.kind == "user" -> androidx.appcompat.app.AlertDialog.Builder(this)
                 .setItems(arrayOf("取消关注")) { _, _ ->
                     lifecycleScope.launch {

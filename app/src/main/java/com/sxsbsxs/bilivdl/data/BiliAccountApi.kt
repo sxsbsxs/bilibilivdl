@@ -1,6 +1,7 @@
 package com.sxsbsxs.bilivdl.data
 
 import com.a10miaomiao.bilimiao.comm.apis.MessageAPI
+import com.a10miaomiao.bilimiao.comm.apis.BangumiAPI
 import com.a10miaomiao.bilimiao.comm.apis.UserApi
 import com.a10miaomiao.bilimiao.comm.apis.UserRelationApi
 import com.a10miaomiao.bilimiao.comm.network.MiaoHttp
@@ -18,6 +19,7 @@ object BiliAccountApi {
     private val userApi = UserApi()
     private val relationApi = UserRelationApi()
     private val messageApi = MessageAPI()
+    private val bangumiApi = BangumiAPI()
 
     private suspend fun root(request: MiaoHttp): JSONObject {
         val body = request.awaitString()
@@ -179,6 +181,36 @@ object BiliAccountApi {
                 val count = payload.optInt(key)
                 AccountCenterItem("message", label, if (count > 0) count.toString() + " 条未读" else "暂无未读消息")
             }
+    }
+
+
+    suspend fun bangumi(type: String, status: Int, page: Int, pageSize: Int = 20): AccountCenterPage {
+        require(type == "bangumi" || type == "cinema") { "番剧类型无效" }
+        require(status in 0..3) { "追番状态无效" }
+        val response = root(bangumiApi.followList(type, status, page, pageSize))
+        val payload = response.optJSONObject("result") ?: response.optJSONObject("data") ?: JSONObject()
+        val values = payload.optJSONArray("follow_list") ?: JSONArray()
+        val items = (0 until values.length()).mapNotNull { index ->
+            val item = values.optJSONObject(index) ?: return@mapNotNull null
+            val seasonId = item.optString("season_id")
+            if (seasonId.isBlank()) return@mapNotNull null
+            val cover = text(item, "cover", "square_cover").let { if (it.startsWith("//")) "https:" + it else it }
+            val newest = item.optJSONObject("new_ep")?.optString("index_show").orEmpty()
+            val progress = item.optJSONObject("progress")?.optString("index_show").orEmpty()
+            val subtitle = listOf(item.optString("season_type_name"), newest, progress)
+                .filter { it.isNotBlank() && it != "null" }.joinToString(" · ")
+            AccountCenterItem("bangumi", text(item, "title").ifBlank { "未命名番剧" },
+                subtitle, cover, mediaId = seasonId)
+        }
+        return AccountCenterPage(items, payload.optInt("has_next") == 1)
+    }
+
+    suspend fun changeBangumiStatus(seasonId: String, status: Int) {
+        require(seasonId.isNotBlank()) { "番剧编号无效" }
+        require(status in 0..3) { "追番状态无效" }
+        val request = if (status == 0) bangumiApi.cancelFollow(seasonId)
+            else bangumiApi.setFollowStatus(seasonId, status)
+        root(request)
     }
 
     suspend fun addToWatchLater(aid: Long) {

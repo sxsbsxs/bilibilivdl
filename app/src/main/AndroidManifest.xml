@@ -10,6 +10,7 @@
      android:label="@string/app_name" android:supportsRtl="true" android:theme="@style/Theme.BiliVdl">
   <service android:name=".data.BiliDownloadService" android:exported="false" android:foregroundServiceType="dataSync"/>
   <activity android:name=".ui.AccountLibraryActivity" android:exported="false"/>
+  <activity android:name=".ui.BangumiSeasonActivity" android:exported="false"/>
   <activity android:name=".ui.DownloadedResourceActivity" android:exported="false"/>
   <activity android:name=".ui.LocalDownloadsActivity" android:exported="false"/>
   <activity android:name=".ui.LocalMediaPlayerActivity" android:exported="false"/>

@@ -49,7 +49,7 @@
             android:layout_marginTop="22dp" android:text="我的内容" android:textColor="@color/text_primary"
             android:textSize="15sp" android:textStyle="bold"/>
         <GridLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="10dp" android:columnCount="3" android:rowCount="2"
+            android:layout_marginTop="10dp" android:columnCount="3" android:rowCount="3"
             android:useDefaultMargins="false">
             <TextView android:id="@+id/account_history" style="@style/AccountMenuTile" android:text="◷&#10;历史记录"/>
             <TextView android:id="@+id/account_watch_later" style="@style/AccountMenuTile" android:text="▤&#10;稍后再看"/>
@@ -57,6 +57,8 @@
             <TextView android:id="@+id/account_following" style="@style/AccountMenuTile" android:text="◎&#10;我的关注"/>
             <TextView android:id="@+id/account_liked" style="@style/AccountMenuTile" android:text="♡&#10;我赞过的"/>
             <TextView android:id="@+id/account_messages" style="@style/AccountMenuTile" android:text="✉&#10;消息概览"/>
+            <TextView android:id="@+id/account_bangumi" style="@style/AccountMenuTile" android:text="▣&#10;我的追番"/>
+            <TextView android:id="@+id/account_cinema" style="@style/AccountMenuTile" android:text="▣&#10;我的追剧"/>
         </GridLayout>
         <com.google.android.material.card.MaterialCardView android:layout_width="match_parent"
             android:layout_height="wrap_content" android:layout_marginTop="16dp"

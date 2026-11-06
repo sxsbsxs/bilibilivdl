@@ -54,6 +54,8 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         bindLibraryEntry(view, R.id.account_following, AccountLibraryActivity.TYPE_FOLLOWING)
         bindLibraryEntry(view, R.id.account_liked, AccountLibraryActivity.TYPE_LIKED)
         bindLibraryEntry(view, R.id.account_messages, AccountLibraryActivity.TYPE_MESSAGES)
+        bindLibraryEntry(view, R.id.account_bangumi, AccountLibraryActivity.TYPE_BANGUMI)
+        bindLibraryEntry(view, R.id.account_cinema, AccountLibraryActivity.TYPE_CINEMA)
         refresh()
     }
 
