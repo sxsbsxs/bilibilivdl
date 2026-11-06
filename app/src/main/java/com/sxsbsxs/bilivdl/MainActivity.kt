@@ -1,7 +1,24 @@
 package com.sxsbsxs.bilivdl
 
 import android.os.Bundle
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import com.sxsbsxs.bilivdl.databinding.ActivityMainBinding
@@ -9,10 +26,23 @@ import com.sxsbsxs.bilivdl.ui.DownloadsFragment
 import com.sxsbsxs.bilivdl.ui.DynamicFragment
 import com.sxsbsxs.bilivdl.ui.HomeFragment
 import com.sxsbsxs.bilivdl.ui.ProfileFragment
+import com.sxsbsxs.bilivdl.ui.theme.BiliVdlTheme
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val tabFragments = mutableMapOf<String, Fragment>()
+    private var selectedTabId by mutableIntStateOf(R.id.nav_home)
+
+    private data class Tab(val id: Int, val title: String, val icon: Int)
+
+    private val tabs by lazy {
+        listOf(
+            Tab(R.id.nav_home, "首页", R.drawable.ic_home),
+            Tab(R.id.nav_dynamic, "动态", R.drawable.ic_dynamic),
+            Tab(R.id.nav_downloads, "下载", R.drawable.ic_download),
+            Tab(R.id.nav_profile, "我的", R.drawable.ic_profile)
+        )
+    }
 
     companion object {
         private const val STATE_SELECTED_TAB = "selected_tab"
@@ -27,36 +57,72 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val selected = savedInstanceState?.getInt(STATE_SELECTED_TAB, R.id.nav_home)
+        selectedTabId = savedInstanceState?.getInt(STATE_SELECTED_TAB, R.id.nav_home)
             ?: R.id.nav_home
-        // Set the restored selection before attaching the listener so the initial
-        // selection cannot enqueue the same Fragment transaction twice.
-        binding.bottomNavigation.selectedItemId = selected
-        binding.bottomNavigation.setOnItemSelectedListener { item ->
-            showPage(item.itemId)
-            true
+
+        binding.bottomNavigationCompose.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.bottomNavigationCompose.setContent {
+            BiliVdlTheme {
+                NavigationBar(
+                    modifier = Modifier.height(64.dp),
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF34363C),
+                    tonalElevation = 0.dp
+                ) {
+                    tabs.forEach { tab ->
+                        val selected = selectedTabId == tab.id
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                if (selectedTabId != tab.id) {
+                                    selectedTabId = tab.id
+                                    showPage(tab.id)
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(tab.icon),
+                                    contentDescription = tab.title,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            },
+                            label = { Text(tab.title, fontSize = 10.sp) },
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFFFB7299),
+                                selectedTextColor = Color(0xFFFB7299),
+                                indicatorColor = Color(0xFFFFEDF2),
+                                unselectedIconColor = Color(0xFF777D87),
+                                unselectedTextColor = Color(0xFF777D87)
+                            )
+                        )
+                    }
+                }
+            }
         }
-        showPage(selected)
+
+        showPage(selectedTabId)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putInt(STATE_SELECTED_TAB, binding.bottomNavigation.selectedItemId)
+        outState.putInt(STATE_SELECTED_TAB, selectedTabId)
         super.onSaveInstanceState(outState)
     }
 
     fun openAccountPage() {
-        binding.bottomNavigation.selectedItemId = R.id.nav_profile
-        // The selected-item listener switches tabs when the selection changes.
-        // When already selected, the profile is already visible.
+        selectedTabId = R.id.nav_profile
+        showPage(R.id.nav_profile)
     }
 
     /**
-     * Keep one Fragment instance per bottom-navigation destination.
-     * Switching tabs must not recreate the home feed or discard the download list scroll.
+     * Keep one Fragment instance per destination. The new Compose navigation bar
+     * only owns navigation chrome; legacy pages keep their existing business logic
+     * while each screen is migrated independently.
      */
     private fun showPage(itemId: Int) {
         val manager = supportFragmentManager
-        // Settle a pending tab change before deciding which existing fragments to hide.
         manager.executePendingTransactions()
         val (tag, create) = when (itemId) {
             R.id.nav_dynamic -> TAG_DYNAMIC to { DynamicFragment() }
@@ -64,7 +130,8 @@ class MainActivity : AppCompatActivity() {
             R.id.nav_profile -> TAG_PROFILE to { ProfileFragment() }
             else -> TAG_HOME to { HomeFragment() }
         }
-        val target = tabFragments[tag] ?: manager.findFragmentByTag(tag) ?: create().also { tabFragments[tag] = it }
+        val target = tabFragments[tag] ?: manager.findFragmentByTag(tag)
+            ?: create().also { tabFragments[tag] = it }
         val transaction = manager.beginTransaction().setReorderingAllowed(true)
 
         manager.fragments.filter { it.isAdded && it !== target }.forEach { fragment ->

@@ -1,21 +1,104 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:layout_marginBottom="11dp"
-    android:foreground="?attr/selectableItemBackground" android:clickable="true" android:focusable="true"
-    app:cardBackgroundColor="@color/surface_dark" app:cardCornerRadius="14dp" app:cardElevation="0dp" app:strokeColor="@color/stroke_dark" app:strokeWidth="1dp">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-        <FrameLayout android:id="@+id/video_cover_frame" android:layout_width="match_parent" android:layout_height="104dp">
-            <ImageView android:id="@+id/video_cover" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_empty_card" android:contentDescription="视频封面" android:scaleType="centerCrop"/>
-            <TextView android:id="@+id/video_duration_badge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom|end" android:layout_margin="6dp" android:background="#B3000000" android:paddingHorizontal="6dp" android:paddingVertical="3dp" android:textColor="@color/white" android:textSize="10sp"/>
-        </FrameLayout>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="9dp" android:paddingEnd="9dp" android:paddingTop="8dp" android:paddingBottom="9dp">
-            <TextView android:id="@+id/video_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="40dp" android:maxLines="2" android:ellipsize="end" android:textColor="@color/text_primary" android:textSize="14sp" android:lineSpacingExtra="2dp"/>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center_vertical" android:orientation="horizontal">
-                <ImageView android:id="@+id/video_author_avatar" android:layout_width="18dp" android:layout_height="18dp" android:background="@drawable/bg_comment_avatar" android:clipToOutline="true" android:scaleType="centerCrop" android:contentDescription="UP主头像"/>
-                <TextView android:id="@+id/video_author" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:layout_weight="1" android:maxLines="1" android:ellipsize="end" android:textColor="@color/text_secondary" android:textSize="11sp"/>
-            </LinearLayout>
-            <TextView android:id="@+id/video_meta" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:maxLines="1" android:ellipsize="end" android:textColor="@color/text_secondary" android:textSize="11sp"/>
-            <TextView android:id="@+id/video_extra_meta" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone"/>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="14dp"
+    android:layout_marginEnd="14dp"
+    android:layout_marginBottom="12dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="?attr/selectableItemBackground"
+    android:padding="0dp">
+
+    <FrameLayout
+        android:id="@+id/video_cover_frame"
+        android:layout_width="140dp"
+        android:layout_height="79dp"
+        android:background="@drawable/bg_empty_card"
+        android:clipToOutline="true">
+
+        <ImageView
+            android:id="@+id/video_cover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_empty_card"
+            android:contentDescription="视频封面"
+            android:scaleType="centerCrop" />
+
+        <TextView
+            android:id="@+id/video_duration_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="5dp"
+            android:background="#B3000000"
+            android:paddingHorizontal="5dp"
+            android:paddingVertical="2dp"
+            android:textColor="@color/white"
+            android:textSize="10sp" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="79dp"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/video_title"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:lineSpacingExtra="1dp"
+            android:maxLines="2"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:textStyle="500" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/video_author_avatar"
+                android:layout_width="17dp"
+                android:layout_height="17dp"
+                android:background="@drawable/bg_comment_avatar"
+                android:clipToOutline="true"
+                android:contentDescription="UP主头像"
+                android:scaleType="centerCrop" />
+
+            <TextView
+                android:id="@+id/video_author"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/video_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/video_extra_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
     </LinearLayout>
-</com.google.android.material.card.MaterialCardView>
+</LinearLayout>
