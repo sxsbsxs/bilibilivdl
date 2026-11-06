@@ -24,7 +24,7 @@
    <androidx.recyclerview.widget.RecyclerView android:id="@+id/home_search_results" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false" android:visibility="gone" android:clipToPadding="false" android:paddingBottom="8dp"/>
    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:text="为你推荐" android:textColor="@color/text_primary" android:textSize="19sp" android:textStyle="bold"/>
    <ProgressBar android:id="@+id/home_progress" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center_horizontal" android:layout_marginTop="16dp" android:indeterminateTint="@color/brand" android:visibility="gone"/>
-   <TextView android:id="@+id/home_feed_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center" android:text="正在加载推荐视频…" android:textColor="@color/text_secondary" android:textSize="12sp"/>
+   <TextView android:id="@+id/home_feed_status" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center" android:text="正在加载推荐视频…" android:textColor="@color/text_secondary" android:textSize="12sp"/>
    <androidx.recyclerview.widget.RecyclerView android:id="@+id/home_recommendations" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:clipToPadding="false" android:nestedScrollingEnabled="false" android:paddingBottom="12dp"/>
   </LinearLayout>
  </androidx.core.widget.NestedScrollView>
