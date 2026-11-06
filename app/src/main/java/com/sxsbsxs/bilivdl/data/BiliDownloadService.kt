@@ -56,6 +56,8 @@ class BiliDownloadService : Service() {
         private const val ACTION_CANCEL = "cancel"
         private val running = ConcurrentHashMap<String, Job>()
         private val requestedActions = ConcurrentHashMap<String, String>()
+        // Keep a fast resume request while the cancelled worker is unwinding.
+        private val pendingRestarts = ConcurrentHashMap<String, Intent>()
         private val downloadSlots = Semaphore(2)
 
         fun pause(context: Context, id: String) = sendControl(context, id, ACTION_PAUSE)
@@ -160,8 +162,14 @@ class BiliDownloadService : Service() {
         val savedOptions = getSharedPreferences("download_options", MODE_PRIVATE)
         val videoCodec = intent.getStringExtra(EXTRA_VIDEO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_video", "").orEmpty() }
         val audioCodec = intent.getStringExtra(EXTRA_AUDIO_CODEC).orEmpty().ifBlank { savedOptions.getString(taskId + "_audio", "").orEmpty() }
-        // Prevent duplicate workers when a task is resumed repeatedly or an intent is redelivered.
-        if (running.containsKey(taskId)) return START_REDELIVER_INTENT
+        // Do not drop a fast resume while the previous cancelled coroutine is still unwinding.
+        val existingJob = running[taskId]
+        if (existingJob != null) {
+            if (existingJob.isCancelled || !existingJob.isActive) {
+                pendingRestarts[taskId] = Intent(intent)
+            }
+            return START_REDELIVER_INTENT
+        }
 
         val taskJob = scope.launch(start = CoroutineStart.LAZY) {
             var slotAcquired = false
@@ -226,7 +234,12 @@ class BiliDownloadService : Service() {
             } finally {
                 if (slotAcquired) downloadSlots.release()
                 running.remove(taskId, this.coroutineContext[Job])
-                if (active.decrementAndGet() == 0) {
+                val pendingRestart = pendingRestarts.remove(taskId)
+                val remaining = active.decrementAndGet()
+                if (pendingRestart != null) {
+                    // Keep the foreground service alive across the hand-off.
+                    startService(pendingRestart)
+                } else if (remaining == 0) {
                     stopSelfResult(latestStartId.get())
                 }
             }
