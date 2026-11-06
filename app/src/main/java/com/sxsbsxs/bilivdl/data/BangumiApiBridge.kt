@@ -99,20 +99,18 @@ object BangumiApiBridge {
             val videoParts = videoCodec.split('|', limit = 3)
             val videoId = videoParts.firstOrNull()?.toIntOrNull()
             val videoName = if (videoParts.size >= 2) videoParts[1] else videoCodec
-            val videoCodecId = videoParts.getOrNull(2)?.toLongOrNull()
             val video = if (videoCodec.isNotBlank()) {
                 dash.video.firstOrNull { (videoId == null || it.id == videoId) &&
-                    (videoCodecId == null || it.codecId == videoCodecId) && it.codecs == videoName }
+                    it.codecs == videoName }
                     ?: error("番剧没有返回所选视频编码：" + videoCodec)
             } else dash.video.firstOrNull { it.id == actual } ?: dash.video.firstOrNull()
                 ?: error("番剧没有可用视频轨道")
             val audioParts = audioCodec.split('|', limit = 3)
             val audioId = audioParts.firstOrNull()?.toIntOrNull()
             val audioName = if (audioParts.size >= 2) audioParts[1] else audioCodec
-            val audioCodecId = audioParts.getOrNull(2)?.toLongOrNull()
             val audio = if (audioCodec.isNotBlank()) {
                 dash.audio.orEmpty().firstOrNull { (audioId == null || it.id == audioId) &&
-                    (audioCodecId == null || it.codecId == audioCodecId) && it.codecs == audioName }
+                    it.codecs == audioName }
                     ?: error("番剧没有返回所选音频编码：" + audioCodec)
             } else dash.audio?.firstOrNull() ?: error("番剧没有可用音频轨道")
             val videoUrl = video.base_url.ifBlank { video.backup_url?.firstOrNull().orEmpty() }
