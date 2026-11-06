@@ -31,6 +31,13 @@ class CommentAdapter(
 
     private val data = mutableListOf<VideoComment>()
     private val pendingLikeIds = hashSetOf<Long>()
+    private var ownerMid: Long = 0L
+
+    fun setOwnerMid(mid: Long) {
+        if (ownerMid == mid) return
+        ownerMid = mid
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
 
     init {
         setHasStableIds(true)
@@ -117,7 +124,8 @@ class CommentAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(comment: VideoComment, likePending: Boolean) {
-            binding.commentUser.text = comment.user
+            val isOwner = comment.isUp || (ownerMid > 0L && comment.mid == ownerMid)
+            binding.commentUser.text = comment.user + if (isOwner) "  UP主" else ""
             binding.commentBadge.visibility = if (comment.likedByUp) View.VISIBLE else View.GONE
             val face = comment.face.trim().let {
                 if (it.startsWith("//")) "https:$it" else it
