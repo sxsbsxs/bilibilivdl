@@ -94,32 +94,48 @@ object BilimiaoApiBridge {
         val pgc = (payload as? ModuleDynamic.ModuleItem.DynPgc)?.value
         val draw = (payload as? ModuleDynamic.ModuleItem.DynDraw)?.value
         val article = (payload as? ModuleDynamic.ModuleItem.DynArticle)?.value
+        val ugcSeason = (payload as? ModuleDynamic.ModuleItem.DynUgcSeason)?.value
+        val course = (payload as? ModuleDynamic.ModuleItem.DynCourBatchUp)?.value
         // 转发动态的正文属于外层，媒体卡属于被转发的内层动态。
         val forwarded = (payload as? ModuleDynamic.ModuleItem.DynForward)
             ?.value?.item?.let { parseSpaceDynamic(it, depth + 1) }
 
         val aid = archive?.avid?.takeIf { it > 0L }
             ?: pgc?.aid?.takeIf { it > 0L }
+            ?: ugcSeason?.avid?.takeIf { it > 0L }
+            ?: course?.avid?.takeIf { it > 0L }
             ?: forwarded?.aid?.takeIf { it > 0L }
             ?: 0L
         val bvid = archive?.bvid.orEmpty().ifBlank { forwarded?.bvid.orEmpty() }
         // 有些 PGC 动态会以 Archive 模块呈现，EP/SS 信息也可能放在 Archive 中。
         val episodeId = pgc?.epid?.takeIf { it > 0L }
             ?: archive?.episodeId?.takeIf { it > 0L }
+            ?: course?.epid?.takeIf { it > 0L }
             ?: forwarded?.episodeId?.takeIf { it > 0L }
             ?: 0L
         val seasonId = pgc?.seasonId?.takeIf { it > 0L }
             ?: archive?.pgcSeasonId?.takeIf { it > 0L }
+            ?: course?.seasonId?.takeIf { it > 0L }
             ?: forwarded?.seasonId?.takeIf { it > 0L }
             ?: 0L
         val title = archive?.title.orEmpty().ifBlank {
             pgc?.title.orEmpty().ifBlank {
-                article?.title.orEmpty().ifBlank { forwarded?.title.orEmpty() }
+                article?.title.orEmpty().ifBlank {
+                    ugcSeason?.title.orEmpty().ifBlank {
+                        course?.title.orEmpty().ifBlank { forwarded?.title.orEmpty() }
+                    }
+                }
             }
         }
         val cover = archive?.cover.orEmpty().ifBlank {
             pgc?.cover.orEmpty().ifBlank {
-                draw?.items?.firstOrNull()?.src.orEmpty().ifBlank { forwarded?.cover.orEmpty() }
+                article?.covers?.firstOrNull().orEmpty().ifBlank {
+                    ugcSeason?.cover.orEmpty().ifBlank {
+                        course?.cover.orEmpty().ifBlank {
+                            draw?.items?.firstOrNull()?.src.orEmpty().ifBlank { forwarded?.cover.orEmpty() }
+                        }
+                    }
+                }
             }
         }.let { value -> if (value.startsWith("//")) "https:$value" else value }
         val images = buildList {
