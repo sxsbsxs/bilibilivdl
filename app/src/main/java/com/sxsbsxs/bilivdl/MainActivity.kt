@@ -6,6 +6,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import com.sxsbsxs.bilivdl.databinding.ActivityMainBinding
 import com.sxsbsxs.bilivdl.ui.DownloadsFragment
+import com.sxsbsxs.bilivdl.ui.DynamicFragment
 import com.sxsbsxs.bilivdl.ui.HomeFragment
 import com.sxsbsxs.bilivdl.ui.ProfileFragment
 
@@ -16,6 +17,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val STATE_SELECTED_TAB = "selected_tab"
         private const val TAG_HOME = "tab_home"
+        private const val TAG_DYNAMIC = "tab_dynamic"
         private const val TAG_DOWNLOADS = "tab_downloads"
         private const val TAG_PROFILE = "tab_profile"
     }
@@ -57,6 +59,7 @@ class MainActivity : AppCompatActivity() {
         // Settle a pending tab change before deciding which existing fragments to hide.
         manager.executePendingTransactions()
         val (tag, create) = when (itemId) {
+            R.id.nav_dynamic -> TAG_DYNAMIC to { DynamicFragment() }
             R.id.nav_downloads -> TAG_DOWNLOADS to { DownloadsFragment() }
             R.id.nav_profile -> TAG_PROFILE to { ProfileFragment() }
             else -> TAG_HOME to { HomeFragment() }

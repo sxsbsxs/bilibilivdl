@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">BiliVdl</string>
     <string name="nav_home">首页</string>
+    <string name="nav_dynamic">动态</string>
     <string name="nav_downloads">下载</string>
     <string name="nav_profile">我的</string>
 </resources>

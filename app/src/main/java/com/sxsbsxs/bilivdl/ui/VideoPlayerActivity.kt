@@ -71,6 +71,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         const val EXTRA_SEASON_ID = "season_id"
         const val EXTRA_COVER = "cover"
         const val EXTRA_AUTHOR = "author"
+        const val EXTRA_OPEN_COMMENTS = "open_comments"
     }
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
@@ -186,7 +187,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.relatedVideosList.adapter = relatedAdapter
         b.playerInfoTab.setOnClickListener { showDetailTab(true) }
         b.playerCommentsTab.setOnClickListener { showDetailTab(false) }
-        showDetailTab(true)
+        showDetailTab(!intent.getBooleanExtra(EXTRA_OPEN_COMMENTS, false))
         loadRelatedVideos()
         b.qualityButton.setOnClickListener { showQuality() }
         b.partButton.setOnClickListener { showParts() }
