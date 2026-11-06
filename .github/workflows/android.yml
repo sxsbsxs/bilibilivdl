@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, v2.0-integration ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, v2.0-integration ]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +21,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
