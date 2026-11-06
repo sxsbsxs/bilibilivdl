@@ -50,7 +50,9 @@ import com.sxsbsxs.bilivdl.databinding.ActivityVideoPlayerBinding
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -68,6 +70,10 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
     private lateinit var b: ActivityVideoPlayerBinding
     private var exo: ExoPlayer? = null
+    private var playbackJob: Job? = null
+    private var playbackRequestId = 0
+    private var downloadQualityJob: Job? = null
+    private var downloadOptionsJob: Job? = null
     private var info: PlaybackInfo? = null
     private lateinit var relatedAdapter: VideoAdapter
     private var videoBackupIndex = 0
@@ -290,9 +296,11 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun load(qn: Int) {
+        playbackJob?.cancel()
+        val requestId = ++playbackRequestId
         b.playerStatus.visibility = View.VISIBLE
         b.playerStatus.text = "正在获取播放地址…"
-        lifecycleScope.launch {
+        playbackJob = lifecycleScope.launch {
             try {
                 val previousQualities = info?.qualities.orEmpty()
                 val accountProfile = if (cookie.isNotBlank()) withContext(Dispatchers.IO) {
@@ -309,7 +317,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     } else BiliPlaybackApi.load(
                         bvid, aid, qn, cookie, selectedPartIndex, isVip = isVip, isLoggedIn = isLoggedIn,
                         onStage = { stage -> runOnUiThread {
-                            if (!isFinishing && ::b.isInitialized) {
+                            if (requestId == playbackRequestId && !isFinishing && ::b.isInitialized) {
                                 b.playerStatus.visibility = View.VISIBLE
                                 b.playerStatus.text = stage
                             }
@@ -318,6 +326,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 }
                 // Keep the full quality menu from the original highest-quality response.
                 // A low-qn response is intentionally filtered by the API and must not erase higher choices.
+                if (requestId != playbackRequestId || isFinishing) return@launch
                 val lockedQualityIds = loadedPlayback.restrictedQualities.map { it.id }.toSet()
                 val p = loadedPlayback.copy(qualities = (loadedPlayback.qualities + previousQualities)
                     .filterNot { it.first in lockedQualityIds }
@@ -325,7 +334,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                 info = p
                 if (p.title.isNotBlank()) b.playerTitle.text = p.title
                 videoLiked = if (cookie.isNotBlank() && aid > 0L) {
-                    runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }.getOrDefault(false)
+                    runCatching { withContext(Dispatchers.IO) { BiliVideoActionApi.isLiked(aid, cookie) } }
+                        .onFailure { if (it is CancellationException) throw it }.getOrDefault(false)
                 } else false
                 b.videoLike.text = (if (videoLiked) "已赞 " else "点赞 ") + formatCount(p.likeCount)
                 b.videoCoin.text = "投币 " + formatCount(p.coinCount)
@@ -421,7 +431,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.qualityButton.text = p.name
                 b.playerStatus.text = "正在连接视频…"
                 loadDanmaku(p.cid)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
+                if (requestId != playbackRequestId || isFinishing) return@launch
                 val reason = e.message.orEmpty()
                 b.playerStatus.visibility = View.VISIBLE
                 b.playerStatus.text = if (reason.contains("Conversion") && reason.contains("万")) {
@@ -866,17 +879,19 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun showDownloadQuality() {
+        downloadQualityJob?.cancel()
         val p = info
         if (p == null) { b.downloadStatus.visibility = View.VISIBLE
         b.downloadStatus.text = "请先等待播放地址加载完成"; return }
         b.downloadStatus.visibility = View.VISIBLE
         b.downloadStatus.text = "正在读取可用清晰度…"
-        lifecycleScope.launch {
+        downloadQualityJob = lifecycleScope.launch {
             try {
                 val downloadedChoices = withContext(Dispatchers.IO) {
                     if (epId <= 0L && aid > 0L) {
                         // Download probing can be capped independently from playback (BiliMiao/gRPC).
-                        runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie, isVip = accountIsVip, isLoggedIn = accountIsLoggedIn) }.getOrDefault(emptyList())
+                        runCatching { BiliPlaybackApi.downloadQualities(aid, p.cid, cookie, isVip = accountIsVip, isLoggedIn = accountIsLoggedIn) }
+                            .onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList())
                     } else emptyList()
                 }
                 // Merge verified playback tiers with download-endpoint tiers; never discard
@@ -922,6 +937,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                     .show()
                 b.downloadStatus.visibility = View.GONE
                 b.downloadStatus.text = ""
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 b.downloadStatus.text = "读取清晰度失败：${error.message ?: "网络异常"}"
             }
@@ -929,13 +946,14 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun loadDownloadStreamOptions(qn: Int) {
+        downloadOptionsJob?.cancel()
         val p = info ?: return
         if (epId <= 0L && aid <= 0L) {
             startDownload(qn)
             return
         }
         b.downloadStatus.text = "正在读取可选音视频资源…"
-        lifecycleScope.launch {
+        downloadOptionsJob = lifecycleScope.launch {
             try {
                 val options = withContext(Dispatchers.IO) {
                     if (epId > 0L) BangumiApiBridge.downloadStreamChoices(epId, p.cid, qn) else BiliPlaybackApi.downloadStreamChoices(aid, p.cid, qn, cookie)
@@ -971,6 +989,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                                 }.show()
                         }
                     }.show()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 b.downloadStatus.text = "读取资源选项失败，使用默认音视频轨道： " + (error.message ?: "未知错误")
                 startDownload(qn)
@@ -1490,6 +1510,10 @@ class VideoPlayerActivity : AppCompatActivity() {
         super.onStop()
     }
     override fun onDestroy() {
+        playbackRequestId++
+        playbackJob?.cancel()
+        downloadQualityJob?.cancel()
+        downloadOptionsJob?.cancel()
         playerUiHandler.removeCallbacks(progressUpdater)
         controlsHideRunnable?.let(playerUiHandler::removeCallbacks)
         longPressRunnable?.let(playerUiHandler::removeCallbacks)
