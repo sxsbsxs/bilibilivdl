@@ -4,8 +4,8 @@ android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
  defaultConfig {
   applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=38; versionName="2.0.18"
-  // The app is distributed primarily to modern Android phones. Avoid bundling
-  // three copies of Python/FFmpeg native libraries into one oversized APK.
+  // Ship only the native ABI used by the app's media pipeline; excluding
+  // unused 32-bit and x86 variants keeps the APK smaller.
   ndk { abiFilters += listOf("arm64-v8a") }
  }
  buildFeatures { viewBinding=true; compose=true }
