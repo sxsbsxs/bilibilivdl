@@ -27,6 +27,8 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     private var _binding: FragmentDownloadBinding? = null
     private val b get() = _binding!!
     private val dao by lazy { DownloadQueueDatabase.get(requireContext()).tasks() }
+    private var currentTasks: List<DownloadTaskEntity> = emptyList()
+    private var taskFilter: String = "all"
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -57,6 +59,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
     }
 
     private fun refreshTasks(tasks: List<DownloadTaskEntity>) {
+        currentTasks = tasks
         b.downloadTaskControls.removeAllViews()
         if (tasks.isEmpty()) {
             b.downloadSummary.text = ""
@@ -70,8 +73,53 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
         val failed = tasks.count { it.status == "failed" }
         b.downloadSummary.text = "全部 " + tasks.size + "    进行中 " + active + "    已暂停 " + paused + "    已完成 " + completed + "    失败 " + failed
         b.downloadTasks.visibility = View.GONE
-        addBatchControls(tasks)
-        tasks.forEach { addTaskCard(it) }
+        addTaskFilters(tasks)
+        val visible = when (taskFilter) {
+            "active" -> tasks.filter { it.status == "queued" || it.status == "downloading" }
+            "paused" -> tasks.filter { it.status == "paused" }
+            "completed" -> tasks.filter { it.status == "completed" }
+            "failed" -> tasks.filter { it.status == "failed" || it.status == "cancelled" }
+            else -> tasks
+        }
+        addBatchControls(visible)
+        if (visible.isEmpty()) {
+            b.downloadTaskControls.addView(TextView(requireContext()).apply {
+                text = "这个分类下暂时没有任务"
+                textSize = 13f
+                setTextColor(requireContext().getColor(R.color.text_secondary))
+                setPadding(dp(8), dp(20), dp(8), dp(20))
+            })
+        } else visible.forEach { addTaskCard(it) }
+    }
+
+    private fun addTaskFilters(tasks: List<DownloadTaskEntity>) {
+        val counts = mapOf(
+            "all" to tasks.size,
+            "active" to tasks.count { it.status == "queued" || it.status == "downloading" },
+            "paused" to tasks.count { it.status == "paused" },
+            "completed" to tasks.count { it.status == "completed" },
+            "failed" to tasks.count { it.status == "failed" || it.status == "cancelled" }
+        )
+        val row = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(8))
+        }
+        val labels = listOf("all" to "全部", "active" to "进行中", "paused" to "已暂停", "completed" to "已完成", "failed" to "失败")
+        labels.forEach { (key, label) ->
+            row.addView(TextView(requireContext()).apply {
+                text = "$label ${counts[key] ?: 0}"
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setPadding(dp(8), dp(7), dp(8), dp(7))
+                setTextColor(requireContext().getColor(if (taskFilter == key) R.color.brand else R.color.text_secondary))
+                setOnClickListener {
+                    taskFilter = key
+                    refreshTasks(currentTasks)
+                }
+            }, LinearLayout.LayoutParams(0, dp(34), 1f))
+        }
+        b.downloadTaskControls.addView(row)
     }
 
     /** 批量操作直接作用于持久化任务队列，不只是界面按钮。 */
