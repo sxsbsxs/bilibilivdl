@@ -185,10 +185,11 @@ class VideoPlayerActivity : AppCompatActivity() {
                     BiliPlaybackApi.relatedVideos(bvid, aid, cookie)
                 }
                 relatedAdapter.submitList(items)
-                b.relatedVideosStatus.text = if (items.isEmpty()) "暂时没有相关推荐"
-                    else "根据当前视频推荐 · 共 ${items.size} 条"
+                b.relatedVideosStatus.text = if (items.isEmpty()) "暂时没有相关推荐" else ""
+                b.relatedVideosStatus.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
             } catch (error: Exception) {
-                b.relatedVideosStatus.text = "相关推荐加载失败：${error.message ?: "网络异常"}"
+                b.relatedVideosStatus.visibility = View.VISIBLE
+                b.relatedVideosStatus.text = "相关推荐加载失败"
             }
         }
     }
@@ -225,10 +226,16 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun load(qn: Int) {
-        b.playerStatus.text = "正在获取播放地址…"
+        b.playerStatus.visibility = View.GONE
+        b.playerStatus.text = ""
         lifecycleScope.launch {
             try {
-                val p = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
+                val previousQualities = info?.qualities.orEmpty()
+                val loadedPlayback = withContext(Dispatchers.IO) { if (epId > 0L) BangumiApiBridge.playback(epId, qn) else BiliPlaybackApi.load(bvid, aid, qn, cookie, selectedPartIndex) }
+                // Keep the full quality menu from the original highest-quality response.
+                // A low-qn response is intentionally filtered by the API and must not erase higher choices.
+                val p = loadedPlayback.copy(qualities = (loadedPlayback.qualities + previousQualities)
+                    .distinctBy { it.first }.sortedByDescending { it.first })
                 info = p
                 if (p.title.isNotBlank()) b.playerTitle.text = p.title
                 videoLiked = if (cookie.isNotBlank() && aid > 0L) {
@@ -310,6 +317,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                                 pendingSeekPosition = 0L
                                 resumePosition = 0L
                                 player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                                b.playerStatus.visibility = View.GONE
                                 b.playerStatus.text = "正在播放 · ${p.name}"
                             }
                         }
@@ -325,6 +333,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 loadDanmaku(p.cid)
             } catch (e: Exception) {
                 val reason = e.message.orEmpty()
+                b.playerStatus.visibility = View.VISIBLE
                 b.playerStatus.text = if (reason.contains("Conversion") && reason.contains("万")) {
                     "获取播放地址失败：B站返回了异常格式数据，已尝试备用线路，请稍后重试"
                 } else "获取播放地址失败：${reason.ifBlank { "接口异常" }}"
@@ -548,8 +557,10 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun showDownloadQuality() {
         val p = info
-        if (p == null) { b.downloadStatus.text = "请先等待播放地址加载完成"; return }
-        b.downloadStatus.text = "正在读取账号可用的下载清晰度…"
+        if (p == null) { b.downloadStatus.visibility = View.VISIBLE
+        b.downloadStatus.text = "请先等待播放地址加载完成"; return }
+        b.downloadStatus.visibility = View.VISIBLE
+        b.downloadStatus.text = "正在读取可用清晰度…"
         lifecycleScope.launch {
             try {
                 val choices = withContext(Dispatchers.IO) {
@@ -632,7 +643,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         val task = JSONObject()
             .put("id", taskId)
             .put("title", title)
-            .put("quality", info?.name ?: "清晰度 " + qn)
+            .put("quality", info?.qualities?.firstOrNull { it.first == qn }?.second ?: "清晰度 " + qn)
             .put("episodeId", epId)
             .put("pageIndex", selectedPartIndex)
             .put("cover", intent.getStringExtra(EXTRA_COVER).orEmpty())
@@ -681,8 +692,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.danmakuOverlay.setPlaying(exo?.isPlaying == true)
                 b.danmakuButton.text = "弹幕：开（${items.size}）· 长按导出"
             } catch (e: Exception) {
-                b.danmakuButton.text = "弹幕加载失败"
-                b.playerStatus.text = "播放中 · 弹幕暂不可用：${e.message}"
+                b.danmakuButton.text = "弹幕"
+                // A danmaku endpoint failure should not replace the playback status with a noisy warning.
             }
         }
     }
