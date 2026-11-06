@@ -201,6 +201,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.videoLike.setOnClickListener { toggleVideoLike() }
         b.videoCoin.setOnClickListener { showCoinDialog() }
         b.videoFavorite.setOnClickListener { showFavoriteFolders() }
+        b.videoTriple.setOnClickListener { tripleVideo() }
+        b.downloadAllParts.setOnClickListener { showDownloadAllParts() }
         b.danmakuSend.setOnClickListener { showDanmakuComposer() }
         // comments_list is inside a NestedScrollView with nested scrolling disabled;
         // listen to the parent scroll view or the RecyclerView never receives scroll events.
@@ -977,48 +979,14 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun startDownload(qn: Int, videoCodec: String = "", audioCodec: String = "") {
-        val taskId = java.util.UUID.randomUUID().toString()
-        val title = b.playerTitle.text.toString()
-            .replace(Regex("[\\\\/:*?\\\"<>|]"), "_")
-            .take(70)
-            .ifBlank { "bilibili_video" }
-        val task = JSONObject()
-            .put("id", taskId)
-            .put("title", title)
-            .put("quality", info?.qualities?.firstOrNull { it.first == qn }?.second ?: "清晰度 " + qn)
-            .put("episodeId", epId)
-            .put("pageIndex", selectedPartIndex)
-            .put("cover", intent.getStringExtra(EXTRA_COVER).orEmpty())
-            .put("author", intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
-            .put("bvid", bvid)
-            .put("aid", aid)
-            .put("qn", qn)
-            .put("status", "downloading")
-            .put("progress", "等待后台下载服务启动")
-            .put("time", System.currentTimeMillis())
-        val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
-        val old = JSONArray(prefs.getString("tasks", "[]"))
-        old.put(task)
-        prefs.edit().putString("tasks", old.toString()).apply()
-        getSharedPreferences("download_options", MODE_PRIVATE).edit()
-            .putString(taskId + "_video", videoCodec)
-            .putString(taskId + "_audio", audioCodec)
-            .apply()
-        try {
-            BiliDownloadService.enqueue(this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec, selectedPartIndex, intent.getStringExtra(EXTRA_COVER).orEmpty(), intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
+        val part = info?.parts?.getOrNull(selectedPartIndex)
+        val added = enqueueDownloadForPart(qn, videoCodec, audioCodec, selectedPartIndex, part?.title.orEmpty())
+        if (added) {
             b.downloadStatus.visibility = View.GONE
             b.downloadStatus.text = ""
-        } catch (error: Exception) {
-            task.put("status", "failed").put("progress", error.message ?: "无法启动下载服务")
-            val current = JSONArray(prefs.getString("tasks", "[]"))
-            val updated = JSONArray()
-            for (i in 0 until current.length()) {
-                val item = current.optJSONObject(i) ?: continue
-                updated.put(if (item.optString("id") == taskId) task else item)
-            }
-            prefs.edit().putString("tasks", updated.toString()).apply()
+        } else {
             b.downloadStatus.visibility = View.VISIBLE
-            b.downloadStatus.text = "下载任务启动失败：" + error.message
+            b.downloadStatus.text = "下载任务启动失败，请稍后重试"
         }
     }
 
@@ -1369,6 +1337,115 @@ class VideoPlayerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 b.playerStatus.text = e.message ?: "读取收藏夹失败"
             }
+        }
+    }
+
+    private fun tripleVideo() {
+        if (cookie.isBlank()) {
+            b.playerStatus.text = "一键三连需要先登录 B站账号"
+            return
+        }
+        lifecycleScope.launch {
+            b.videoTriple.isEnabled = false
+            try {
+                withContext(Dispatchers.IO) { BilimiaoApiBridge.triple(requireAid()) }
+                b.videoTriple.text = "已三连"
+                b.playerStatus.text = "一键三连成功"
+            } catch (e: Exception) {
+                b.playerStatus.text = e.message ?: "一键三连失败"
+            } finally {
+                b.videoTriple.isEnabled = true
+            }
+        }
+    }
+
+    /** Batch flow adapted from KafuuNeko/BiliDownload: one quality selection, one persistent task per part. */
+    private fun showDownloadAllParts() {
+        val playback = info ?: run {
+            b.downloadStatus.visibility = View.VISIBLE
+            b.downloadStatus.text = "请先等待视频信息加载完成"
+            return
+        }
+        if (epId > 0L) {
+            b.downloadStatus.text = "番剧请从剧集列表选择下载"
+            b.downloadStatus.visibility = View.VISIBLE
+            return
+        }
+        if (playback.parts.size <= 1) {
+            b.downloadStatus.visibility = View.VISIBLE
+            b.downloadStatus.text = "当前视频只有一个分P，请使用普通下载"
+            return
+        }
+        val choices = playback.qualities.distinctBy { it.first }.sortedByDescending { it.first }
+        if (choices.isEmpty()) {
+            b.downloadStatus.visibility = View.VISIBLE
+            b.downloadStatus.text = "没有可用的下载清晰度"
+            return
+        }
+        var selected = choices.first().first
+        MaterialAlertDialogBuilder(this)
+            .setTitle("批量下载全部分P")
+            .setMessage("共 \${playback.parts.size} 个分P。每个分P将独立加入后台队列，可单独暂停和重试。")
+            .setSingleChoiceItems(choices.map { it.second }.toTypedArray(), 0) { _, which ->
+                selected = choices[which].first
+            }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("加入队列") { _, _ ->
+                val parts = playback.parts.toList()
+                var added = 0
+                parts.forEach { part ->
+                    if (enqueueDownloadForPart(selected, "", "", part.page - 1, part.title)) added++
+                }
+                b.downloadStatus.visibility = View.VISIBLE
+                b.downloadStatus.text = "已将 \${added}/\${parts.size} 个分P加入下载队列"
+            }
+            .show()
+    }
+
+    private fun enqueueDownloadForPart(
+        qn: Int,
+        videoCodec: String,
+        audioCodec: String,
+        pageIndex: Int,
+        partTitle: String
+    ): Boolean {
+        val taskId = java.util.UUID.randomUUID().toString()
+        val baseTitle = b.playerTitle.text.toString().ifBlank { "bilibili_video" }
+        val title = (if (partTitle.isBlank()) baseTitle else "$baseTitle - $partTitle")
+            .replace(Regex("[\\\\\\\\/:*?\\\"<>|]"), "_").take(70)
+        val qualityName = info?.qualities?.firstOrNull { it.first == qn }?.second ?: "清晰度 $qn"
+        val task = JSONObject()
+            .put("id", taskId).put("title", title).put("quality", qualityName)
+            .put("episodeId", epId).put("pageIndex", pageIndex)
+            .put("cover", intent.getStringExtra(EXTRA_COVER).orEmpty())
+            .put("author", intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
+            .put("bvid", bvid).put("aid", aid).put("qn", qn)
+            .put("status", "queued").put("progress", "等待下载队列")
+            .put("time", System.currentTimeMillis())
+        val prefs = getSharedPreferences("download_queue", MODE_PRIVATE)
+        val old = JSONArray(prefs.getString("tasks", "[]"))
+        old.put(task)
+        prefs.edit().putString("tasks", old.toString()).apply()
+        getSharedPreferences("download_options", MODE_PRIVATE).edit()
+            .putString(taskId + "_video", videoCodec)
+            .putString(taskId + "_audio", audioCodec).apply()
+        return try {
+            BiliDownloadService.enqueue(
+                this, taskId, bvid, aid, title, qn, epId, videoCodec, audioCodec, pageIndex,
+                intent.getStringExtra(EXTRA_COVER).orEmpty(),
+                intent.getStringExtra(EXTRA_AUTHOR).orEmpty()
+            )
+            true
+        } catch (error: Exception) {
+            task.put("status", "failed").put("progress", error.message ?: "无法启动下载服务")
+            val current = JSONArray(prefs.getString("tasks", "[]"))
+            val updated = JSONArray()
+            for (i in 0 until current.length()) {
+                val item = current.optJSONObject(i) ?: continue
+                updated.put(if (item.optString("id") == taskId) task else item)
+            }
+            prefs.edit().putString("tasks", updated.toString()).apply()
+            false
         }
     }
 
