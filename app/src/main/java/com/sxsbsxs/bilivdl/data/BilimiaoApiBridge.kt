@@ -2,6 +2,7 @@ package com.sxsbsxs.bilivdl.data
 
 import com.a10miaomiao.bilimiao.comm.apis.CommentApi
 import com.a10miaomiao.bilimiao.comm.apis.VideoAPI
+import com.a10miaomiao.bilimiao.comm.apis.UserApi
 import com.a10miaomiao.bilimiao.comm.network.MiaoHttp
 import org.json.JSONObject
 
@@ -12,6 +13,7 @@ import org.json.JSONObject
 object BilimiaoApiBridge {
     private val videoApi = VideoAPI()
     private val commentApi = CommentApi()
+    private val userApi = UserApi()
 
     private suspend fun execute(request: MiaoHttp): JSONObject {
         // Keep okhttp's Response type inside bilimiao's own module to avoid exposing
@@ -30,6 +32,57 @@ object BilimiaoApiBridge {
             }
         }
         return root
+    }
+
+    /**
+     * Creator profile and archive pages routed through bilimiao2's maintained API client.
+     * Raw JSON is returned so the Android UI can tolerate Bilibili response schema changes.
+     */
+    suspend fun userSpace(mid: Long): JSONObject {
+        require(mid > 0L) { "UP主 UID 无效" }
+        return execute(userApi.space(mid.toString()))
+            .optJSONObject("data") ?: error("B站没有返回 UP 主资料")
+    }
+
+    suspend fun userVideos(mid: Long, cursorAid: Long = 0L, pageSize: Int = 30): List<BiliVideo> {
+        require(mid > 0L) { "UP主 UID 无效" }
+        val root = execute(userApi.upperVideoList(
+            vmid = mid.toString(),
+            aid = cursorAid.toString(),
+            pageSize = pageSize.coerceIn(1, 50)
+        ))
+        val data = root.optJSONObject("data") ?: return emptyList()
+        val list = data.optJSONObject("list")
+        val videos = list?.optJSONArray("vlist")
+            ?: data.optJSONArray("archives")
+            ?: data.optJSONArray("items")
+            ?: return emptyList()
+        return (0 until videos.length()).mapNotNull { index ->
+            val item = videos.optJSONObject(index) ?: return@mapNotNull null
+            val aid = item.optLong("aid")
+            val bvid = item.optString("bvid")
+            if (aid <= 0L && bvid.isBlank()) return@mapNotNull null
+            val owner = item.optJSONObject("owner")
+            BiliVideo(
+                title = item.optString("title").ifBlank { "未命名视频" },
+                cover = item.optString("pic").ifBlank { item.optString("cover") },
+                author = item.optString("author").ifBlank { item.optString("name").ifBlank { "UP主" } },
+                play = item.optString("play").ifBlank { item.optJSONObject("stat")?.optString("view").orEmpty() },
+                duration = item.optString("length").ifBlank { item.optString("duration") },
+                bvid = bvid,
+                aid = aid,
+                description = item.optString("description").ifBlank { item.optString("desc") },
+                danmaku = item.optLong("video_review").takeIf { it > 0L }
+                    ?: item.optJSONObject("stat")?.optLong("danmaku")?.takeIf { it > 0L },
+                likes = item.optJSONObject("stat")?.optLong("like")?.takeIf { it > 0L },
+                favorites = item.optJSONObject("stat")?.optLong("favorite")?.takeIf { it > 0L },
+                coins = item.optJSONObject("stat")?.optLong("coin")?.takeIf { it > 0L },
+                shares = item.optJSONObject("stat")?.optLong("share")?.takeIf { it > 0L },
+                comments = item.optJSONObject("stat")?.optLong("reply")?.takeIf { it > 0L },
+                pubdate = item.optLong("created").takeIf { it > 0L },
+                authorFace = owner?.optString("face").orEmpty()
+            )
+        }
     }
 
     suspend fun videoInfo(id: String, type: String): JSONObject {

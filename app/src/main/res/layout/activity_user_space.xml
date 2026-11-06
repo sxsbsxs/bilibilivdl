@@ -20,6 +20,9 @@
     <TextView android:id="@+id/space_stats" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:textColor="@color/brand_dark" android:textSize="13sp" android:textStyle="bold"/>
    </LinearLayout>
   </com.google.android.material.card.MaterialCardView>
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:paddingStart="2dp" android:text="TA 的投稿" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold"/>
+  <TextView android:id="@+id/space_video_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center" android:text="正在加载投稿…" android:textColor="@color/text_secondary" android:textSize="12sp"/>
+  <androidx.recyclerview.widget.RecyclerView android:id="@+id/space_videos" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:nestedScrollingEnabled="false" android:clipToPadding="false" android:paddingBottom="12dp"/>
   <TextView android:id="@+id/space_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:gravity="center" android:text="正在获取用户资料…" android:textColor="@color/text_secondary" android:textSize="12sp"/>
  </LinearLayout>
 </ScrollView>

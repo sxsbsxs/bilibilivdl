@@ -1,15 +1,21 @@
 package com.sxsbsxs.bilivdl.ui
 
+import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BiliHeaders
+import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
+import com.sxsbsxs.bilivdl.data.BiliVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -19,14 +25,30 @@ import java.net.URL
 
 class UserSpaceActivity : AppCompatActivity() {
     companion object { const val EXTRA_MID = "user_mid" }
+    private lateinit var videosAdapter: VideoAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_user_space)
-        findViewById<android.view.View>(R.id.space_back).setOnClickListener { finish() }
+        findViewById<View>(R.id.space_back).setOnClickListener { finish() }
         val mid = intent.getLongExtra(EXTRA_MID, 0L)
         if (mid <= 0L) { finish(); return }
+        videosAdapter = VideoAdapter { video ->
+            startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                putExtra(VideoPlayerActivity.EXTRA_BVID, video.bvid)
+                putExtra(VideoPlayerActivity.EXTRA_AID, video.aid)
+                putExtra(VideoPlayerActivity.EXTRA_TITLE, video.title)
+                putExtra(VideoPlayerActivity.EXTRA_COVER, video.cover)
+                putExtra(VideoPlayerActivity.EXTRA_AUTHOR, video.author)
+            })
+        }
+        findViewById<RecyclerView>(R.id.space_videos).apply {
+            layoutManager = LinearLayoutManager(this@UserSpaceActivity)
+            adapter = videosAdapter
+            isNestedScrollingEnabled = false
+        }
         loadProfile(mid)
+        loadCreatorVideos(mid)
     }
 
     private fun request(url: String): JSONObject {
@@ -90,6 +112,39 @@ class UserSpaceActivity : AppCompatActivity() {
                 status.text = "个人资料已加载"
             } catch (error: Exception) {
                 status.text = "用户资料加载失败：${error.message ?: "网络异常"}"
+            }
+        }
+    }
+
+    private fun loadCreatorVideos(mid: Long) {
+        val status = findViewById<TextView>(R.id.space_video_status)
+        lifecycleScope.launch {
+            try {
+                val videos = withContext(Dispatchers.IO) {
+                    runCatching { BilimiaoApiBridge.userVideos(mid, pageSize = 30) }.getOrElse {
+                        // Fallback keeps the creator page usable if the upstream app endpoint is rate-limited.
+                        val root = request("https://api.bilibili.com/x/space/wbi/arc/search?mid=$mid&ps=30&pn=1&order=pubdate")
+                        if (root.optInt("code", -1) != 0) throw it
+                        val vlist = root.optJSONObject("data")?.optJSONObject("list")?.optJSONArray("vlist")
+                        (0 until (vlist?.length() ?: 0)).mapNotNull { index ->
+                            val item = vlist?.optJSONObject(index) ?: return@mapNotNull null
+                            val aid = item.optLong("aid")
+                            if (aid <= 0L) return@mapNotNull null
+                            BiliVideo(
+                                title = item.optString("title"), cover = item.optString("pic"),
+                                author = item.optString("author"), play = item.optString("play"),
+                                duration = item.optString("length"), bvid = item.optString("bvid"),
+                                aid = aid, description = item.optString("description")
+                            )
+                        }
+                    }
+                }
+                videosAdapter.submitList(videos)
+                status.text = if (videos.isEmpty()) "这个 UP 主还没有公开投稿" else "共加载 ${videos.size} 个视频"
+                status.visibility = View.VISIBLE
+            } catch (error: Exception) {
+                status.text = "投稿加载失败：${error.message ?: "网络异常"}"
+                status.visibility = View.VISIBLE
             }
         }
     }
