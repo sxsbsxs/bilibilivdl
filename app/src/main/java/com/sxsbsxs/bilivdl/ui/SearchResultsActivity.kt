@@ -34,6 +34,7 @@ class SearchResultsActivity : AppCompatActivity() {
     private var hasMore = true
     private var isBangumi = false
     private var isDirectVideoId = false
+    private var relatedQuery = ""
     private var videoAdapter: VideoAdapter? = null
     private val seenIds = hashSetOf<String>()
 
@@ -66,8 +67,9 @@ class SearchResultsActivity : AppCompatActivity() {
             b.searchResultsList.layoutManager = GridLayoutManager(this, 2)
             val results = readExtra<ArrayList<BiliVideo>>(EXTRA_VIDEO_RESULTS).orEmpty()
             seenIds.addAll(results.map { videoKey(it) })
-            hasMore = !isDirectVideoId && results.size >= PAGE_SIZE
-            b.searchResultsCount.text = if (isDirectVideoId) "精确匹配 · 1 个视频" else "找到 ${results.size} 个视频"
+            relatedQuery = results.firstOrNull()?.title.orEmpty().ifBlank { query }
+            hasMore = isDirectVideoId || results.size >= PAGE_SIZE
+            b.searchResultsCount.text = if (isDirectVideoId) "原视频及相关视频 · ${results.size} 个" else "找到 ${results.size} 个视频"
             videoAdapter = VideoAdapter(::openVideo).also { it.submitList(results) }
             b.searchResultsList.adapter = videoAdapter
             b.searchResultsRefresh.setOnRefreshListener { refreshSearch() }
@@ -105,16 +107,23 @@ class SearchResultsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    if (isDirectVideoId) listOf(BiliVideoLookup.get(query))
-                    else BiliApi.searchVideos(query, 1, PAGE_SIZE)
+                    if (isDirectVideoId) {
+                        val exact = BiliVideoLookup.get(query)
+                        relatedQuery = exact.title.ifBlank { query }
+                        val related = BiliApi.searchVideos(relatedQuery, 1, PAGE_SIZE)
+                        listOf(exact) + related.filterNot { videoKey(it) == videoKey(exact) }
+                    } else {
+                        relatedQuery = query
+                        BiliApi.searchVideos(query, 1, PAGE_SIZE)
+                    }
                 }
                 seenIds.clear()
                 seenIds.addAll(result.map { videoKey(it) })
                 videoAdapter?.submitList(result)
                 page = 1
-                hasMore = !isDirectVideoId && result.size >= PAGE_SIZE
+                hasMore = result.size >= PAGE_SIZE
                 b.searchResultsCount.text = if (isDirectVideoId) {
-                    "精确匹配 · 1 个视频"
+                    "原视频及相关视频 · 已加载 ${result.size} 个"
                 } else {
                     if (hasMore) "已加载 ${result.size} 个视频 · 下拉可刷新" else "共找到 ${result.size} 个视频"
                 }
@@ -128,19 +137,19 @@ class SearchResultsActivity : AppCompatActivity() {
     }
 
     private fun loadNextPage() {
-        if (loadingMore || !hasMore || query.isBlank() || isDirectVideoId) return
+        if (loadingMore || !hasMore || query.isBlank()) return
         loadingMore = true
         val nextPage = page + 1
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) { BiliApi.searchVideos(query, nextPage, PAGE_SIZE) }
+                val result = withContext(Dispatchers.IO) { BiliApi.searchVideos(relatedQuery.ifBlank { query }, nextPage, PAGE_SIZE) }
                 val fresh = result.filter { seenIds.add(videoKey(it)) }
                 page = nextPage
                 if (fresh.isNotEmpty()) videoAdapter?.appendList(fresh)
                 hasMore = result.size >= PAGE_SIZE
                 val count = videoAdapter?.itemCount ?: 0
                 b.searchResultsCount.text = if (hasMore) {
-                    "已加载 $count 个视频 · 下拉可刷新"
+                    if (isDirectVideoId) "原视频及相关视频 · 已加载 $count 个" else "已加载 $count 个视频 · 下拉可刷新"
                 } else {
                     "共找到 $count 个视频"
                 }
