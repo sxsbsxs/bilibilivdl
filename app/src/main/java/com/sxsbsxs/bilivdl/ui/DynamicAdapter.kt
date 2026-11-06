@@ -85,7 +85,7 @@ class DynamicAdapter(
             b.dynamicAuthor.setOnClickListener { onUser(item.ownerMid) }
 
             // 多图动态使用三列宫格；单图视频/番剧仍用紧凑封面卡。
-            val imageUrls = item.images.map(String::trim).filter { it.isNotBlank() }.distinct().take(9)
+            val imageUrls = item.images.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(9)
             val showGallery = imageUrls.size > 1
             b.dynamicGalleryTitle.visibility =
                 if (showGallery && item.title.isNotBlank()) View.VISIBLE else View.GONE

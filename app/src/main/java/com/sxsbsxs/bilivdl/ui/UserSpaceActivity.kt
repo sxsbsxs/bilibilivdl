@@ -404,6 +404,10 @@ class UserSpaceActivity : AppCompatActivity() {
 
     private fun showSpaceTab(index: Int, mid: Long) {
         currentSpaceTab = index
+        // 每次切换空间页签都从顶部开始，避免上一页滚动位置触发错误分页。
+        findViewById<ScrollView>(R.id.space_scroll).post {
+            findViewById<ScrollView>(R.id.space_scroll).scrollTo(0, 0)
+        }
         findViewById<View>(R.id.space_home_panel).visibility = if (index == 0) View.VISIBLE else View.GONE
         findViewById<View>(R.id.space_dynamics_panel).visibility = if (index == 1) View.VISIBLE else View.GONE
         findViewById<View>(R.id.space_posts_panel).visibility = if (index == 2) View.VISIBLE else View.GONE

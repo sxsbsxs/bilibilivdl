@@ -97,8 +97,13 @@ object BilimiaoApiBridge {
             ?: pgc?.aid?.takeIf { it > 0L }
             ?: 0L
         val bvid = archive?.bvid.orEmpty()
-        val episodeId = pgc?.epid ?: 0L
-        val seasonId = pgc?.seasonId ?: 0L
+        // 有些 PGC 动态会以 Archive 模块呈现，EP/SS 信息也可能放在 Archive 中。
+        val episodeId = pgc?.epid?.takeIf { it > 0L }
+            ?: archive?.episodeId?.takeIf { it > 0L }
+            ?: 0L
+        val seasonId = pgc?.seasonId?.takeIf { it > 0L }
+            ?: archive?.pgcSeasonId?.takeIf { it > 0L }
+            ?: 0L
         val title = archive?.title.orEmpty().ifBlank {
             pgc?.title.orEmpty().ifBlank { article?.title.orEmpty() }
         }
