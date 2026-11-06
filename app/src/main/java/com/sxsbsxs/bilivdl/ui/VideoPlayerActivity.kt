@@ -30,6 +30,7 @@ import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideoActionApi
 import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
 import com.sxsbsxs.bilivdl.data.BiliDownloadService
+import com.sxsbsxs.bilivdl.data.YtDlpBridge
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
 import com.sxsbsxs.bilivdl.data.VideoComment
 import com.sxsbsxs.bilivdl.data.DanmakuItem
@@ -198,7 +199,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         val labels = arrayOf(
             "点赞 / 取消点赞", "投币", "收藏", "分享视频链接",
             "选择分P / 番剧选集", if (danmakuEnabled) "关闭弹幕" else "开启弹幕",
-            "字幕设置", "发送弹幕"
+            "字幕设置", "发送弹幕", "yt-dlp 通用链接下载"
         )
         MaterialAlertDialogBuilder(this).setTitle("更多功能")
             .setItems(labels) { _, which ->
@@ -211,8 +212,41 @@ class VideoPlayerActivity : AppCompatActivity() {
                     5 -> b.danmakuButton.performClick()
                     6 -> showSubtitles()
                     7 -> showDanmakuComposer()
+                    8 -> promptYtDlpUrl()
                 }
             }.show()
+    }
+
+    private fun promptYtDlpUrl() {
+        val input = EditText(this).apply {
+            hint = "粘贴支持的网站视频链接"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setPadding(24, 18, 24, 18)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("yt-dlp 通用下载")
+            .setMessage("输入视频页面链接。B站高画质下载仍建议使用原生下载入口。")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("开始下载") { _, _ ->
+                val url = input.text?.toString()?.trim().orEmpty()
+                if (url.isNotBlank()) downloadWithYtDlp(url)
+            }
+            .show()
+    }
+
+    private fun downloadWithYtDlp(url: String) {
+        b.downloadStatus.visibility = View.VISIBLE
+        b.downloadStatus.text = "yt-dlp 正在解析并下载…"
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { YtDlpBridge.download(this@VideoPlayerActivity, url) }
+                b.downloadStatus.text = "下载完成，已保存到系统视频库"
+            } catch (error: Exception) {
+                b.downloadStatus.text = "yt-dlp 下载失败：" + (error.message ?: "暂不支持此链接")
+            }
+        }
     }
 
     private fun formatCount(value: Long): String {
