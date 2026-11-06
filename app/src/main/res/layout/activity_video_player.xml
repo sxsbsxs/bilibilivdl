@@ -50,7 +50,7 @@
                 <TextView
                     android:id="@+id/player_info_tab"
                     android:layout_width="0dp"
-                    android:layout_height="44dp"
+                    android:layout_height="40dp"
                     android:layout_weight="1"
                     android:gravity="center"
                     android:text="视频详情"
@@ -172,7 +172,7 @@
 
                 <TextView
                     android:layout_width="0dp"
-                    android:layout_height="46dp"
+                    android:layout_height="42dp"
                     android:id="@+id/quality_button"
                     android:layout_weight="1"
                     android:gravity="center"
@@ -226,7 +226,7 @@
                     android:id="@+id/part_button"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:minHeight="54dp"
+                    android:minHeight="50dp"
                     android:layout_weight="1"
                     android:gravity="center"
                     android:drawableTop="@drawable/ic_action_part"
@@ -273,7 +273,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
+                android:layout_marginTop="18dp"
                 android:text="视频互动"
                 android:textColor="@color/text_primary"
                 android:textSize="15sp"
@@ -289,7 +289,7 @@
                     android:id="@+id/video_like"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:minHeight="76dp"
+                    android:minHeight="68dp"
                     android:layout_marginStart="0dp"
                     android:layout_weight="1"
                     android:gravity="center"

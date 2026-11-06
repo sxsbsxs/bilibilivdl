@@ -7,6 +7,7 @@ import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BangumiApiBridge
 import com.sxsbsxs.bilivdl.data.BangumiSearchResult
 import com.sxsbsxs.bilivdl.data.BiliApi
@@ -48,6 +49,8 @@ class SearchController(
         binding.searchBangumiMode.isSelected = bangumi
         binding.searchVideoMode.alpha = if (bangumi) 0.65f else 1f
         binding.searchBangumiMode.alpha = if (bangumi) 1f else 0.65f
+        binding.searchVideoMode.setTextColor(fragment.requireContext().getColor(if (bangumi) R.color.text_secondary else R.color.brand))
+        binding.searchBangumiMode.setTextColor(fragment.requireContext().getColor(if (bangumi) R.color.brand else R.color.text_secondary))
         binding.searchInputLayout.hint = if (bangumi) "输入番剧名称" else "输入关键词、BV号或AV号"
         binding.searchStatus.text = if (bangumi) "搜索番剧名称，选择番剧后可查看剧集并播放" else "搜索视频、UP 主，或直接输入 BV / AV 号"
         binding.searchResults.adapter = if (bangumi) bangumiAdapter else videoAdapter
