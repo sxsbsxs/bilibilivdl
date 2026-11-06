@@ -116,7 +116,7 @@ object BangumiApiBridge {
             val videoUrl = video.base_url.ifBlank { video.backup_url?.firstOrNull().orEmpty() }
             val audioUrl = audio.base_url.ifBlank { audio.backup_url?.firstOrNull().orEmpty() }
             if (videoUrl.isBlank() || audioUrl.isBlank()) error("番剧 DASH 地址无效")
-            return PlaybackInfo(cid = ep.cid, url = videoUrl, quality = actual, name = label, qualities = qualities, isDash = true, videoUrl = videoUrl, audioUrl = audioUrl, videoBackupUrls = video.backup_url.orEmpty(), audioBackupUrls = audio.backup_url.orEmpty())
+            return PlaybackInfo(cid = ep.cid, url = videoUrl, quality = actual, name = label, qualities = qualities, isDash = true, videoUrl = videoUrl, audioUrl = audioUrl, videoBackupUrls = video.backup_url.orEmpty(), audioBackupUrls = audio.backup_url.orEmpty(), audioCodec = audio.codecs)
         }
         val segments = result.durl.orEmpty().sortedBy { it.order }.mapNotNull { it.url.takeIf { url -> url.startsWith("https://") || url.startsWith("http://") } }
         if (segments.isEmpty()) error("番剧接口没有返回可播放的视频流")
