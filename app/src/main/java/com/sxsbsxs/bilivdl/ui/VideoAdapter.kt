@@ -38,9 +38,18 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
     }
     fun appendList(list: List<BiliVideo>) {
         if (list.isEmpty()) return
+        val keys = items.mapTo(hashSetOf()) { stableKey(it) }
+        val additions = list.filter { keys.add(stableKey(it)) }
+        if (additions.isEmpty()) return
         val start = items.size
-        items.addAll(list)
-        notifyItemRangeInserted(start, list.size)
+        items.addAll(additions)
+        notifyItemRangeInserted(start, additions.size)
+    }
+
+    private fun stableKey(video: BiliVideo): String = when {
+        video.bvid.isNotBlank() -> "bv:${video.bvid}"
+        video.aid > 0L -> "av:${video.aid}"
+        else -> "title:${video.author}:${video.title}"
     }
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         Holder(ItemVideoBinding.inflate(LayoutInflater.from(parent.context), parent, false))
@@ -57,10 +66,18 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
     }
     inner class Holder(val binding: ItemVideoBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(v: BiliVideo) {
-            // Keep a consistent 16:9 cover ratio across the two-column feed.
-            val coverHeightDp = 104
-            binding.videoCover.layoutParams = binding.videoCover.layoutParams.apply {
-                height = (coverHeightDp * binding.root.resources.displayMetrics.density).toInt()
+            // Derive the cover height from the measured card width so the same feed
+            // keeps a true 16:9 thumbnail on narrow phones and in split-screen mode.
+            binding.videoCover.post {
+                val width = binding.videoCover.width
+                if (width > 0) {
+                    val targetHeight = (width * 9f / 16f).toInt()
+                    val params = binding.videoCover.layoutParams
+                    if (params.height != targetHeight) {
+                        params.height = targetHeight
+                        binding.videoCover.layoutParams = params
+                    }
+                }
             }
             binding.videoTitle.text = v.title
             binding.videoAuthor.text = v.author
@@ -94,23 +111,31 @@ class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adap
                 .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
                 .build()
             val face = v.authorFace.trim().let { if (it.startsWith("//")) "https:$it" else it }
-            if (face.isNotBlank()) Glide.with(binding.videoAuthorAvatar)
-                .load(GlideUrl(face, headers))
-                .placeholder(R.drawable.bg_comment_avatar)
-                .error(R.drawable.bg_comment_avatar)
-                .circleCrop()
-                .into(binding.videoAuthorAvatar)
-            else binding.videoAuthorAvatar.setImageResource(R.drawable.bg_comment_avatar)
+            if (face.startsWith("https://") || face.startsWith("http://")) {
+                Glide.with(binding.videoAuthorAvatar)
+                    .load(GlideUrl(face, headers))
+                    .placeholder(R.drawable.bg_comment_avatar)
+                    .error(R.drawable.bg_comment_avatar)
+                    .circleCrop()
+                    .into(binding.videoAuthorAvatar)
+            } else {
+                Glide.with(binding.videoAuthorAvatar).clear(binding.videoAuthorAvatar)
+                binding.videoAuthorAvatar.setImageResource(R.drawable.bg_comment_avatar)
+            }
             binding.videoDurationBadge.visibility = if (v.duration.isBlank()) android.view.View.GONE else android.view.View.VISIBLE
-            binding.videoCover.setImageResource(R.drawable.bg_empty_card)
-            Glide.with(binding.videoCover)
-                .load(GlideUrl(imageUrl, headers))
-                .placeholder(R.drawable.bg_empty_card)
-                .error(R.drawable.bg_empty_card)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .override(480, 320)
-                .centerCrop()
-                .into(binding.videoCover)
+            if (imageUrl.startsWith("https://") || imageUrl.startsWith("http://")) {
+                Glide.with(binding.videoCover)
+                    .load(GlideUrl(imageUrl, headers))
+                    .placeholder(R.drawable.bg_empty_card)
+                    .error(R.drawable.bg_empty_card)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .override(480, 270)
+                    .centerCrop()
+                    .into(binding.videoCover)
+            } else {
+                Glide.with(binding.videoCover).clear(binding.videoCover)
+                binding.videoCover.setImageResource(R.drawable.bg_empty_card)
+            }
             binding.root.setOnClickListener { onClick(v) }
         }
     }
