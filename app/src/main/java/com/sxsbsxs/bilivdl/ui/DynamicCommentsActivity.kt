@@ -575,24 +575,41 @@ class DynamicCommentsActivity : AppCompatActivity() {
     }
 
     private fun handleLongPress(comment: VideoComment) {
-        if (accountMid <= 0L || comment.mid != accountMid) return
+        val canDelete = accountMid > 0L && comment.mid == accountMid
+        val actions = if (canDelete) arrayOf("复制评论", "删除评论") else arrayOf("复制评论")
         MaterialAlertDialogBuilder(this)
-            .setTitle("删除自己的评论")
-            .setMessage("确定删除这条评论吗？此操作无法撤销。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ ->
-                lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            BilimiaoApiBridge.deleteComment(dynamicId, comment.id, DYNAMIC_COMMENT_TYPE)
-                        }
-                        status.text = "评论已删除"
-                        loadComments(reset = true)
-                    } catch (error: Exception) {
-                        status.text = error.message ?: "删除评论失败"
-                    }
+            .setItems(actions) { _, which ->
+                val deleteIndex = if (canDelete) 1 else -1
+                if (which == deleteIndex) {
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle("删除自己的评论")
+                        .setMessage("确定删除这条评论吗？此操作无法撤销。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("删除") { _, _ ->
+                            lifecycleScope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        BilimiaoApiBridge.deleteComment(
+                                            dynamicId, comment.id, DYNAMIC_COMMENT_TYPE
+                                        )
+                                    }
+                                    status.text = "评论已删除"
+                                    loadComments(reset = true)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    status.text = error.message ?: "删除评论失败"
+                                }
+                            }
+                        }.show()
+                } else {
+                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("B站评论", comment.text))
+                    android.widget.Toast.makeText(this, "已复制评论", android.widget.Toast.LENGTH_SHORT).show()
                 }
-            }.show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun openUser(mid: Long) {
