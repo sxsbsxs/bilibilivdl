@@ -14,20 +14,29 @@ object BiliQrLoginApi {
             connectTimeout = 12000
             readTimeout = 15000
             requestMethod = "GET"
+            useCaches = false
             setRequestProperty("User-Agent", BiliHeaders.UA)
-            setRequestProperty("Referer", "https://www.bilibili.com/")
+            setRequestProperty("Referer", "https://passport.bilibili.com/")
+            setRequestProperty("Origin", "https://passport.bilibili.com")
             setRequestProperty("Accept", "application/json, text/plain, */*")
+            setRequestProperty("Cache-Control", "no-cache")
+            setRequestProperty("Pragma", "no-cache")
         }
         return try {
-            val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (body.isBlank()) error("B站登录接口没有返回内容（HTTP ${connection.responseCode}）")
-            val cookies = connection.headerFields.entries
+            val httpCode = connection.responseCode
+            val stream = if (httpCode in 200..299) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (body.isBlank()) error("B站登录接口没有返回内容（HTTP $httpCode）")
+
+            // Match BiliDownload: collect every Set-Cookie header from the successful poll.
+            // Deduplicate by cookie name rather than the whole name/value pair.
+            val cookieHeaders = connection.headerFields.entries
                 .filter { it.key?.equals("Set-Cookie", ignoreCase = true) == true }
                 .flatMap { it.value.orEmpty() }
+            val cookies = cookieHeaders
                 .map { it.substringBefore(';').trim() }
                 .filter { it.contains('=') }
-                .distinct()
+                .distinctBy { it.substringBefore('=').trim() }
                 .joinToString("; ")
             JSONObject(body) to cookies
         } finally {
