@@ -16,6 +16,9 @@ import com.bumptech.glide.load.model.LazyHeaders
 import com.sxsbsxs.bilivdl.R
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideo
+import com.sxsbsxs.bilivdl.data.BiliAccountApi
+import com.sxsbsxs.bilivdl.data.BiliSession
+import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -61,6 +64,7 @@ class UserSpaceActivity : AppCompatActivity() {
                 }
             }
         )
+        setupFollowButton(mid)
         loadProfile(mid)
         loadCreatorVideos(mid, reset = true)
     }
@@ -79,6 +83,54 @@ class UserSpaceActivity : AppCompatActivity() {
             if (body.isBlank()) error("HTTP ${connection.responseCode}")
             JSONObject(body)
         } finally { connection.disconnect() }
+    }
+
+
+    private fun setupFollowButton(targetMid: Long) {
+        val button = findViewById<MaterialButton>(R.id.space_follow_button)
+        val sessionCookie = BiliSession.cookie(this)
+        if (sessionCookie.isBlank()) {
+            button.text = "登录后关注"
+            button.setOnClickListener { startActivity(Intent(this, QrLoginActivity::class.java)) }
+            return
+        }
+        button.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                val myMid = withContext(Dispatchers.IO) {
+                    BiliSession.profile(this@UserSpaceActivity, sessionCookie).optLong("mid")
+                }
+                if (myMid == targetMid) {
+                    button.visibility = View.GONE
+                    return@launch
+                }
+                val followed = withContext(Dispatchers.IO) { BiliAccountApi.isFollowing(targetMid) }
+                button.text = if (followed) "已关注" else "关注 UP主"
+                button.visibility = View.VISIBLE
+                button.setOnClickListener {
+                    button.isEnabled = false
+                    lifecycleScope.launch {
+                        try {
+                            val next = button.text.toString() != "已关注"
+                            withContext(Dispatchers.IO) { BiliAccountApi.follow(targetMid, next) }
+                            button.text = if (next) "已关注" else "关注 UP主"
+                            findViewById<TextView>(R.id.space_status).text =
+                                if (next) "已关注这个 UP 主" else "已取消关注"
+                        } catch (error: Exception) {
+                            findViewById<TextView>(R.id.space_status).text = error.message ?: "关注操作失败"
+                        } finally {
+                            button.isEnabled = true
+                        }
+                    }
+                }
+            } catch (error: Exception) {
+                button.visibility = View.VISIBLE
+                button.text = "关注状态不可用"
+                findViewById<TextView>(R.id.space_status).text = error.message ?: "无法获取关注状态"
+            } finally {
+                button.isEnabled = true
+            }
+        }
     }
 
     private fun loadProfile(mid: Long) {

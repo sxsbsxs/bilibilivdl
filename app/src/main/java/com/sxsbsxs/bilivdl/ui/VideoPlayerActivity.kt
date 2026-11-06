@@ -115,6 +115,11 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentSort = 2
     private var videoLiked = false
     private var currentOwnerMid = 0L
+    private var currentAccountMid = 0L
+    private var ownerFollowed = false
+    private var watchLaterAdded = false
+    private var watchLaterButton: MaterialButton? = null
+    private var ownerFollowButton: MaterialButton? = null
     private var playbackSpeedIndex = 0
     private var pendingSeekPosition = 0L
     private var selectedPartIndex = 0
@@ -156,6 +161,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         super.onCreate(saved)
         b = ActivityVideoPlayerBinding.inflate(layoutInflater)
         setContentView(b.root)
+        setupAccountActionButtons()
         b.playerFrame.post { fitPlayerFrame() }
         setupPlayerControls()
         b.playerTitle.text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
@@ -165,7 +171,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         resumePosition = getSharedPreferences("playback_positions", MODE_PRIVATE).getLong(positionKey(), 0L)
         b.commentSort.text = "按热度"
         b.commentsList.layoutManager = LinearLayoutManager(this)
-        b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment, ::openUserSpace)
+        b.commentsList.adapter = CommentAdapter(::showReplies, ::likeComment, ::openUserSpace, ::handleCommentLongPress)
         relatedAdapter = VideoAdapter { video ->
             startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
                 putExtra(EXTRA_BVID, video.bvid)
@@ -313,6 +319,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val accountProfile = if (cookie.isNotBlank()) withContext(Dispatchers.IO) {
                     runCatching { BiliSession.profile(this@VideoPlayerActivity, cookie) }.getOrNull()
                 } else null
+                currentAccountMid = accountProfile?.optLong("mid") ?: 0L
                 val isVip = (accountProfile?.optInt("vipType") ?: 0) > 0
                 val isLoggedIn = accountProfile?.optBoolean("isLogin") == true
                 accountIsVip = isVip
@@ -353,6 +360,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                     p.category,
                     if (p.duration > 0) "${p.duration / 60}:${(p.duration % 60).toString().padStart(2, '0')}" else ""
                 ).filter { it.isNotBlank() }.joinToString("  ·  ")
+                currentOwnerMid = p.ownerMid
+                refreshOwnerFollowAction()
                 val authorText = p.author.ifBlank { intent.getStringExtra(EXTRA_AUTHOR).orEmpty() }
                 if (authorText.isNotBlank()) b.playerAuthor.text = authorText
                 b.playerAuthorSign.text = p.ownerSign
@@ -1190,7 +1199,8 @@ class VideoPlayerActivity : AppCompatActivity() {
                     }
                 }
             },
-            onUser = ::openUserSpace
+            onUser = ::openUserSpace,
+            onLongPress = ::handleCommentLongPress
         )
         list.adapter = replyAdapter
         var page = 1
@@ -1302,6 +1312,107 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
+
+
+    private fun setupAccountActionButtons() {
+        val authorRow = b.playerAuthor.parent as? ViewGroup ?: return
+        val container = authorRow.parent as? ViewGroup ?: return
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        fun makeAction(label: String): MaterialButton = MaterialButton(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 12f
+            minHeight = dp(38)
+            minimumHeight = dp(38)
+            insetTop = 0
+            insetBottom = 0
+            cornerRadius = dp(10)
+            backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.surface_elevated))
+            setTextColor(getColor(R.color.text_primary))
+            strokeWidth = dp(1)
+            strokeColor = android.content.res.ColorStateList.valueOf(getColor(R.color.stroke_dark))
+        }
+        watchLaterButton = makeAction("稍后再看").apply { setOnClickListener { addCurrentToWatchLater() } }
+        ownerFollowButton = makeAction("关注 UP主").apply { setOnClickListener { toggleOwnerFollow() } }
+        actions.addView(watchLaterButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(7) })
+        actions.addView(ownerFollowButton, LinearLayout.LayoutParams(0, dp(38), 1f))
+        container.addView(actions, container.indexOfChild(authorRow) + 1,
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    private fun addCurrentToWatchLater() {
+        val target = watchLaterButton ?: return
+        if (cookie.isBlank()) { b.playerStatus.text = "稍后再看需要先使用 B站 APP 扫码登录"; return }
+        if (watchLaterAdded) { b.playerStatus.text = "当前视频已加入稍后再看"; return }
+        target.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { BiliAccountApi.addToWatchLater(requireAid()) }
+                watchLaterAdded = true
+                target.text = "已加入稍后再看"
+                b.playerStatus.text = "已加入稍后再看"
+            } catch (error: Exception) {
+                b.playerStatus.text = error.message ?: "添加稍后再看失败"
+            } finally { target.isEnabled = true }
+        }
+    }
+
+    private fun refreshOwnerFollowAction() {
+        val target = ownerFollowButton ?: return
+        target.visibility = if (currentOwnerMid > 0L && currentOwnerMid != currentAccountMid) View.VISIBLE else View.GONE
+        if (cookie.isBlank() || currentOwnerMid <= 0L || currentOwnerMid == currentAccountMid) return
+        target.isEnabled = false
+        lifecycleScope.launch {
+            val followed = runCatching {
+                withContext(Dispatchers.IO) { BiliAccountApi.isFollowing(currentOwnerMid) }
+            }.getOrDefault(false)
+            ownerFollowed = followed
+            target.text = if (followed) "已关注" else "关注 UP主"
+            target.isEnabled = true
+        }
+    }
+
+    private fun toggleOwnerFollow() {
+        val target = ownerFollowButton ?: return
+        if (cookie.isBlank()) { b.playerStatus.text = "关注 UP 主需要先使用 B站 APP 扫码登录"; return }
+        if (currentOwnerMid <= 0L || currentOwnerMid == currentAccountMid) return
+        target.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                val next = !ownerFollowed
+                withContext(Dispatchers.IO) { BiliAccountApi.follow(currentOwnerMid, next) }
+                ownerFollowed = next
+                target.text = if (next) "已关注" else "关注 UP主"
+                b.playerStatus.text = if (next) "关注成功" else "已取消关注"
+            } catch (error: Exception) {
+                b.playerStatus.text = error.message ?: "关注操作失败"
+            } finally { target.isEnabled = true }
+        }
+    }
+
+    private fun handleCommentLongPress(comment: VideoComment) {
+        if (currentAccountMid <= 0L || comment.mid != currentAccountMid) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle("删除自己的评论")
+            .setMessage("确定删除这条评论吗？此操作无法撤销。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) { BilimiaoApiBridge.deleteComment(aid, comment.id) }
+                        b.commentsStatus.visibility = View.VISIBLE
+                        b.commentsStatus.text = "评论已删除"
+                        resetComments()
+                    } catch (error: Exception) {
+                        b.commentsStatus.visibility = View.VISIBLE
+                        b.commentsStatus.text = error.message ?: "删除评论失败"
+                    }
+                }
+            }.show()
+    }
 
     private fun requireAid(): Long {
         if (aid <= 0L) error("当前视频缺少 AV 号，无法执行互动")

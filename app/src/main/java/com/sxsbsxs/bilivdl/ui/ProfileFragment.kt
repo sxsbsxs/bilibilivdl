@@ -30,6 +30,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     private var logoutEntry: TextView? = null
     private var refreshJob: Job? = null
     private var logoutJob: Job? = null
+    private var accountMid = 0L
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -47,7 +48,26 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 .setNegativeButton("取消", null)
                 .setPositiveButton("退出") { _, _ -> logout() }.show()
         }
+        bindLibraryEntry(view, R.id.account_history, AccountLibraryActivity.TYPE_HISTORY)
+        bindLibraryEntry(view, R.id.account_watch_later, AccountLibraryActivity.TYPE_WATCH_LATER)
+        bindLibraryEntry(view, R.id.account_favorites, AccountLibraryActivity.TYPE_FAVORITES)
+        bindLibraryEntry(view, R.id.account_following, AccountLibraryActivity.TYPE_FOLLOWING)
+        bindLibraryEntry(view, R.id.account_liked, AccountLibraryActivity.TYPE_LIKED)
+        bindLibraryEntry(view, R.id.account_messages, AccountLibraryActivity.TYPE_MESSAGES)
         refresh()
+    }
+
+    private fun bindLibraryEntry(view: View, viewId: Int, type: String) {
+        view.findViewById<TextView>(viewId)?.setOnClickListener {
+            if (BiliSession.cookie(requireContext()).isBlank()) {
+                startActivity(Intent(requireContext(), QrLoginActivity::class.java))
+                return@setOnClickListener
+            }
+            startActivity(Intent(requireContext(), AccountLibraryActivity::class.java).apply {
+                putExtra(AccountLibraryActivity.EXTRA_TYPE, type)
+                putExtra(AccountLibraryActivity.EXTRA_MID, accountMid)
+            })
+        }
     }
 
     override fun onResume() { super.onResume(); refresh() }
@@ -66,7 +86,6 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
                 throw cancelled
             } catch (_: Exception) {
                 if (!isAdded) return@launch
-                // Network failure must not be misreported as an expired session.
                 accountName?.text = "账号状态待验证"
                 status?.text = "暂时无法获取账号资料，请检查网络后刷新"
                 loginEntry?.visibility = View.GONE
@@ -79,6 +98,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
 
     private fun renderAccount(account: BiliAccount) {
         if (!account.isLogin) { renderLoggedOut(); return }
+        accountMid = account.mid
         loginEntry?.visibility = View.GONE
         refreshEntry?.visibility = View.VISIBLE
         logoutEntry?.visibility = View.VISIBLE
@@ -98,6 +118,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
     }
 
     private fun renderLoggedOut() {
+        accountMid = 0L
         loginEntry?.visibility = View.VISIBLE
         refreshEntry?.visibility = View.GONE
         logoutEntry?.visibility = View.GONE

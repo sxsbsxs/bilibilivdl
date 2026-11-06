@@ -15,7 +15,8 @@ import com.sxsbsxs.bilivdl.databinding.ItemCommentBinding
 class CommentAdapter(
     private val onReplies: (VideoComment) -> Unit,
     private val onLike: (VideoComment) -> Unit,
-    private val onUser: (Long) -> Unit
+    private val onUser: (Long) -> Unit,
+    private val onLongPress: (VideoComment) -> Unit = {}
 ) : RecyclerView.Adapter<CommentAdapter.Holder>() {
 
     private val data = mutableListOf<VideoComment>()
@@ -47,7 +48,7 @@ class CommentAdapter(
             parent,
             false
         )
-        return Holder(binding, onReplies, onLike, onUser)
+        return Holder(binding, onReplies, onLike, onUser, onLongPress)
     }
 
     override fun getItemCount(): Int = data.size
@@ -60,7 +61,8 @@ class CommentAdapter(
         private val binding: ItemCommentBinding,
         private val onReplies: (VideoComment) -> Unit,
         private val onLike: (VideoComment) -> Unit,
-        private val onUser: (Long) -> Unit
+        private val onUser: (Long) -> Unit,
+        private val onLongPress: (VideoComment) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(comment: VideoComment) {
@@ -80,6 +82,7 @@ class CommentAdapter(
             binding.commentUser.setOnClickListener { onUser(comment.mid) }
             binding.commentReplies.setOnClickListener { onReplies(comment) }
             binding.commentLikes.setOnClickListener { onLike(comment) }
+            binding.root.setOnLongClickListener { onLongPress(comment); true }
         }
     }
 }

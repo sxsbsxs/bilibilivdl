@@ -214,4 +214,10 @@ object BilimiaoApiBridge {
     suspend fun addFavorite(aid: Long, folderId: String) {
         execute(videoApi.favoriteDeal(aid.toString(), listOf(folderId), emptyList()))
     }
+    
+    suspend fun deleteComment(aid: Long, rpid: Long): String {
+        require(aid > 0L && rpid > 0L) { "评论编号无效" }
+        val root = execute(commentApi.del(1, aid.toString(), rpid.toString()))
+        return root.optString("message").ifBlank { "评论已删除" }
+    }
 }

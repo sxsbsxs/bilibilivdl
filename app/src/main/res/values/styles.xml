@@ -5,4 +5,18 @@
 </style>
 <style name="BiliVdlSectionTitle"><item name="android:textColor">@color/text_primary</item><item name="android:textSize">17sp</item><item name="android:textStyle">bold</item></style>
 <style name="BiliVdlSecondaryText"><item name="android:textColor">@color/text_secondary</item><item name="android:textSize">12sp</item></style>
+
+<style name="AccountMenuTile">
+    <item name="android:layout_width">0dp</item>
+    <item name="android:layout_height">76dp</item>
+    <item name="android:layout_columnWeight">1</item>
+    <item name="android:layout_margin">4dp</item>
+    <item name="android:gravity">center</item>
+    <item name="android:background">@drawable/bg_surface_card</item>
+    <item name="android:textColor">@color/text_primary</item>
+    <item name="android:textSize">12sp</item>
+    <item name="android:lineSpacingExtra">2dp</item>
+    <item name="android:clickable">true</item>
+    <item name="android:focusable">true</item>
+</style>
 </resources>
