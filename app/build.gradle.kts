@@ -2,8 +2,10 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
  defaultConfig {
-  applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=23; versionName="2.0.3"
-  ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+  applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=24; versionName="2.0.4"
+  // The app is distributed primarily to modern Android phones. Avoid bundling
+  // three copies of Python/FFmpeg native libraries into one oversized APK.
+  ndk { abiFilters += listOf("arm64-v8a") }
  }
  buildFeatures { viewBinding=true; compose=true }
  compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
