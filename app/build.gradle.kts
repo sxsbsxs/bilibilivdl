@@ -34,7 +34,6 @@ dependencies {
  implementation("androidx.compose.ui:ui")
  implementation("androidx.compose.foundation:foundation")
  implementation("androidx.compose.material3:material3")
- implementation(project(":bilimiao-compose"))
  implementation(project(":bilimiao-comm"))
  implementation(project(":bilimiao-download"))
  implementation(project(":danmaku-engine"))

@@ -22,9 +22,7 @@ dependencyResolutionManagement {
 rootProject.name = "BiliVdl"
 include(":app")
 
-// bilimiao2 playback / API / danmaku / download libraries
-include(":bilimiao-compose")
-project(":bilimiao-compose").projectDir = file("upstream/bilimiao2/bilimiao-compose")
+// bilimiao2 API / danmaku / download libraries are wired in; the full Compose UI module is vendored for staged page migration.
 include(":bilimiao-comm")
 project(":bilimiao-comm").projectDir = file("upstream/bilimiao2/bilimiao-comm")
 include(":bilimiao-download")
