@@ -77,9 +77,20 @@ class SearchController(
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             try {
                 if (bangumiMode) {
-                    val result = withContext(Dispatchers.IO) { BangumiApiBridge.search(key) }
-                    bangumiAdapter.submit(result)
-                    binding.searchStatus.text = if (result.isEmpty()) "没有找到相关番剧" else "找到 ${result.size} 部番剧"
+                    val direct = Regex("(?i)\\b(ss|ep)(\\d+)\\b").find(key)
+                    if (direct != null) {
+                        val kind = direct.groupValues[1].lowercase()
+                        val id = direct.groupValues[2].toLong()
+                        val season = withContext(Dispatchers.IO) {
+                            if (kind == "ss") BangumiApiBridge.season(id)
+                            else BangumiApiBridge.season(0L, id)
+                        }
+                        openSeason(season)
+                    } else {
+                        val result = withContext(Dispatchers.IO) { BangumiApiBridge.search(key) }
+                        bangumiAdapter.submit(result)
+                        binding.searchStatus.text = if (result.isEmpty()) "没有找到相关番剧" else "找到 ${result.size} 部番剧"
+                    }
                 } else {
                     val result = withContext(Dispatchers.IO) {
                         if (BiliApi.resolveVideoId(key) != null) listOf(BiliVideoLookup.get(key))
@@ -112,30 +123,37 @@ class SearchController(
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val season = withContext(Dispatchers.IO) { BangumiApiBridge.season(item.seasonId) }
-                if (season.episodes.isEmpty()) error("该番剧暂时没有可用剧集")
-                val labels: Array<CharSequence> = season.episodes.map { episode ->
-                    listOf(episode.title, episode.longTitle).filter { it.isNotBlank() }.joinToString(" · ")
-                }.toTypedArray()
-                AlertDialog.Builder(fragment.requireContext())
-                    .setTitle(season.title.ifBlank { item.title })
-                    .setItems(labels) { _, index ->
-                        val episode = season.episodes[index]
-                        fragment.startActivity(Intent(fragment.requireContext(), VideoPlayerActivity::class.java).apply {
-                            putExtra(VideoPlayerActivity.EXTRA_EP_ID, episode.id)
-                            putExtra(VideoPlayerActivity.EXTRA_AID, episode.aid)
-                            putExtra(VideoPlayerActivity.EXTRA_BVID, episode.bvid)
-                            putExtra(VideoPlayerActivity.EXTRA_COVER, episode.cover.ifBlank { season.cover })
-                            putExtra(VideoPlayerActivity.EXTRA_AUTHOR, "番剧 · ${season.title}")
-                            putExtra(VideoPlayerActivity.EXTRA_TITLE, listOf(season.title, episode.title, episode.longTitle)
-                                .filter { it.isNotBlank() }.joinToString(" · "))
-                        })
-                    }
-                    .setNegativeButton("关闭", null)
-                    .show()
-                binding.searchStatus.text = "已加载 ${season.episodes.size} 集，选择剧集即可播放"
+                openSeason(season)
             } catch (error: Exception) {
                 binding.searchStatus.text = "番剧详情加载失败：" + (error.message ?: "接口异常")
             }
         }
+    }
+
+    private fun openSeason(season: com.sxsbsxs.bilivdl.data.BangumiSeason) {
+        if (season.episodes.isEmpty()) {
+            binding.searchStatus.text = "该番剧暂时没有可用剧集"
+            return
+        }
+        val labels: Array<CharSequence> = season.episodes.map { episode ->
+            listOf(episode.title, episode.longTitle).filter { it.isNotBlank() }.joinToString(" · ")
+        }.toTypedArray()
+        AlertDialog.Builder(fragment.requireContext())
+            .setTitle(season.title.ifBlank { "选择剧集" })
+            .setItems(labels) { _, index ->
+                val episode = season.episodes[index]
+                fragment.startActivity(Intent(fragment.requireContext(), VideoPlayerActivity::class.java).apply {
+                    putExtra(VideoPlayerActivity.EXTRA_EP_ID, episode.id)
+                    putExtra(VideoPlayerActivity.EXTRA_AID, episode.aid)
+                    putExtra(VideoPlayerActivity.EXTRA_BVID, episode.bvid)
+                    putExtra(VideoPlayerActivity.EXTRA_COVER, episode.cover.ifBlank { season.cover })
+                    putExtra(VideoPlayerActivity.EXTRA_AUTHOR, "番剧 · ${season.title}")
+                    putExtra(VideoPlayerActivity.EXTRA_TITLE, listOf(season.title, episode.title, episode.longTitle)
+                        .filter { it.isNotBlank() }.joinToString(" · "))
+                })
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+        binding.searchStatus.text = "已加载 ${season.episodes.size} 集，选择剧集即可播放"
     }
 }
