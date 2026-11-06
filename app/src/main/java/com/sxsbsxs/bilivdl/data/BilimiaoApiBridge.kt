@@ -44,12 +44,19 @@ object BilimiaoApiBridge {
             .optJSONObject("data") ?: error("B站没有返回 UP 主资料")
     }
 
-    suspend fun userVideos(mid: Long, cursorAid: Long = 0L, pageSize: Int = 30): List<BiliVideo> {
+    suspend fun userVideos(
+        mid: Long,
+        cursorAid: Long = 0L,
+        pageSize: Int = 30,
+        order: String = "pubdate"
+    ): List<BiliVideo> {
         require(mid > 0L) { "UP主 UID 无效" }
+        require(order == "pubdate" || order == "click") { "投稿排序方式无效" }
         val root = execute(userApi.upperVideoList(
             vmid = mid.toString(),
             aid = cursorAid.takeIf { it > 0L }?.toString().orEmpty(),
-            pageSize = pageSize.coerceIn(1, 50)
+            pageSize = pageSize.coerceIn(1, 50),
+            order = order
         ))
         val data = root.optJSONObject("data") ?: return emptyList()
         val list = data.optJSONObject("list")

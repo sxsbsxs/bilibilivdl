@@ -33,7 +33,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.button.MaterialButton
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
 import com.sxsbsxs.bilivdl.data.BangumiApiBridge
 import com.sxsbsxs.bilivdl.data.SubtitleApiBridge
@@ -136,8 +135,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var currentAccountMid = 0L
     private var ownerFollowed = false
     private var watchLaterAdded = false
-    private var watchLaterButton: MaterialButton? = null
-    private var ownerFollowButton: MaterialButton? = null
+    private var watchLaterButton: TextView? = null
+    private var ownerFollowButton: TextView? = null
     private var playbackSpeedIndex = 0
     private var pendingSeekPosition = 0L
     private var selectedPartIndex = 0
@@ -1466,25 +1465,34 @@ class VideoPlayerActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
         }
-        fun makeAction(label: String): MaterialButton = MaterialButton(this).apply {
+        fun makeAction(label: String): TextView = TextView(this).apply {
             text = label
-            isAllCaps = false
             textSize = 12f
-            minHeight = dp(38)
-            minimumHeight = dp(38)
-            insetTop = 0
-            insetBottom = 0
-            cornerRadius = dp(10)
-            backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.surface_elevated))
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(12), 0, dp(12), 0)
             setTextColor(getColor(R.color.text_primary))
-            strokeWidth = dp(1)
-            strokeColor = android.content.res.ColorStateList.valueOf(getColor(R.color.stroke_dark))
+            background = getDrawable(R.drawable.bg_action_chip)
+            isClickable = true
+            isFocusable = true
+            minHeight = dp(32)
         }
-        watchLaterButton = makeAction("稍后再看").apply { setOnClickListener { addCurrentToWatchLater() } }
-        ownerFollowButton = makeAction("关注 UP主").apply { setOnClickListener { toggleOwnerFollow() } }
-        actions.addView(watchLaterButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(7) })
-        actions.addView(ownerFollowButton, LinearLayout.LayoutParams(0, dp(38), 1f))
-        container.addView(actions, container.indexOfChild(authorRow) + 1,
+        watchLaterButton = makeAction("稍后再看").apply {
+            setOnClickListener { addCurrentToWatchLater() }
+        }
+        ownerFollowButton = makeAction("关注 UP主").apply {
+            setOnClickListener { toggleOwnerFollow() }
+        }
+        actions.addView(
+            watchLaterButton,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(32)).apply {
+                marginEnd = dp(8)
+            }
+        )
+        actions.addView(ownerFollowButton,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(32)))
+        val signIndex = container.indexOfChild(b.playerAuthorSign)
+        val insertIndex = if (signIndex >= 0) signIndex + 1 else container.indexOfChild(authorRow) + 1
+        container.addView(actions, insertIndex,
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 

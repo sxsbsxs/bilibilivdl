@@ -36,6 +36,8 @@ class UserSpaceActivity : AppCompatActivity() {
     private var videosHasMore = true
     private var nextVideoAid = 0L
     private var videosPage = 0
+    private var videoSortOrder = "pubdate"
+    private var refreshVideosAfterLoad = false
     private val loadedVideoKeys = hashSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,6 +63,10 @@ class UserSpaceActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@UserSpaceActivity)
             adapter = videosAdapter
             isNestedScrollingEnabled = false
+        }
+        findViewById<TextView>(R.id.space_video_tab).apply {
+            text = videoSortLabel()
+            setOnClickListener { showVideoSortMenu(mid) }
         }
         findViewById<ScrollView>(R.id.space_scroll).setOnScrollChangeListener(
             View.OnScrollChangeListener { changedView, _, y, _, _ ->
@@ -343,8 +349,32 @@ class UserSpaceActivity : AppCompatActivity() {
         else -> value.toString()
     }
 
+    private fun videoSortLabel(): String =
+        if (videoSortOrder == "pubdate") "最新发布 ▾" else "最多播放 ▾"
+
+    private fun showVideoSortMenu(mid: Long) {
+        val selected = if (videoSortOrder == "pubdate") 0 else 1
+        AlertDialog.Builder(this)
+            .setTitle("投稿排序")
+            .setSingleChoiceItems(arrayOf("最新发布", "最多播放"), selected) { dialog, which ->
+                val nextOrder = if (which == 0) "pubdate" else "click"
+                dialog.dismiss()
+                if (nextOrder != videoSortOrder) {
+                    videoSortOrder = nextOrder
+                    findViewById<TextView>(R.id.space_video_tab).text = videoSortLabel()
+                    loadCreatorVideos(mid, reset = true)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
     private fun loadCreatorVideos(mid: Long, reset: Boolean) {
-        if (videosLoading || (!reset && !videosHasMore)) return
+        if (videosLoading) {
+            if (reset) refreshVideosAfterLoad = true
+            return
+        }
+        if (!reset && !videosHasMore) return
         if (reset) {
             videosHasMore = true
             nextVideoAid = 0L
@@ -362,9 +392,11 @@ class UserSpaceActivity : AppCompatActivity() {
             try {
                 val result = withContext(Dispatchers.IO) {
                     runCatching {
-                        BilimiaoApiBridge.userVideos(mid, cursorAid = cursor, pageSize = 30)
+                        BilimiaoApiBridge.userVideos(
+                            mid, cursorAid = cursor, pageSize = 30, order = videoSortOrder
+                        )
                     }.getOrElse { upstreamError ->
-                        val root = request("https://api.bilibili.com/x/space/wbi/arc/search?mid=$mid&ps=30&pn=$page&order=pubdate")
+                        val root = request("https://api.bilibili.com/x/space/wbi/arc/search?mid=$mid&ps=30&pn=$page&order=$videoSortOrder")
                         if (root.optInt("code", -1) != 0) throw upstreamError
                         val vlist = root.optJSONObject("data")?.optJSONObject("list")?.optJSONArray("vlist")
                         (0 until (vlist?.length() ?: 0)).mapNotNull { index ->
@@ -399,6 +431,10 @@ class UserSpaceActivity : AppCompatActivity() {
                 status.text = "投稿加载失败：${error.message ?: "网络异常"}"
             } finally {
                 videosLoading = false
+                if (refreshVideosAfterLoad && !isFinishing && !isDestroyed) {
+                    refreshVideosAfterLoad = false
+                    loadCreatorVideos(mid, reset = true)
+                }
             }
         }
     }

@@ -287,7 +287,12 @@
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:gravity="center_vertical"
-                android:text="投稿"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="最新发布 ▾"
                 android:textColor="@color/brand_dark"
                 android:textSize="12sp" />
         </LinearLayout>
