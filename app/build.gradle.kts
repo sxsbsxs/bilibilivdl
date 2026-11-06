@@ -1,21 +1,15 @@
-plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose"); id("com.chaquo.python"); alias(libs.plugins.ksp) }
+plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose"); alias(libs.plugins.ksp) }
 // Compose-first UI shell; business logic remains in the existing Kotlin layers.
 android {
  namespace="com.sxsbsxs.bilivdl"; compileSdk=36
  defaultConfig {
-  applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=37; versionName="2.0.17"
+  applicationId="com.sxsbsxs.bilivdl"; minSdk=24; targetSdk=35; versionCode=38; versionName="2.0.18"
   // The app is distributed primarily to modern Android phones. Avoid bundling
   // three copies of Python/FFmpeg native libraries into one oversized APK.
   ndk { abiFilters += listOf("arm64-v8a") }
  }
  buildFeatures { viewBinding=true; compose=true }
  compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
-}
-chaquopy {
- defaultConfig {
-  version = "3.11"
-  pip { install("-r", "src/main/python/requirements.txt") }
- }
 }
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {

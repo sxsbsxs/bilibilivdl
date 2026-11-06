@@ -37,6 +37,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:orientation="vertical"
+                android:gravity="bottom"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
                 android:paddingTop="6dp"
@@ -47,8 +48,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:background="#66000000"
-                    android:padding="5dp">
+                    android:background="#77000000"
+                    android:padding="7dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -78,11 +79,16 @@
                     <SeekBar
                         android:id="@+id/player_seek"
                         android:layout_width="match_parent"
-                        android:layout_height="26dp"
+                        android:layout_height="24dp"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="2dp"
+                        android:paddingStart="3dp"
+                        android:paddingEnd="3dp"
+                        android:minHeight="14dp"
                         android:max="1000"
-                        android:progressTint="#FB7299"
-                        android:thumbTint="#FFFFFF"
-                        android:progressBackgroundTint="#77FFFFFF" />
+                        android:splitTrack="false"
+                        android:progressDrawable="@drawable/player_seek_progress"
+                        android:thumb="@drawable/player_seek_thumb" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -376,7 +382,6 @@
                     android:foreground="?attr/selectableItemBackground"
                     android:clickable="true"
                     android:focusable="true" />
-            <TextView android:id="@+id/ytdlp_download_button" android:layout_width="0dp" android:layout_height="wrap_content" android:minHeight="54dp" android:layout_weight="1" android:gravity="center" android:text="其他网站下载" android:textColor="@color/text_secondary" android:textSize="10sp" android:background="?attr/selectableItemBackgroundBorderless"
                     android:foreground="?attr/selectableItemBackground" android:clickable="true" android:focusable="true" />
                             <TextView
                     android:id="@+id/download_all_parts"

@@ -46,7 +46,6 @@ import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideoActionApi
 import com.sxsbsxs.bilivdl.data.BiliDownloadEngine
 import com.sxsbsxs.bilivdl.data.BiliDownloadService
-import com.sxsbsxs.bilivdl.data.YtDlpBridge
 import com.sxsbsxs.bilivdl.data.PlaybackInfo
 import com.sxsbsxs.bilivdl.data.VideoComment
 import com.sxsbsxs.bilivdl.data.DanmakuItem
@@ -144,7 +143,10 @@ class VideoPlayerActivity : AppCompatActivity() {
                 val seek = findViewById<SeekBar>(R.id.player_seek)
                 if (player != null && seek != null && !updatingSeek && player.duration > 0L) {
                     seek.max = 1000
-                    seek.progress = ((player.currentPosition.toDouble() / player.duration).coerceIn(0.0, 1.0) * 1000).toInt()
+                    val duration = player.duration.toDouble()
+                    seek.progress = ((player.currentPosition.toDouble() / duration).coerceIn(0.0, 1.0) * 1000).toInt()
+                    seek.secondaryProgress = ((player.bufferedPosition.coerceAtLeast(0L).toDouble() / duration)
+                        .coerceIn(0.0, 1.0) * 1000).toInt()
                     findViewById<TextView>(R.id.player_time)?.text =
                         "${timeLabel(player.currentPosition)} / ${timeLabel(player.duration)}"
                 }
@@ -213,7 +215,6 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.shareVideoButton.setOnClickListener { shareCurrentVideo() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.subtitleButton.setOnClickListener { showSubtitles() }
-        b.ytdlpDownloadButton.setOnClickListener { promptYtDlpUrl() }
         b.danmakuButton.setOnClickListener {
             if (danmakuLoadFailed) {
                 info?.cid?.takeIf { it > 0L }?.let(::loadDanmaku)
@@ -269,40 +270,6 @@ class VideoPlayerActivity : AppCompatActivity() {
             } catch (error: Exception) {
                 b.relatedVideosStatus.visibility = View.VISIBLE
                 b.relatedVideosStatus.text = "相关推荐加载失败"
-            }
-        }
-    }
-
-    private fun promptYtDlpUrl() {
-        val input = EditText(this).apply {
-            hint = "粘贴支持的网站视频链接"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine(true)
-            setPadding(24, 18, 24, 18)
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("yt-dlp 通用下载")
-            .setMessage("输入视频页面链接。B站高画质下载仍建议使用原生下载入口。")
-            .setView(input)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("开始下载") { _, _ ->
-                val url = input.text?.toString()?.trim().orEmpty()
-                if (url.isNotBlank()) downloadWithYtDlp(url)
-            }
-            .show()
-    }
-
-    private fun downloadWithYtDlp(url: String) {
-        b.downloadStatus.visibility = View.VISIBLE
-        b.downloadStatus.text = "yt-dlp 正在解析并下载…"
-        lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) { YtDlpBridge.download(this@VideoPlayerActivity, url, BiliSession.cookie(this@VideoPlayerActivity)) }
-                b.downloadStatus.text = "下载完成，已保存到系统视频库"
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                b.downloadStatus.text = "yt-dlp 下载失败：" + (error.message ?: "暂不支持此链接")
             }
         }
     }
