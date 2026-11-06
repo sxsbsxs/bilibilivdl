@@ -613,16 +613,7 @@
                     android:focusable="true" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/comments_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
-                android:text="正在加载评论…"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-
-            <LinearLayout
+                        <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -634,25 +625,54 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:background="@drawable/bg_empty_card"
                     android:hint="写下你的评论…"
-                    android:singleLine="true"
+                    android:inputType="textCapSentences|textMultiLine"
+                    android:maxLines="3"
+                    android:minLines="1"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp"
                     android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary" />
+                    android:textColorHint="@color/text_secondary"
+                    android:textSize="13sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/comment_send"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:minWidth="58dp"
                     android:text="发送"
                     android:textAllCaps="false"
-                    app:cornerRadius="999dp" app:backgroundTint="@color/brand" />
+                    android:textSize="12sp"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/surface_elevated"
+                    app:cornerRadius="10dp"
+                    app:strokeColor="@color/stroke_dark"
+                    app:strokeWidth="1dp" />
             </LinearLayout>
 
+            <!-- Fixed viewport keeps RecyclerView recycling enabled inside the page scroller. -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/comments_list"
                 android:layout_width="match_parent"
+                android:layout_height="520dp"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="true"
+                android:paddingBottom="8dp" />
+
+            <TextView
+                android:id="@+id/comments_status"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false" />
+                android:gravity="center"
+                android:minHeight="34dp"
+                android:paddingHorizontal="8dp"
+                android:text="正在加载评论…"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
