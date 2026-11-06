@@ -14,7 +14,6 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
 import com.sxsbsxs.bilivdl.R
-import com.sxsbsxs.bilivdl.data.BiliHeaders
 import com.sxsbsxs.bilivdl.data.BilimiaoApiBridge
 import com.sxsbsxs.bilivdl.data.BiliVideo
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +68,7 @@ class UserSpaceActivity : AppCompatActivity() {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 12000
             readTimeout = 16000
-            setRequestProperty("User-Agent", BiliHeaders.UA)
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36")
             setRequestProperty("Referer", "https://www.bilibili.com/")
             setRequestProperty("Accept", "application/json")
         }
