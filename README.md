@@ -5,7 +5,7 @@
 - 游客头像和未登录个人空间采用 bilimiao2 的默认形象及游客入口，不强制先登录。
 - 播放进度条直接使用 bilimiao2 的 Compose `MediaProgressSlider`，接入当前播放器的播放与缓冲时间。
 
-# BiliVdl 2.0.18
+# BiliVdl 2.0.19
 
 ## 2.0.18 更新
 

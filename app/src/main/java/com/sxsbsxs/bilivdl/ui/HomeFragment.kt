@@ -22,15 +22,15 @@ import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
 import android.content.Context
 import com.sxsbsxs.bilivdl.data.BiliSession
-import com.sxsbsxs.bilivdl.databinding.FragmentHomeBinding
+import com.sxsbsxs.bilivdl.databinding.FragmentBilivdlHomeBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class HomeFragment : Fragment(R.layout.fragment_home) {
-    private var _binding: FragmentHomeBinding? = null
+class HomeFragment : Fragment(R.layout.fragment_bilivdl_home) {
+    private var _binding: FragmentBilivdlHomeBinding? = null
     private val b get() = checkNotNull(_binding) { "HomeFragment view is not available" }
 
     private var page = 0
@@ -45,7 +45,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        _binding = FragmentHomeBinding.bind(view)
+        _binding = FragmentBilivdlHomeBinding.bind(view)
 
         val openSearch = {
             b.homeSearchInput.requestFocus()
@@ -101,12 +101,12 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             if (profile.optBoolean("isLogin") && face.isNotBlank()) {
                 Glide.with(this@HomeFragment)
                     .load(GlideUrl(face, LazyHeaders.Builder().addHeader("Referer", "https://www.bilibili.com/").build()))
-                    .placeholder(R.drawable.bg_comment_avatar)
-                    .error(R.drawable.bg_comment_avatar)
+                    .placeholder(R.drawable.bili_akari_img)
+                    .error(R.drawable.bili_akari_img)
                     .circleCrop()
                     .into(avatar)
             } else {
-                avatar.setImageResource(R.drawable.bg_comment_avatar)
+                avatar.setImageResource(R.drawable.bili_akari_img)
             }
         }
     }

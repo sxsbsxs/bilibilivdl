@@ -54,7 +54,7 @@ kotlin {
                 implementation(libs.compose.material.icons.extended.kmp)
                 implementation(libs.androidx.datastore.preferences)
                 implementation(libs.compose.preference)
-                implementation("org.jetbrains.compose.material3.adaptive:adaptive:1.3.0-beta02")
+                implementation("org.jetbrains.compose.material3.adaptive:adaptive:1.2.0")
 
                 implementation(project(":bilimiao-comm"))
             }
@@ -63,6 +63,8 @@ kotlin {
             kotlin.srcDir("src/androidMain/java")
             resources.srcDir("src/androidMain/res")
             dependencies {
+                // Keep AndroidX Compose versions compatible with API 36 and AGP 8.13.
+                implementation(enforcedPlatform(libs.androidx.compose.bom))
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.androidx.appcompat)
                 implementation(libs.material)
