@@ -114,6 +114,13 @@ kotlin {
     }
 }
 
+// The vendored module keeps upstream's generated Res imports even though it is
+// now included under BiliVdl's root project. Pin the original package explicitly.
+compose.resources {
+    packageOfResClass = "bilimiao.bilimiao_compose.generated.resources"
+    generateResClass = always
+}
+
 android {
     compileSdk = 36
 
