@@ -19,14 +19,14 @@
         </LinearLayout>
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="我的内容" android:textColor="@color/text_primary" android:textSize="17sp" android:textStyle="bold"/>
         <GridLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:columnCount="3" android:rowCount="3" android:useDefaultMargins="false">
-            <TextView android:id="@+id/account_history" style="@style/AccountMenuTile" android:text="◷&#10;历史记录"/>
-            <TextView android:id="@+id/account_watch_later" style="@style/AccountMenuTile" android:text="▤&#10;稍后再看"/>
-            <TextView android:id="@+id/account_favorites" style="@style/AccountMenuTile" android:text="☆&#10;我的收藏"/>
-            <TextView android:id="@+id/account_following" style="@style/AccountMenuTile" android:text="◎&#10;我的关注"/>
-            <TextView android:id="@+id/account_liked" style="@style/AccountMenuTile" android:text="♡&#10;我赞过的"/>
-            <TextView android:id="@+id/account_messages" style="@style/AccountMenuTile" android:text="✉&#10;消息概览"/>
-            <TextView android:id="@+id/account_bangumi" style="@style/AccountMenuTile" android:text="▣&#10;我的追番"/>
-            <TextView android:id="@+id/account_cinema" style="@style/AccountMenuTile" android:text="▣&#10;我的追剧"/>
+            <TextView android:id="@+id/account_history" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_history" android:text="历史记录"/>
+            <TextView android:id="@+id/account_watch_later" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_watch_later" android:text="稍后再看"/>
+            <TextView android:id="@+id/account_favorites" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_favorite" android:text="我的收藏"/>
+            <TextView android:id="@+id/account_following" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_following" android:text="我的关注"/>
+            <TextView android:id="@+id/account_liked" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_liked" android:text="我赞过的"/>
+            <TextView android:id="@+id/account_messages" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_messages" android:text="消息概览"/>
+            <TextView android:id="@+id/account_bangumi" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_bangumi" android:text="我的追番"/>
+            <TextView android:id="@+id/account_cinema" style="@style/AccountMenuTile" android:drawableTop="@drawable/ic_menu_cinema" android:text="我的追剧"/>
         </GridLayout>
     </LinearLayout>
 </ScrollView>
