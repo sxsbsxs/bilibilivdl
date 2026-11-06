@@ -745,9 +745,7 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun openUserSpace(mid: Long) {
         if (mid <= 0L) return
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://space.bilibili.com/$mid")))
-        }.onFailure { b.commentsStatus.text = "无法打开用户主页：${it.message}" }
+        startActivity(Intent(this, UserSpaceActivity::class.java).putExtra(UserSpaceActivity.EXTRA_MID, mid))
     }
 
     private fun showReplies(comment: VideoComment) {
