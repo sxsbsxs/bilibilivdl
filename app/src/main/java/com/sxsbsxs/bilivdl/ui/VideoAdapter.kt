@@ -15,7 +15,8 @@ import com.sxsbsxs.bilivdl.databinding.ItemVideoBinding
 class VideoAdapter(private val onClick: (BiliVideo) -> Unit) : RecyclerView.Adapter<VideoAdapter.Holder>() {
     private val items = mutableListOf<BiliVideo>()
     fun submitList(list: List<BiliVideo>) {
-        val next = list.toList()
+        val seen = hashSetOf<String>()
+        val next = list.filter { seen.add(stableKey(it)) }
         if (items == next) return
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = items.size
