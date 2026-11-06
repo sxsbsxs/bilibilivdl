@@ -137,7 +137,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         b.shareVideoButton.setOnClickListener { shareCurrentVideo() }
         b.playbackSpeedButton.setOnClickListener { cyclePlaybackSpeed() }
         b.subtitleButton.setOnClickListener { showSubtitles() }
-        b.moreActionsButton.setOnClickListener { showMoreActions() }
+        b.ytdlpDownloadButton.setOnClickListener { promptYtDlpUrl() }
         b.danmakuButton.setOnClickListener {
             danmakuEnabled = !danmakuEnabled
             b.danmakuOverlay.setDanmakuEnabled(danmakuEnabled)
@@ -196,13 +196,6 @@ class VideoPlayerActivity : AppCompatActivity() {
                 b.relatedVideosStatus.text = "相关推荐加载失败"
             }
         }
-    }
-
-    private fun showMoreActions() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("更多下载方式")
-            .setItems(arrayOf("yt-dlp 通用链接下载")) { _, _ -> promptYtDlpUrl() }
-            .show()
     }
 
     private fun promptYtDlpUrl() {

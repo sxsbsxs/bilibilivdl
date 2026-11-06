@@ -86,14 +86,14 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 text = label
                 isAllCaps = false
                 isEnabled = enabled
-                minHeight = dp(40)
+                minHeight = dp(36)
                 backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
                 strokeWidth = 0
                 elevation = 0f
-                setTextColor(context.getColor(R.color.brand))
+                setTextColor(context.getColor(R.color.text_secondary))
                 textSize = 12f
                 setOnClickListener { action() }
-                layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                layoutParams = LinearLayout.LayoutParams(0, dp(36), 1f).apply {
                     marginEnd = dp(5)
                 }
             })
@@ -206,7 +206,7 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
                 textSize = 12f
                 setOnClickListener { click() }
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)
                 ).apply { marginStart = dp(6) }
             })
         }

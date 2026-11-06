@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand">#FB7299</color>
-    <color name="brand_dark">#E85D87</color>
-    <color name="background_dark">#FFF9FB</color>
-    <color name="surface_dark">#FFFFFF</color>
-    <color name="surface_elevated">#FFF0F4</color>
-    <color name="text_primary">#292329</color>
-    <color name="text_secondary">#8A7D84</color>
-    <color name="stroke_dark">#F2DCE4</color>
-    <color name="white">#FFFFFF</color>
-    <color name="black">#000000</color>
+<color name="brand">#FB7299</color><color name="brand_dark">#E85D87</color>
+<color name="background_dark">#F6F7F8</color><color name="surface_dark">#FFFFFF</color><color name="surface_elevated">#F1F2F3</color>
+<color name="text_primary">#18191C</color><color name="text_secondary">#9499A0</color><color name="icon_tint">#61666D</color>
+<color name="stroke_dark">#E7E8EB</color><color name="white">#FFFFFF</color><color name="black">#000000</color>
 </resources>
