@@ -199,7 +199,7 @@ object BiliInteractionApi {
                 val field = (tag shr 3).toInt()
                 val wire = (tag and 7).toInt()
                 when {
-                    field in setOf(2, 3, 4, 5, 9) && wire == 0 -> {
+                    field in setOf(2, 3, 4, 5, 11) && wire == 0 -> {
                         val (v, n) = readVarint(data, i); i = n
                         when (field) {
                             2 -> progress = v
