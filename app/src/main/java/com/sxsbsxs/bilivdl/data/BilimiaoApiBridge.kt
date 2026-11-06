@@ -142,6 +142,8 @@ object BilimiaoApiBridge {
         val article = (payload as? ModuleDynamic.ModuleItem.DynArticle)?.value
         val ugcSeason = (payload as? ModuleDynamic.ModuleItem.DynUgcSeason)?.value
         val course = (payload as? ModuleDynamic.ModuleItem.DynCourBatchUp)?.value
+        val courseBatch = (payload as? ModuleDynamic.ModuleItem.DynCourBatch)?.value
+        val courseSeason = (payload as? ModuleDynamic.ModuleItem.DynCourSeason)?.value
         // 转发动态的正文属于外层，媒体卡属于被转发的内层动态。
         val forwarded = (payload as? ModuleDynamic.ModuleItem.DynForward)
             ?.value?.item?.let { parseSpaceDynamic(it, depth + 1) }
@@ -150,17 +152,23 @@ object BilimiaoApiBridge {
             ?: pgc?.aid?.takeIf { it > 0L }
             ?: ugcSeason?.avid?.takeIf { it > 0L }
             ?: course?.avid?.takeIf { it > 0L }
+            ?: courseBatch?.avid?.takeIf { it > 0L }
+            ?: courseSeason?.avid?.takeIf { it > 0L }
             ?: forwarded?.aid?.takeIf { it > 0L }
             ?: 0L
         val bvid = archive?.bvid.orEmpty().ifBlank { forwarded?.bvid.orEmpty() }
         val episodeId = pgc?.epid?.takeIf { it > 0L }
             ?: archive?.episodeId?.takeIf { it > 0L }
             ?: course?.epid?.takeIf { it > 0L }
+            ?: courseBatch?.epid?.takeIf { it > 0L }
+            ?: courseSeason?.epid?.takeIf { it > 0L }
             ?: forwarded?.episodeId?.takeIf { it > 0L }
             ?: 0L
         val seasonId = pgc?.seasonId?.takeIf { it > 0L }
             ?: archive?.pgcSeasonId?.takeIf { it > 0L }
             ?: course?.seasonId?.takeIf { it > 0L }
+            ?: courseBatch?.seasonId?.takeIf { it > 0L }
+            ?: courseSeason?.seasonId?.takeIf { it > 0L }
             ?: forwarded?.seasonId?.takeIf { it > 0L }
             ?: 0L
         val opusTitle = paragraphText(opusSummary?.title)
@@ -170,7 +178,11 @@ object BilimiaoApiBridge {
                 article?.title.orEmpty().ifBlank {
                     ugcSeason?.title.orEmpty().ifBlank {
                         course?.title.orEmpty().ifBlank {
-                            paragraphTitle.ifBlank { opusTitle.ifBlank { forwarded?.title.orEmpty() } }
+                            courseBatch?.title.orEmpty().ifBlank {
+                                courseSeason?.title.orEmpty().ifBlank {
+                                    paragraphTitle.ifBlank { opusTitle.ifBlank { forwarded?.title.orEmpty() } }
+                                }
+                            }
                         }
                     }
                 }
@@ -181,9 +193,13 @@ object BilimiaoApiBridge {
                 article?.covers?.firstOrNull().orEmpty().ifBlank {
                     ugcSeason?.cover.orEmpty().ifBlank {
                         course?.cover.orEmpty().ifBlank {
-                            draw?.items?.firstOrNull()?.src.orEmpty().ifBlank {
-                                opusSummary?.covers?.firstOrNull()?.src.orEmpty().ifBlank {
-                                    paragraphImages.firstOrNull().orEmpty().ifBlank { forwarded?.cover.orEmpty() }
+                            courseBatch?.cover.orEmpty().ifBlank {
+                                courseSeason?.cover.orEmpty().ifBlank {
+                                    draw?.items?.firstOrNull()?.src.orEmpty().ifBlank {
+                                        opusSummary?.covers?.firstOrNull()?.src.orEmpty().ifBlank {
+                                            paragraphImages.firstOrNull().orEmpty().ifBlank { forwarded?.cover.orEmpty() }
+                                        }
+                                    }
                                 }
                             }
                         }
