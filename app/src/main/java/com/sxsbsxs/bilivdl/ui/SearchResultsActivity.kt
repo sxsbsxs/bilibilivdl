@@ -83,6 +83,7 @@ class SearchResultsActivity : AppCompatActivity() {
                     }
                 }
             })
+            if (isDirectVideoId) refreshSearch()
         }
     }
 
