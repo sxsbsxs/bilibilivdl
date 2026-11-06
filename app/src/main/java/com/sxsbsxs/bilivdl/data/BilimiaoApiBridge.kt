@@ -125,8 +125,11 @@ object BilimiaoApiBridge {
                 liked = item.optJSONObject("reply_control")?.optInt("action") == 1,
                 face = member?.optString("avatar").orEmpty().ifBlank { member?.optString("face").orEmpty() },
                 ctime = item.optLong("ctime"),
-                isUp = item.optJSONObject("reply_control")?.optInt("up_action") == 1,
-                level = member?.optJSONObject("level_info")?.optInt("current_level") ?: 0
+                // up_action means the UP owner liked this comment; it does not
+                // identify the comment author as the UP owner.
+                isUp = false,
+                level = member?.optJSONObject("level_info")?.optInt("current_level") ?: 0,
+                likedByUp = item.optJSONObject("reply_control")?.optInt("up_action") == 1
             )
         }
         val cursor = data.optJSONObject("cursor")
@@ -167,8 +170,11 @@ object BilimiaoApiBridge {
                 liked = item.optJSONObject("reply_control")?.optInt("action") == 1,
                 face = member?.optString("avatar").orEmpty().ifBlank { member?.optString("face").orEmpty() },
                 ctime = item.optLong("ctime"),
-                isUp = item.optJSONObject("reply_control")?.optInt("up_action") == 1,
-                level = member?.optJSONObject("level_info")?.optInt("current_level") ?: 0
+                // up_action means the UP owner liked this comment; it does not
+                // identify the comment author as the UP owner.
+                isUp = false,
+                level = member?.optJSONObject("level_info")?.optInt("current_level") ?: 0,
+                likedByUp = item.optJSONObject("reply_control")?.optInt("up_action") == 1
             )
         }
         val cursor = data.optJSONObject("cursor")
