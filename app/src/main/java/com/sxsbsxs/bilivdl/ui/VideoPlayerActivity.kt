@@ -196,25 +196,10 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun showMoreActions() {
-        val labels = arrayOf(
-            "点赞 / 取消点赞", "投币", "收藏", "分享视频链接",
-            "选择分P / 番剧选集", if (danmakuEnabled) "关闭弹幕" else "开启弹幕",
-            "字幕设置", "发送弹幕", "yt-dlp 通用链接下载"
-        )
-        MaterialAlertDialogBuilder(this).setTitle("更多功能")
-            .setItems(labels) { _, which ->
-                when (which) {
-                    0 -> toggleVideoLike()
-                    1 -> showCoinDialog()
-                    2 -> showFavoriteFolders()
-                    3 -> shareCurrentVideo()
-                    4 -> showParts()
-                    5 -> b.danmakuButton.performClick()
-                    6 -> showSubtitles()
-                    7 -> showDanmakuComposer()
-                    8 -> promptYtDlpUrl()
-                }
-            }.show()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("更多下载方式")
+            .setItems(arrayOf("yt-dlp 通用链接下载")) { _, _ -> promptYtDlpUrl() }
+            .show()
     }
 
     private fun promptYtDlpUrl() {
