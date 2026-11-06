@@ -326,16 +326,40 @@ class DownloadsFragment : Fragment(R.layout.fragment_download) {
             .setPositiveButton("知道了", null).show()
     }
 
+    /**
+     * BiliDownload 批量重试语义：使用原任务 ID 和原下载规格，不创建重复记录；
+     * 同时恢复下载失败与用户取消的任务，并保留封面、UP 主等展示元数据。
+     */
     private fun retryFailedTasks() {
         viewLifecycleOwner.lifecycleScope.launch {
-            val tasks = dao.tasksByStatus("failed")
-            tasks.forEach { task ->
-                if (task.bvid.isNotBlank() || task.aid > 0L || task.episodeId > 0L) {
-                    BiliDownloadService.enqueue(requireContext(), task.taskId, task.bvid, task.aid,
-                        task.title, task.qn, task.episodeId, task.videoCodec, task.audioCodec, task.pageIndex)
+            val failed = dao.tasksByStatus("failed")
+            val cancelled = dao.tasksByStatus("cancelled")
+            val targets = (failed + cancelled).distinctBy { it.taskId }
+            val activeIds = currentTasks
+                .filter { it.status == "queued" || it.status == "downloading" }
+                .map { it.taskId }
+                .toSet()
+            var submitted = 0
+            var skipped = 0
+            targets.forEach { task ->
+                val hasIdentity = task.bvid.isNotBlank() || task.aid > 0L || task.episodeId > 0L
+                if (!hasIdentity || task.taskId in activeIds) {
+                    skipped++
+                } else {
+                    runCatching {
+                        BiliDownloadService.enqueue(
+                            requireContext(), task.taskId, task.bvid, task.aid,
+                            task.title, task.qn, task.episodeId, task.videoCodec,
+                            task.audioCodec, task.pageIndex, task.cover, task.author
+                        )
+                    }.onSuccess { submitted++ }.onFailure { skipped++ }
                 }
             }
-            b.downloadSummary.text = if (tasks.isEmpty()) "没有可重试的失败任务" else "已重新加入 " + tasks.size + " 个失败任务"
+            b.downloadSummary.text = when {
+                targets.isEmpty() -> "没有可重试的失败或已取消任务"
+                else -> "已重新提交 $submitted 个任务" +
+                    if (skipped > 0) " · 跳过 $skipped 个" else ""
+            }
         }
     }
 
