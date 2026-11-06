@@ -92,13 +92,15 @@ object BilimiaoApiBridge {
         return CommentPage(result, hasMore, total)
     }
 
-    suspend fun replies(aid: Long, rootId: Long, page: Int = 1): List<VideoComment> {
-        val root = execute(commentApi.replyList(aid.toString(), rootId.toString(), 1, page, 20))
-        val replies = root.optJSONObject("data")?.optJSONArray("replies") ?: return emptyList()
-        return (0 until replies.length()).mapNotNull { i ->
-            val item = replies.optJSONObject(i) ?: return@mapNotNull null
+    suspend fun replies(aid: Long, rootId: Long, page: Int = 1): CommentPage {
+        val root = execute(commentApi.replyList(aid.toString(), rootId.toString(), 1, page.coerceAtLeast(1), 20))
+        val data = root.optJSONObject("data") ?: return CommentPage(emptyList(), false, 0)
+        val replies = data.optJSONArray("replies")
+        val result = ArrayList<VideoComment>()
+        if (replies != null) for (i in 0 until replies.length()) {
+            val item = replies.optJSONObject(i) ?: continue
             val member = item.optJSONObject("member")
-            VideoComment(
+            result += VideoComment(
                 id = item.optLong("rpid"),
                 user = member?.optString("uname").orEmpty().ifBlank { "用户" },
                 text = item.optJSONObject("content")?.optString("message").orEmpty(),
@@ -112,8 +114,24 @@ object BilimiaoApiBridge {
                 level = member?.optJSONObject("level_info")?.optInt("current_level") ?: 0
             )
         }
+        val cursor = data.optJSONObject("cursor")
+        val pageInfo = data.optJSONObject("page")
+        val hasMore = when {
+            cursor?.has("is_end") == true -> !cursor.optBoolean("is_end", true)
+            pageInfo != null -> pageInfo.optInt("num", page) * pageInfo.optInt("size", 20).coerceAtLeast(1) < pageInfo.optInt("count", result.size)
+            else -> result.size >= 20
+        }
+        val total = cursor?.optInt("all_count")?.takeIf { it > 0 }
+            ?: pageInfo?.optInt("count")?.takeIf { it > 0 }
+            ?: result.size
+        return CommentPage(result, hasMore, total)
     }
 
+    suspend fun sendReply(aid: Long, rootId: Long, parentId: Long, message: String): String {
+        require(message.isNotBlank()) { "回复内容不能为空" }
+        val root = execute(commentApi.add(message.trim(), 1, aid.toString(), rootId.toString(), parentId.toString()))
+        return root.optString("message").ifBlank { "回复发送成功" }
+    }
     suspend fun likeComment(aid: Long, rpid: Long, liked: Boolean): String {
         val root = execute(commentApi.action(1, aid.toString(), rpid.toString(), if (liked) 1 else 0))
         return root.optString("message").ifBlank { "评论点赞操作成功" }

@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +22,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.core.widget.NestedScrollView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.button.MaterialButton
 import com.sxsbsxs.bilivdl.data.BiliPlaybackApi
 import com.sxsbsxs.bilivdl.data.BangumiApiBridge
 import com.sxsbsxs.bilivdl.data.SubtitleApiBridge
@@ -789,27 +792,132 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun showReplies(comment: VideoComment) {
-        lifecycleScope.launch {
-            try {
-                val replies = withContext(Dispatchers.IO) { BilimiaoApiBridge.replies(aid, comment.id, 1) }
-                val list = RecyclerView(this@VideoPlayerActivity).apply {
-                    layoutManager = LinearLayoutManager(this@VideoPlayerActivity)
-                    isNestedScrollingEnabled = true
-                    setPadding(16, 4, 16, 4)
-                    adapter = CommentAdapter(::showReplies, ::likeComment, ::openUserSpace).apply {
-                        submit(listOf(comment) + replies)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 8, 16, 8)
+        }
+        lateinit var replyAdapter: CommentAdapter
+        val list = RecyclerView(this).apply {
+            layoutManager = LinearLayoutManager(this@VideoPlayerActivity)
+            isNestedScrollingEnabled = true
+        }
+        val status = TextView(this).apply {
+            textSize = 12f
+            setTextColor(getColor(com.sxsbsxs.bilivdl.R.color.text_secondary))
+            setPadding(4, 6, 4, 6)
+            visibility = View.GONE
+        }
+        val composer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val input = EditText(this).apply {
+            hint = "回复这条评论…"
+            minLines = 1
+            maxLines = 3
+            textSize = 14f
+            setPadding(12, 8, 12, 8)
+            background = getDrawable(com.sxsbsxs.bilivdl.R.drawable.bg_empty_card)
+        }
+        val send = MaterialButton(this).apply {
+            text = "发送"
+            isAllCaps = false
+            minHeight = 42
+        }
+        composer.addView(input, LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        composer.addView(send, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 44))
+        root.addView(list, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(status, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
+        root.addView(composer, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle("全部回复 · ${comment.replyCount}")
+            .setView(root)
+            .setNegativeButton("关闭", null)
+            .create()
+        replyAdapter = CommentAdapter(
+            onReplies = { nested -> showReplies(nested) },
+            onLike = { target ->
+                lifecycleScope.launch {
+                    try {
+                        if (cookie.isBlank()) error("评论点赞需要先登录 B站账号")
+                        withContext(Dispatchers.IO) { BilimiaoApiBridge.likeComment(aid, target.id, !target.liked) }
+                        replyAdapter.updateLike(target.id, !target.liked)
+                    } catch (error: Exception) {
+                        status.visibility = View.VISIBLE
+                        status.text = error.message ?: "点赞失败"
                     }
-                    layoutParams = android.view.ViewGroup.LayoutParams(-1, (resources.displayMetrics.heightPixels * 0.62f).toInt())
                 }
-                MaterialAlertDialogBuilder(this@VideoPlayerActivity)
-                    .setTitle("全部回复 · ${comment.replyCount}")
-                    .setView(list)
-                    .setPositiveButton("关闭", null)
-                    .show()
-            } catch (e: Exception) {
-                MaterialAlertDialogBuilder(this@VideoPlayerActivity).setMessage("回复加载失败：${e.message}").setPositiveButton("知道了", null).show()
+            },
+            onUser = ::openUserSpace
+        )
+        list.adapter = replyAdapter
+        var page = 1
+        var hasMore = true
+        var loading = false
+        fun loadReplyPage(reset: Boolean) {
+            if (loading || (!hasMore && !reset)) return
+            loading = true
+            val requestedPage = if (reset) 1 else page
+            lifecycleScope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        BilimiaoApiBridge.replies(aid, comment.id, requestedPage)
+                    }
+                    if (reset) replyAdapter.submit(listOf(comment) + result.comments)
+                    else replyAdapter.submit(result.comments, append = true)
+                    page = requestedPage + 1
+                    hasMore = result.hasMore && result.comments.isNotEmpty()
+                    status.visibility = if (!hasMore) View.VISIBLE else View.GONE
+                    status.text = if (result.comments.isEmpty() && reset) "暂无回复" else if (!hasMore) "没有更多回复了" else ""
+                } catch (error: Exception) {
+                    status.visibility = View.VISIBLE
+                    status.text = "回复加载失败：${error.message ?: "网络异常"}"
+                } finally {
+                    loading = false
+                }
             }
         }
+        list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                val manager = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                if (dy > 0 && manager.findLastVisibleItemPosition() >= manager.itemCount - 3) {
+                    loadReplyPage(false)
+                }
+            }
+        })
+        send.setOnClickListener {
+            val message = input.text?.toString()?.trim().orEmpty()
+            if (message.isBlank()) {
+                input.error = "请输入回复内容"
+                return@setOnClickListener
+            }
+            lifecycleScope.launch {
+                send.isEnabled = false
+                try {
+                    if (cookie.isBlank()) error("回复评论需要先登录 B站账号")
+                    withContext(Dispatchers.IO) {
+                        BilimiaoApiBridge.sendReply(aid, comment.id, comment.id, message)
+                    }
+                    input.setText("")
+                    page = 1
+                    hasMore = true
+                    replyAdapter.submit(listOf(comment))
+                    loadReplyPage(true)
+                } catch (error: Exception) {
+                    status.visibility = View.VISIBLE
+                    status.text = error.message ?: "回复发送失败"
+                } finally {
+                    send.isEnabled = true
+                }
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            (resources.displayMetrics.heightPixels * 0.72f).toInt()
+        )
+        loadReplyPage(true)
     }
 
     private fun likeComment(comment: VideoComment) {

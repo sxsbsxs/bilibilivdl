@@ -28,12 +28,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
 
 class HomeFragment : Fragment(R.layout.fragment_home) {
     private var _binding: FragmentHomeBinding? = null
     private val b get() = checkNotNull(_binding) { "HomeFragment view is not available" }
 
     private var page = 0
+    private var feedStartPage = 1
     private var loading = false
     private var hasMore = true
     private var duplicatePages = 0
@@ -239,13 +241,14 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         val binding = _binding ?: return
         loadJob?.cancel()
         page = 0
+        feedStartPage = Random.nextInt(1, 31)
         hasMore = true
         duplicatePages = 0
         loading = false
         videos.clear()
         adapter.submitList(emptyList())
         binding.homeSwipe.isRefreshing = true
-        loadPage(1)
+        loadPage(feedStartPage)
     }
 
     private fun loadPage(target: Int) {
@@ -253,7 +256,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         if (loading || (!hasMore && target > 1)) return
 
         loading = true
-        if (target == 1 && !binding.homeSwipe.isRefreshing) {
+        if (target == feedStartPage && !binding.homeSwipe.isRefreshing) {
             binding.homeProgress.visibility = View.VISIBLE
         }
         val appContext = requireContext().applicationContext

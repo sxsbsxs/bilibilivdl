@@ -58,7 +58,7 @@ object BiliApi {
         val value = input.trim()
         val bv = Regex("(?i)BV[0-9A-Za-z]{10}").find(value)?.value
         if (bv != null) return bv
-        val av = Regex("(?i)av\\s*(\\d+)").find(value)?.groupValues?.getOrNull(1)
+        val av = Regex("(?i)(?:\\bav\\s*|[?&]aid=)(\\d+)").find(value)?.groupValues?.getOrNull(1)
         return av?.let { "av$it" }
     }
 }
