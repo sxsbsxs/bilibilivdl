@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 from yt_dlp import YoutubeDL
 
 def download(url, output_dir, cookie=""):
@@ -11,7 +12,8 @@ def download(url, output_dir, cookie=""):
         "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36",
         "Referer": "https://www.bilibili.com/",
     }
-    if cookie:
+    host = (urlparse(url).hostname or "").lower()
+    if cookie and (host == "bilibili.com" or host.endswith(".bilibili.com")):
         headers["Cookie"] = cookie
 
     # Android APK currently ships without an FFmpeg executable. Select a
