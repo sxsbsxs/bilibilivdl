@@ -231,7 +231,8 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         videos.clear()
         adapter.submitList(emptyList())
         binding.homeSwipe.isRefreshing = true
-        loadPage(1)
+        // Start from a rotating popular page so every refresh is not the same first 20 videos.
+        loadPage((1..5).random())
     }
 
     private fun loadPage(target: Int) {
