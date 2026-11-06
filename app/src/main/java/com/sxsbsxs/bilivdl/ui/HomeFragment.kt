@@ -78,7 +78,6 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
             })
         }
         b.homeRecommendations.layoutManager = GridLayoutManager(requireContext(), 2)
-        b.homeRecommendations.setHasFixedSize(true)
         b.homeRecommendations.adapter = adapter
         b.homeSwipe.setOnRefreshListener { refresh() }
         b.homeScroll.setOnScrollChangeListener(
