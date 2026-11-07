@@ -62,6 +62,7 @@ jobs:
           python3 - <<'PY'
           from io import BytesIO
           from pathlib import Path
+          import struct
           import zipfile
 
           aar_files = list(Path("bvd-downloader/build/outputs/aar").glob("*debug.aar"))
@@ -82,8 +83,41 @@ jobs:
                   raise SystemExit("BVD AAR is missing generated Data Binding classes: " + ", ".join(missing))
               print("BVD AAR Data Binding classes verified")
 
+          def uleb128(data, offset):
+              value = 0
+              shift = 0
+              while True:
+                  byte = data[offset]
+                  offset += 1
+                  value |= (byte & 0x7f) << shift
+                  if byte < 0x80:
+                      return value, offset
+                  shift += 7
+
+          def dex_defines(data, wanted):
+              if not data.startswith(b"dex\\n"):
+                  return False
+              string_count, string_off = struct.unpack_from("<II", data, 0x38)
+              type_count, type_off = struct.unpack_from("<II", data, 0x40)
+              class_count, class_off = struct.unpack_from("<II", data, 0x60)
+              strings = []
+              for index in range(string_count):
+                  item_off = struct.unpack_from("<I", data, string_off + index * 4)[0]
+                  _, cursor = uleb128(data, item_off)
+                  end = data.find(b"\\0", cursor)
+                  strings.append(data[cursor:end].decode("utf-8", errors="replace"))
+              types = [
+                  struct.unpack_from("<I", data, type_off + index * 4)[0]
+                  for index in range(type_count)
+              ]
+              for index in range(class_count):
+                  class_index = struct.unpack_from("<I", data, class_off + index * 32)[0]
+                  if class_index < len(types) and strings[types[class_index]] == wanted:
+                      return True
+              return False
+
           apk = Path("app/build/outputs/apk/debug/app-debug.apk")
-          marker = b"Lcc/kafuu/bilidownload/BR;"
+          wanted = "Lcc/kafuu/bilidownload/BR;"
           with zipfile.ZipFile(apk) as package:
               dex_files = sorted(
                   name for name in package.namelist()
@@ -91,10 +125,13 @@ jobs:
               )
               if not dex_files:
                   raise SystemExit("APK contains no DEX files")
-              present = [name for name in dex_files if marker in package.read(name)]
+              present = [
+                  name for name in dex_files
+                  if dex_defines(package.read(name), wanted)
+              ]
               if not present:
-                  raise SystemExit("APK DEX is missing cc.kafuu.bilidownload.BR; refusing to publish a crashing APK")
-              print("BVD BR class reference packaged in: " + ", ".join(present))
+                  raise SystemExit("APK does not define cc.kafuu.bilidownload.BR; refusing to publish a crashing APK")
+              print("BVD BR class definition verified in: " + ", ".join(present))
           PY
       - name: Upload APK
         uses: actions/upload-artifact@v4
