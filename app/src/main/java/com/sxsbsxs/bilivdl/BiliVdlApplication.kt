@@ -39,7 +39,7 @@ class BiliVdlApplication : Application() {
             listOf(
                 "https://bilibili.com",
                 "https://www.bilibili.com",
-                "https://api.bilibili.com",
+                "https://api.bilibili.com", "https://comment.bilibili.com",
                 "https://passport.bilibili.com",
                 "https://m.bilibili.com"
             ).forEach { manager.setCookie(it, cookie) }
