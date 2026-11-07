@@ -49,7 +49,7 @@ object BiliSession {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(ENCRYPTED_COOKIE, encrypted).remove(LEGACY_COOKIE).apply()
         val manager = CookieManager.getInstance()
-        listOf("https://bilibili.com", "https://www.bilibili.com", "https://api.bilibili.com",
+        listOf("https://bilibili.com", "https://www.bilibili.com", "https://api.bilibili.com", "https://comment.bilibili.com",
             "https://passport.bilibili.com", "https://m.bilibili.com")
             .forEach { manager.setCookie(it, normalized) }
         manager.flush()
