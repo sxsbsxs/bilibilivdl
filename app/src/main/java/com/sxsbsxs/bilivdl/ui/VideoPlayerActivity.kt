@@ -960,6 +960,8 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun loadDanmaku(cid: Long) {
         danmakuLoadFailed = false
+        loadedDanmaku = emptyList()
+        b.danmakuOverlay.setDanmaku(emptyList())
         b.danmakuButton.text = "弹幕加载中…"
         lifecycleScope.launch {
             try {
