@@ -370,7 +370,7 @@ object BiliInteractionApi {
         if (protoResult != null) return protoResult
 
         fun parseXml(xmlBody: String): List<DanmakuItem> {
-            val xml = xmlBody.removePrefix("\\uFEFF").trim()
+            val xml = xmlBody.removePrefix("\uFEFF").trim()
             if (xml.isBlank()) error("XML 弹幕接口返回空内容")
             if (!xml.startsWith("<")) error("XML 弹幕接口返回的不是 XML")
             val parser = Xml.newPullParser()
