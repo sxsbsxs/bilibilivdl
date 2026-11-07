@@ -7,6 +7,7 @@ android {
   ndk { abiFilters += listOf("arm64-v8a") }
  }
  buildFeatures { viewBinding=true; compose=true }
+ packaging { resources { excludes += "/META-INF/INDEX.LIST" } }
  compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
 }
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
