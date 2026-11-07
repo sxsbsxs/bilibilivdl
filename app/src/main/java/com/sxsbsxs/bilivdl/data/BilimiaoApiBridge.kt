@@ -3,6 +3,7 @@ package com.sxsbsxs.bilivdl.data
 import com.a10miaomiao.bilimiao.comm.apis.CommentApi
 import com.a10miaomiao.bilimiao.comm.apis.VideoAPI
 import com.a10miaomiao.bilimiao.comm.apis.UserApi
+import com.a10miaomiao.bilimiao.comm.apis.PlayerAPI
 import com.a10miaomiao.bilimiao.comm.network.MiaoHttp
 import org.json.JSONObject
 import bilibili.app.dynamic.v2.DynamicGRPC
@@ -313,6 +314,19 @@ object BilimiaoApiBridge {
                 authorFace = owner?.optString("face").orEmpty()
             )
         }
+    }
+
+    /**
+     * Fetch the legacy XML danmaku feed through bilimiao's maintained OkHttp client.
+     * This client shares the app cookie provider and standard Bilibili request headers.
+     */
+    suspend fun danmakuXml(cid: Long): String {
+        require(cid > 0L) { "视频分P编号无效" }
+        val body = PlayerAPI().getDanmakuList(cid.toString()).awaitString()
+            .removePrefix("\uFEFF")
+            .trim()
+        if (body.isBlank()) error("B站 XML 弹幕接口没有返回内容")
+        return body
     }
 
     suspend fun videoInfo(id: String, type: String): JSONObject {
