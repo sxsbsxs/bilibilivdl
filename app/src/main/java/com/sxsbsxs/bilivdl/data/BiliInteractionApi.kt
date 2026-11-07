@@ -143,28 +143,40 @@ object BiliInteractionApi {
         return "发送成功"
     }
 
-    fun danmaku(cid: Long, cookie: String = ""): List<DanmakuItem> {
+    /**
+     * Read web danmaku metadata and segments.
+     *
+     * /x/v2/dm/web/view is a protobuf endpoint, not JSON. Treating its response as
+     * JSONObject made the primary route fail every time and forced the old XML fallback.
+     */
+    suspend fun danmaku(cid: Long, cookie: String = ""): List<DanmakuItem> {
         require(cid > 0) { "视频分P编号无效" }
-        val headers = mapOf(
-            "User-Agent" to BiliHeaders.UA,
-            "Referer" to "https://www.bilibili.com/",
-            "Accept" to "*/*"
-        )
+        val userAgent = BiliHeaders.UA
+
         fun getBytes(url: String): ByteArray {
             val c = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15000
                 readTimeout = 25000
-                setRequestProperty("User-Agent", headers.getValue("User-Agent"))
-                setRequestProperty("Referer", headers.getValue("Referer"))
-                setRequestProperty("Accept", headers.getValue("Accept"))
+                setRequestProperty("User-Agent", userAgent)
+                setRequestProperty("Referer", "https://www.bilibili.com/")
+                setRequestProperty("Accept", "*/*")
                 if (cookie.isNotBlank()) setRequestProperty("Cookie", cookie)
             }
             return try {
                 val code = c.responseCode
-                if (code !in 200..299) error("弹幕接口 HTTP $code")
-                c.inputStream.use { it.readBytes() }
-            } finally { c.disconnect() }
+                val stream = if (code in 200..299) c.inputStream else c.errorStream
+                val body = stream?.use { it.readBytes() } ?: ByteArray(0)
+                if (code !in 200..299) {
+                    val hint = body.toString(Charsets.UTF_8).take(120)
+                    error("HTTP $code${if (hint.isBlank()) "" else "：$hint"}")
+                }
+                if (body.isEmpty()) error("服务器返回空内容")
+                body
+            } finally {
+                c.disconnect()
+            }
         }
+
         fun readVarint(data: ByteArray, startAt: Int): Pair<Long, Int> {
             var value = 0L
             var shift = 0
@@ -177,19 +189,15 @@ object BiliInteractionApi {
             }
             error("弹幕 Protobuf 数据格式错误")
         }
+
         fun skipField(data: ByteArray, startAt: Int, wire: Int): Int = when (wire) {
             0 -> readVarint(data, startAt).second
             1 -> (startAt + 8).also { require(it <= data.size) }
             2 -> {
                 val (length, next) = readVarint(data, startAt)
-                run {
-                    require(length >= 0 && length <= (data.size - next).toLong())
-                    next + length.toInt()
-                }
+                require(length >= 0 && length <= (data.size - next).toLong())
+                next + length.toInt()
             }
-            5 -> (startAt + 4).also { require(it <= data.size) }
-            // Unknown protobuf groups are legal wire types. Skip the complete group
-            // rather than aborting the entire segment on an unrelated future field.
             3 -> {
                 var index = startAt
                 while (index < data.size) {
@@ -206,119 +214,232 @@ object BiliInteractionApi {
                 error("弹幕 Protobuf group 未闭合")
             }
             4 -> error("弹幕 Protobuf group 结束标记不匹配")
+            5 -> (startAt + 4).also { require(it <= data.size) }
             else -> error("不支持的弹幕 Protobuf 字段")
         }
+
+        fun parseDmWebView(data: ByteArray): Triple<Int, Long, Long> {
+            if (data.isEmpty()) error("弹幕元数据为空")
+            val prefix = data.toString(Charsets.UTF_8).trimStart()
+            if (prefix.startsWith("{")) {
+                val response = JSONObject(prefix)
+                val code = response.optInt("code", -1)
+                error(if (code != 0) apiError(response, code, "弹幕元数据获取失败")
+                    else "弹幕元数据返回了 JSON，接口响应格式异常")
+            }
+
+            var index = 0
+            var state = 0
+            var total = -1L
+            var count = -1L
+            while (index < data.size) {
+                val (tag, next) = readVarint(data, index)
+                index = next
+                val field = (tag shr 3).toInt()
+                val wire = (tag and 7).toInt()
+                when {
+                    field == 1 && wire == 0 -> {
+                        val (value, after) = readVarint(data, index)
+                        state = value.toInt()
+                        index = after
+                    }
+                    field == 4 && wire == 2 -> {
+                        val (length, after) = readVarint(data, index)
+                        require(length >= 0 && length <= (data.size - after).toLong())
+                        val end = after + length.toInt()
+                        var nested = after
+                        while (nested < end) {
+                            val (nestedTag, nestedNext) = readVarint(data, nested)
+                            nested = nestedNext
+                            val nestedField = (nestedTag shr 3).toInt()
+                            val nestedWire = (nestedTag and 7).toInt()
+                            if (nestedField == 2 && nestedWire == 0) {
+                                val (value, afterValue) = readVarint(data, nested)
+                                total = value
+                                nested = afterValue
+                            } else {
+                                val afterField = skipField(data.copyOfRange(0, end), nested, nestedWire)
+                                nested = afterField
+                            }
+                        }
+                        index = end
+                    }
+                    field == 8 && wire == 0 -> {
+                        val (value, after) = readVarint(data, index)
+                        count = value
+                        index = after
+                    }
+                    else -> index = skipField(data, index, wire)
+                }
+            }
+            if (total < 0L && count < 0L) error("弹幕元数据缺少分段信息")
+            return Triple(state, total, count)
+        }
+
         fun parseElem(data: ByteArray): DanmakuItem? {
-            var i = 0
+            var index = 0
             var progress = 0L
             var mode = 1
             var size = 25
             var color = 0xFFFFFF
             var pool = 0
             var message = ""
-            while (i < data.size) {
-                val (tag, next) = readVarint(data, i); i = next
+            while (index < data.size) {
+                val (tag, next) = readVarint(data, index)
+                index = next
                 val field = (tag shr 3).toInt()
                 val wire = (tag and 7).toInt()
                 when {
                     field in setOf(2, 3, 4, 5, 11) && wire == 0 -> {
-                        val (v, n) = readVarint(data, i); i = n
+                        val (value, after) = readVarint(data, index)
+                        index = after
                         when (field) {
-                            2 -> progress = v
-                            3 -> mode = v.toInt()
-                            4 -> size = v.toInt()
-                            5 -> color = v.toInt()
-                            11 -> pool = v.toInt()
+                            2 -> progress = value
+                            3 -> mode = value.toInt()
+                            4 -> size = value.toInt()
+                            5 -> color = value.toInt()
+                            11 -> pool = value.toInt()
                         }
                     }
                     field == 7 && wire == 2 -> {
-                        val (length, n) = readVarint(data, i); i = n
-                        require(length >= 0 && length <= (data.size - i).toLong())
-                        message = String(data, i, length.toInt(), Charsets.UTF_8)
-                        i += length.toInt()
+                        val (length, after) = readVarint(data, index)
+                        require(length >= 0 && length <= (data.size - after).toLong())
+                        message = String(data, after, length.toInt(), Charsets.UTF_8)
+                        index = after + length.toInt()
                     }
-                    else -> i = skipField(data, i, wire)
+                    else -> index = skipField(data, index, wire)
                 }
             }
             return message.takeIf { it.isNotBlank() }?.let {
                 DanmakuItem(progress, mode, size, color, it, pool)
             }
         }
+
         fun parseSegment(data: ByteArray): List<DanmakuItem> {
             val result = mutableListOf<DanmakuItem>()
-            var i = 0
-            while (i < data.size) {
-                val (tag, next) = readVarint(data, i); i = next
+            var index = 0
+            while (index < data.size) {
+                val (tag, next) = readVarint(data, index)
+                index = next
                 val field = (tag shr 3).toInt()
                 val wire = (tag and 7).toInt()
                 if (field == 1 && wire == 2) {
-                    val (length, n) = readVarint(data, i); i = n
-                    require(length >= 0 && length <= (data.size - i).toLong())
-                    parseElem(data.copyOfRange(i, i + length.toInt()))?.let(result::add)
-                    i += length.toInt()
-                } else i = skipField(data, i, wire)
+                    val (length, after) = readVarint(data, index)
+                    require(length >= 0 && length <= (data.size - after).toLong())
+                    parseElem(data.copyOfRange(after, after + length.toInt()))?.let(result::add)
+                    index = after + length.toInt()
+                } else {
+                    index = skipField(data, index, wire)
+                }
             }
             return result
         }
-        val protoResult = runCatching {
-            val view = JSONObject(String(getBytes("https://api.bilibili.com/x/v2/dm/web/view?type=1&oid=$cid"), Charsets.UTF_8))
-            if (view.optInt("code") != 0) error(view.optString("message", "弹幕分段信息获取失败"))
-            val total = view.optJSONObject("data")?.optJSONObject("dmSge")?.optInt("total", 1)
-                ?.coerceIn(1, 60) ?: 1
-            // 某一段被风控或 CDN 临时失败时，保留已成功的其他分段；
-            // 不要因为单段失败就丢弃整条弹幕流并退回已逐渐停用的旧 XML 接口。
-            buildList {
-                for (segment in 1..total) {
-                    val bytes = runCatching {
-                        getBytes("https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid=$cid&segment_index=$segment")
-                    }.getOrNull() ?: continue
-                    runCatching { parseSegment(bytes) }.getOrNull()?.let { addAll(it) }
-                }
-            }.distinctBy { it.timeMs to it.text }.sortedBy { it.timeMs }
-        }.getOrNull()
-        if (!protoResult.isNullOrEmpty()) return protoResult
 
-        // Compatibility fallback for older videos/CDN responses that still expose XML.
-        // BiliMiao 的稳定兼容线路使用 comment.bilibili.com/{cid}.xml。
-        // x/v1/dm/list.so 在部分视频上已不再返回旧 XML，不能把它当唯一回退。
-        val xml = runCatching {
-            String(getBytes("https://comment.bilibili.com/$cid.xml"), Charsets.UTF_8)
-        }.getOrElse {
-            val c = (URL("https://api.bilibili.com/x/v1/dm/list.so?oid=$cid").openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15000
-                readTimeout = 20000
-                setRequestProperty("User-Agent", BiliHeaders.UA)
-                setRequestProperty("Referer", "https://www.bilibili.com/")
-                if (cookie.isNotBlank()) setRequestProperty("Cookie", cookie)
-            }
-            try {
-                val stream = if (c.responseCode in 200..299) c.inputStream else c.errorStream
-                stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            } finally { c.disconnect() }
-        }
-        if (xml.isBlank()) error("弹幕加载失败：分段弹幕和旧版 XML 接口均未返回数据")
-        val parser = Xml.newPullParser()
-        parser.setInput(xml.reader())
-        val result = ArrayList<DanmakuItem>()
-        var event = parser.eventType
-        while (event != XmlPullParser.END_DOCUMENT) {
-            if (event == XmlPullParser.START_TAG && parser.name == "d") {
-                val p = parser.getAttributeValue(null, "p").orEmpty().split(',')
-                val raw = parser.nextText()
-                if (p.size >= 5) {
-                    val seconds = p[0].toDoubleOrNull() ?: 0.0
-                    val mode = p[1].toIntOrNull() ?: 1
-                    val size = p[2].toIntOrNull() ?: 25
-                    val color = p[3].toLongOrNull()?.toInt() ?: 0xFFFFFF
-                    val text = Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString()
-                    if (text.isNotBlank()) result += DanmakuItem(
-                        (seconds * 1000).toLong(), mode, size, color, text, p.getOrNull(5)?.toIntOrNull() ?: 0
+        var protoError: Exception? = null
+        val protoResult = try {
+            val metadata = parseDmWebView(
+                getBytes("https://api.bilibili.com/x/v2/dm/web/view?type=1&oid=$cid")
+            )
+            val (state, total, count) = metadata
+            if (state == 1) error("UP主或平台已关闭此视频的弹幕")
+            if (total == 0L && count == 0L) return emptyList()
+            val segmentTotal = (if (total > 0L) total else 1L).coerceIn(1L, 60L).toInt()
+            val items = mutableListOf<DanmakuItem>()
+            val segmentErrors = mutableListOf<Exception>()
+            for (segment in 1..segmentTotal) {
+                try {
+                    val bytes = getBytes(
+                        "https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid=$cid&segment_index=$segment"
                     )
+                    items += parseSegment(bytes)
+                } catch (error: Exception) {
+                    segmentErrors += error
                 }
             }
-            event = parser.next()
+            if (items.isEmpty() && segmentErrors.isNotEmpty()) {
+                throw IllegalStateException(
+                    "分段弹幕全部请求失败：${segmentErrors.first().message}",
+                    segmentErrors.first()
+                )
+            }
+            items.distinctBy { it.timeMs to it.text }.sortedBy { it.timeMs }
+        } catch (error: Exception) {
+            protoError = error
+            null
         }
-        return result.sortedBy { it.timeMs }
+        if (protoResult != null) return protoResult
+
+        fun parseXml(xmlBody: String): List<DanmakuItem> {
+            val xml = xmlBody.removePrefix("\\uFEFF").trim()
+            if (xml.isBlank()) error("XML 弹幕接口返回空内容")
+            if (!xml.startsWith("<")) error("XML 弹幕接口返回的不是 XML")
+            val parser = Xml.newPullParser()
+            parser.setInput(xml.reader())
+            val result = ArrayList<DanmakuItem>()
+            var sawRoot = false
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                if (event == XmlPullParser.START_TAG) {
+                    if (!sawRoot) {
+                        sawRoot = true
+                        if (parser.name != "i") error("XML 弹幕接口返回了非弹幕文档")
+                    } else if (parser.name == "d") {
+                        val parts = parser.getAttributeValue(null, "p").orEmpty().split(',')
+                        val raw = parser.nextText()
+                        if (parts.size >= 5) {
+                            val seconds = parts[0].toDoubleOrNull() ?: 0.0
+                            val mode = parts[1].toIntOrNull() ?: 1
+                            val size = parts[2].toIntOrNull() ?: 25
+                            val color = parts[3].toLongOrNull()?.toInt() ?: 0xFFFFFF
+                            val text = Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString()
+                            if (text.isNotBlank()) {
+                                result += DanmakuItem(
+                                    (seconds * 1000).toLong(),
+                                    mode,
+                                    size,
+                                    color,
+                                    text,
+                                    parts.getOrNull(5)?.toIntOrNull() ?: 0
+                                )
+                            }
+                        }
+                    }
+                }
+                event = parser.next()
+            }
+            if (!sawRoot) error("XML 弹幕接口没有返回有效文档")
+            return result.sortedBy { it.timeMs }
+        }
+
+        val xmlErrors = mutableListOf<String>()
+        try {
+            val xml = BilimiaoApiBridge.danmakuXml(cid)
+            return parseXml(xml)
+        } catch (error: Exception) {
+            xmlErrors += "Bilimiao XML：${error.message ?: error.javaClass.simpleName}"
+        }
+
+        try {
+            return parseXml(
+                String(getBytes("https://comment.bilibili.com/$cid.xml"), Charsets.UTF_8)
+            )
+        } catch (error: Exception) {
+            xmlErrors += "评论 CDN XML：${error.message ?: error.javaClass.simpleName}"
+        }
+
+        try {
+            return parseXml(
+                String(getBytes("https://api.bilibili.com/x/v1/dm/list.so?oid=$cid"), Charsets.UTF_8)
+            )
+        } catch (error: Exception) {
+            xmlErrors += "旧版弹幕接口：${error.message ?: error.javaClass.simpleName}"
+        }
+
+        val summary = buildList {
+            protoError?.message?.takeIf { it.isNotBlank() }?.let { add("Protobuf：$it") }
+            addAll(xmlErrors)
+        }.joinToString("；").ifBlank { "所有可用接口均未返回有效弹幕" }.take(220)
+        error("弹幕加载失败：$summary")
     }
 
     private fun apiError(root: JSONObject, code: Int, fallback: String): String = when (code) {
