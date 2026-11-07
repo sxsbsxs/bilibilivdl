@@ -122,6 +122,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var commentPage = 1
     private var commentHasMore = true
     private var commentLoading = false
+    private var commentRequestGeneration = 0L
+    private var commentJob: Job? = null
     private var consecutiveEmptyCommentPages = 0
     private var accountIsVip = false
     private var accountIsLoggedIn = false
@@ -1008,6 +1010,12 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun resetComments() {
+        // Invalidate and cancel the previous page before starting a new sort order.
+        // Otherwise the loading guard can discard the new request and let stale rows win.
+        commentRequestGeneration++
+        commentJob?.cancel()
+        commentJob = null
+        commentLoading = false
         commentPage = 1
         commentHasMore = true
         consecutiveEmptyCommentPages = 0
@@ -1023,14 +1031,17 @@ class VideoPlayerActivity : AppCompatActivity() {
             consecutiveEmptyCommentPages = 0
         }
         commentLoading = true
+        val requestGeneration = ++commentRequestGeneration
         b.commentsStatus.visibility = View.VISIBLE
         b.commentsStatus.text = if (reset) "正在加载评论…" else "正在加载更多…"
-        lifecycleScope.launch {
+        commentJob = lifecycleScope.launch {
             try {
                 val requestedPage = commentPage
                 val result = withContext(Dispatchers.IO) {
                     BilimiaoApiBridge.commentsPage(aid, requestedPage, commentSort)
                 }
+                if (requestGeneration != commentRequestGeneration) return@launch
+
                 (b.commentsList.adapter as CommentAdapter).submit(
                     result.comments,
                     append = !reset
@@ -1057,18 +1068,26 @@ class VideoPlayerActivity : AppCompatActivity() {
 
                 if (continueAfterEmptyPage) {
                     b.commentsList.post {
-                        if (!commentLoading && commentHasMore) loadComments(false)
+                        if (!commentLoading && commentHasMore &&
+                            requestGeneration == commentRequestGeneration) {
+                            loadComments(false)
+                        }
                     }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                b.commentsStatus.visibility = View.VISIBLE
-                b.commentsStatus.text = error.message?.takeIf { it.isNotBlank() }
-                    ?: "评论加载失败，点击重试"
-                b.commentsStatus.setOnClickListener { loadComments(reset = true) }
+                if (requestGeneration == commentRequestGeneration) {
+                    b.commentsStatus.visibility = View.VISIBLE
+                    b.commentsStatus.text = error.message?.takeIf { it.isNotBlank() }
+                        ?: "评论加载失败，点击重试"
+                    b.commentsStatus.setOnClickListener { loadComments(reset = true) }
+                }
             } finally {
-                commentLoading = false
+                if (requestGeneration == commentRequestGeneration) {
+                    commentLoading = false
+                    commentJob = null
+                }
             }
         }
     }
