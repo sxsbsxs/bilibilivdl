@@ -4,6 +4,7 @@ import android.text.Html
 import android.util.Xml
 import org.json.JSONObject
 import org.xmlpull.v1.XmlPullParser
+import kotlinx.coroutines.CancellationException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -415,6 +416,8 @@ object BiliInteractionApi {
         try {
             val xml = BilimiaoApiBridge.danmakuXml(cid)
             return parseXml(xml)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             xmlErrors += "Bilimiao XML：${error.message ?: error.javaClass.simpleName}"
         }
