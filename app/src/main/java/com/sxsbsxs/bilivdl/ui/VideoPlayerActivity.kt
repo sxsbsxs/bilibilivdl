@@ -978,7 +978,15 @@ class VideoPlayerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 danmakuLoadFailed = true
                 b.danmakuButton.text = "弹幕加载失败 · 点击重试"
-                // A danmaku endpoint failure should not replace the playback status with a noisy warning.
+                val reason = e.localizedMessage
+                    ?.replace(Regex("\\s+"), " ")
+                    ?.take(150)
+                    ?.ifBlank { null }
+                    ?: e.javaClass.simpleName
+                // Keep the exact cause visible so network, access-control and parser
+                // failures are not all presented as the same unexplained warning.
+                b.playerStatus.visibility = View.VISIBLE
+                b.playerStatus.text = "弹幕加载失败：$reason"
             }
         }
     }
