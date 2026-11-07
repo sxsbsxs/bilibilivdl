@@ -56,6 +56,46 @@ jobs:
           if unexpected:
               raise SystemExit(f"Unexpected native ABIs found: {sorted(unexpected)}")
           PY
+      - name: Verify BVD Data Binding survives APK packaging
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from io import BytesIO
+          from pathlib import Path
+          import zipfile
+
+          aar_files = list(Path("bvd-downloader/build/outputs/aar").glob("*debug.aar"))
+          if not aar_files:
+              raise SystemExit("BVD debug AAR missing")
+          aar = aar_files[0]
+          with zipfile.ZipFile(aar) as library:
+              if "classes.jar" not in library.namelist():
+                  raise SystemExit("BVD AAR has no classes.jar")
+              with zipfile.ZipFile(BytesIO(library.read("classes.jar"))) as classes:
+                  class_names = set(classes.namelist())
+              required = {
+                  "cc/kafuu/bilidownload/BR.class",
+                  "cc/kafuu/bilidownload/databinding/ActivityVideoDetailsBinding.class",
+              }
+              missing = sorted(required - class_names)
+              if missing:
+                  raise SystemExit("BVD AAR is missing generated Data Binding classes: " + ", ".join(missing))
+              print("BVD AAR Data Binding classes verified")
+
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          marker = b"Lcc/kafuu/bilidownload/BR;"
+          with zipfile.ZipFile(apk) as package:
+              dex_files = sorted(
+                  name for name in package.namelist()
+                  if name.startswith("classes") and name.endswith(".dex")
+              )
+              if not dex_files:
+                  raise SystemExit("APK contains no DEX files")
+              present = [name for name in dex_files if marker in package.read(name)]
+              if not present:
+                  raise SystemExit("APK DEX is missing cc.kafuu.bilidownload.BR; refusing to publish a crashing APK")
+              print("BVD BR class reference packaged in: " + ", ".join(present))
+          PY
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
